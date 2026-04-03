@@ -731,6 +731,17 @@ function Scheduler({S,U,st,gc}){
   const fTeachers=selDept?S.teachers.filter(t=>t.departmentId===selDept):S.teachers;
 
   // Fix#3: handle drop for BOTH new cards from sidebar AND re-dragging existing entries
+  // Check if teacher is already scheduled in ANY room at this day+period
+  const teacherBusy=(tid,day,period,excludeKey)=>{
+    let busy=false;
+    Object.entries(S.schedule).forEach(([k,en])=>{
+      if(k===excludeKey)return;
+      if(!k.endsWith(`_${day}_${period}`))return;
+      en?.forEach(e=>{if(e.teacherId===tid||e.coTeacherId===tid)busy=true});
+    });
+    return busy;
+  };
+
   const handleDrop=(rid,day,p)=>{
     const key=sk(rid,day,p);
     if(S.locks[key]){st("ล็อคแล้ว","error");return}
@@ -738,13 +749,14 @@ function Scheduler({S,U,st,gc}){
 
     // If re-dragging an existing entry from another cell
     if(drag?.fromKey){
-      if(drag.fromKey===key)return; // same cell, ignore
+      if(drag.fromKey===key)return;
       const entry=drag.entry;
       if(isBlk(entry.teacherId,day,p)){st("ครูถูกล็อคคาบนี้","error");return}
+      // Check teacher conflict (exclude the source cell since we're moving FROM there)
+      if(teacherBusy(entry.teacherId,day,p,drag.fromKey)){st("ครูคนนี้สอนคาบนี้อยู่แล้ว (ห้องอื่น)","error");return}
       const room=S.rooms.find(r=>r.id===rid);
       const sub=S.subjects.find(s=>s.id===entry.subjectId);
       if(room&&sub&&room.levelId!==sub.levelId){st("ระดับชั้นไม่ตรงกัน!","error");return}
-      // Remove from old position, add to new
       U.setSchedule(prev=>{
         const updated={...prev};
         updated[drag.fromKey]=(updated[drag.fromKey]||[]).filter(e=>e.id!==entry.id);
@@ -758,6 +770,8 @@ function Scheduler({S,U,st,gc}){
     // Normal new card from sidebar
     if(!drag)return;
     if(isBlk(drag.teacherId,day,p)){st("ครูถูกล็อคคาบนี้","error");return}
+    // Check teacher conflict
+    if(teacherBusy(drag.teacherId,day,p,null)){st("ครูคนนี้สอนคาบนี้อยู่แล้ว (ห้องอื่น)","error");return}
     const room=S.rooms.find(r=>r.id===rid);
     const sub=S.subjects.find(s=>s.id===drag.subjectId);
     if(room&&sub&&room.levelId!==sub.levelId){st("ระดับชั้นไม่ตรงกัน!","error");return}
