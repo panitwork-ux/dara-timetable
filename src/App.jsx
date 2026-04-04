@@ -1022,73 +1022,75 @@ function Settings({S,U,st,ay,setAY,sh,setSH}){
   </div>;
 }
 
+
 /* ===== PDF HELPER — ตามแบบฟอร์มดาราวิทยาลัย (A4 แนวนอน) ===== */
-function pdfPage(title,subtitle,dayRows,footerText){
-  const PLIST=[
-    {id:1,time:"08.30-09.20"},{id:2,time:"09.20-10.10"},
-    {id:3,time:"10.25-11.15"},{id:4,time:"11.15-12.05"},
-    {id:5,time:"13.00-13.50"},{id:6,time:"14.00-14.50"},
-    {id:7,time:"14.50-15.40"},
+function pdfPage(title, subtitle, dayRows, footerText) {
+  const PLIST = [
+    { id: 1, time: "08.30-09.20" }, { id: 2, time: "09.20-10.10" },
+    { id: 3, time: "10.25-11.15" }, { id: 4, time: "11.15-12.05" },
+    { id: 5, time: "13.00-13.50" }, { id: 6, time: "14.00-14.50" },
+    { id: 7, time: "14.50-15.40" },
   ];
-  return `<!DOCTYPE html><html><head><meta charset="utf-8">
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap');
-@page{size:A4 landscape;margin:10mm 8mm}
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Sarabun','Noto Sans Thai',sans-serif;font-size:13px;color:#000}
-.page{width:100%;position:relative}
-.header-row{display:flex;align-items:center;margin-bottom:8px;gap:14px}
-.logo{width:52px;height:52px;border:1.5px solid #999;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;color:#666;flex-shrink:0}
-.title-text{font-size:16px;font-weight:700;flex:1}
-table{width:100%;border-collapse:collapse;table-layout:fixed;margin-top:4px}
-th,td{border:1.5px solid #000;text-align:center;vertical-align:middle}
-th{padding:5px 2px;font-weight:700}
-th.period-num{font-size:16px;height:30px}
-th.period-time{font-size:11px;height:24px;font-weight:400}
-th.day-col{width:72px;font-size:14px;font-weight:700}
-td.day-cell{font-weight:700;font-size:15px;padding:6px 4px;width:72px}
-td.slot{padding:4px 3px;vertical-align:top;height:72px}
-.ent{margin-bottom:1px}
-.ent-sub{font-weight:700;font-size:13px;line-height:1.35}
-.ent-room{font-size:12px;color:#111;line-height:1.3}
-.ent-room2{font-size:11px;color:#333;line-height:1.3}
-.sig-area{margin-top:28px;font-size:13px}
-.sig-flex{display:flex;justify-content:space-between;padding:0 40px}
-.sig-box{text-align:center}
-.sig-line{display:inline-block;width:220px;border-bottom:1.5px dotted #000;margin-bottom:4px}
-@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-</style></head><body>
-<div class="page">
-<div class="header-row">
-  <div class="logo">LOGO</div>
-  <div class="title-text">${title} ${subtitle}</div>
-</div>
-<table>
-<thead>
-<tr>
-<th class="day-col" rowspan="2">ชั่วโมงที่<br/><span style="font-size:11px;font-weight:400">เวลา</span></th>
-${PLIST.map(p=>\`<th class="period-num">\${p.id}</th>\`).join("")}
-</tr>
-<tr>
-${PLIST.map(p=>\`<th class="period-time">\${p.time}</th>\`).join("")}
-</tr>
-</thead>
-<tbody>
-${dayRows.map(({day,cells})=>\`<tr>
-<td class="day-cell">\${day}</td>
-\${cells.map(entries=>{
-  if(!entries||!entries.length)return\`<td class="slot"></td>\`;
-  return\`<td class="slot">\${entries.map(e=>\`<div class="ent"><div class="ent-sub">\${e.sub}</div><div class="ent-room">\${e.room}</div>\${e.room2?\`<div class="ent-room2">\${e.room2}</div>\`:""}</div>\`).join("")}</td>\`;
-}).join("")}
-</tr>\`).join("\\n")}
-</tbody>
-</table>
-<div class="sig-area">
-  <div class="sig-flex">
-    <div class="sig-box">ลงชื่อ<div class="sig-line"></div><br/>รองฯฝ่ายวิชาการ</div>
-    <div class="sig-box">ลงชื่อ<div class="sig-line"></div><br/>ผู้อำนวยการ</div>
-  </div>
-</div>
-</div>
-</body></html>`;
+
+  const thNums = PLIST.map(p => '<th class="period-num">' + p.id + '</th>').join("");
+  const thTimes = PLIST.map(p => '<th class="period-time">' + p.time + '</th>').join("");
+
+  const bodyRows = dayRows.map(function(r) {
+    const dayCells = r.cells.map(function(entries) {
+      if (!entries || !entries.length) return '<td class="slot"></td>';
+      const inner = entries.map(function(e) {
+        let h = '<div class="ent"><div class="ent-sub">' + e.sub + '</div><div class="ent-room">' + e.room + '</div>';
+        if (e.room2) h += '<div class="ent-room2">' + e.room2 + '</div>';
+        h += '</div>';
+        return h;
+      }).join("");
+      return '<td class="slot">' + inner + '</td>';
+    }).join("");
+    return '<tr><td class="day-cell">' + r.day + '</td>' + dayCells + '</tr>';
+  }).join("\n");
+
+  return '<!DOCTYPE html><html><head><meta charset="utf-8">' +
+    '<style>' +
+    "@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap');" +
+    '@page{size:A4 landscape;margin:10mm 8mm}' +
+    '*{margin:0;padding:0;box-sizing:border-box}' +
+    "body{font-family:'Sarabun','Noto Sans Thai',sans-serif;font-size:13px;color:#000}" +
+    '.page{width:100%;position:relative}' +
+    '.header-row{display:flex;align-items:center;margin-bottom:8px;gap:14px}' +
+    '.logo{width:52px;height:52px;border:1.5px solid #999;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;color:#666;flex-shrink:0}' +
+    '.title-text{font-size:16px;font-weight:700;flex:1}' +
+    'table{width:100%;border-collapse:collapse;table-layout:fixed;margin-top:4px}' +
+    'th,td{border:1.5px solid #000;text-align:center;vertical-align:middle}' +
+    'th{padding:5px 2px;font-weight:700}' +
+    'th.period-num{font-size:16px;height:30px}' +
+    'th.period-time{font-size:11px;height:24px;font-weight:400}' +
+    'th.day-col{width:72px;font-size:14px;font-weight:700}' +
+    'td.day-cell{font-weight:700;font-size:15px;padding:6px 4px;width:72px}' +
+    'td.slot{padding:4px 3px;vertical-align:top;height:72px}' +
+    '.ent{margin-bottom:1px}' +
+    '.ent-sub{font-weight:700;font-size:13px;line-height:1.35}' +
+    '.ent-room{font-size:12px;color:#111;line-height:1.3}' +
+    '.ent-room2{font-size:11px;color:#333;line-height:1.3}' +
+    '.sig-area{margin-top:28px;font-size:13px}' +
+    '.sig-flex{display:flex;justify-content:space-between;padding:0 40px}' +
+    '.sig-box{text-align:center}' +
+    '.sig-line{display:inline-block;width:220px;border-bottom:1.5px dotted #000;margin-bottom:4px}' +
+    '@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}' +
+    '</style></head><body>' +
+    '<div class="page">' +
+    '<div class="header-row">' +
+    '<div class="logo">LOGO</div>' +
+    '<div class="title-text">' + title + ' ' + subtitle + '</div>' +
+    '</div>' +
+    '<table><thead>' +
+    '<tr><th class="day-col" rowspan="2">ชั่วโมงที่<br/><span style="font-size:11px;font-weight:400">เวลา</span></th>' + thNums + '</tr>' +
+    '<tr>' + thTimes + '</tr>' +
+    '</thead><tbody>' +
+    bodyRows +
+    '</tbody></table>' +
+    '<div class="sig-area"><div class="sig-flex">' +
+    '<div class="sig-box">ลงชื่อ<div class="sig-line"></div><br/>รองฯฝ่ายวิชาการ</div>' +
+    '<div class="sig-box">ลงชื่อ<div class="sig-line"></div><br/>ผู้อำนวยการ</div>' +
+    '</div></div>' +
+    '</div></body></html>';
 }
