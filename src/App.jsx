@@ -147,6 +147,13 @@ const LS={display:"block",fontSize:13,fontWeight:600,color:"#374151",marginBotto
 
 const Toast=({message,type="success",onClose})=>{useEffect(()=>{const t=setTimeout(onClose,3000);return()=>clearTimeout(t)},[onClose]);return<div style={{position:"fixed",top:24,right:24,zIndex:9999,background:type==="error"?"#DC2626":type==="warning"?"#D97706":"#059669",color:"#fff",padding:"14px 24px",borderRadius:12,fontSize:14,fontWeight:600,boxShadow:"0 10px 30px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:8,animation:"slideIn 0.3s ease"}}><Icon name={type==="error"?"alert":"check"} size={16}/>{message}</div>};
 
+const DIVISIONS=[
+  {id:"p1",name:"ประถมศึกษาตอนต้น",short:"ประถมต้น",defaultLevels:["ป.1","ป.2","ป.3"]},
+  {id:"p2",name:"ประถมศึกษาตอนปลาย",short:"ประถมปลาย",defaultLevels:["ป.4","ป.5","ป.6"]},
+  {id:"m1",name:"มัธยมศึกษาตอนต้น",short:"มัธยมต้น",defaultLevels:["ม.1","ม.2","ม.3"]},
+  {id:"m2",name:"มัธยมศึกษาตอนปลาย",short:"มัธยมปลาย",defaultLevels:["ม.4","ม.5","ม.6"]},
+];
+
 export default function App() {
   const [page,setPage]=useState("dashboard");
   const [side,setSide]=useState(true);
@@ -154,24 +161,55 @@ export default function App() {
   const [syncing,setSyncing]=useState(false);
   const [gasReady,setGasReady]=useState(false);
 
-  const [levels,setLevels]=useState(()=>loadLS("levels",[{id:gid(),name:"ม.4"},{id:gid(),name:"ม.5"},{id:gid(),name:"ม.6"}]));
-  const [plans,setPlans]=useState(()=>loadLS("plans",[]));
-  const [depts,setDepts]=useState(()=>loadLS("depts",[]));
-  const [teachers,setTeachers]=useState(()=>loadLS("teachers",[]));
-  const [subjects,setSubjects]=useState(()=>loadLS("subjects",[]));
-  const [rooms,setRooms]=useState(()=>loadLS("rooms",[]));
-  const [assigns,setAssigns]=useState(()=>loadLS("assigns",[]));
-  const [meetings,setMeetings]=useState(()=>loadLS("meetings",[]));
-  const [schedule,setSchedule]=useState(()=>loadLS("schedule",{}));
-  const [locks,setLocks]=useState(()=>loadLS("locks",{}));
+  // division state — persist ใน localStorage (ไม่ใช่ per-division key)
+  const [divId,setDivId]=useState(()=>localStorage.getItem("dara_division")||"m2");
+  const div=DIVISIONS.find(d=>d.id===divId)||DIVISIONS[3];
+
+  // helper โหลด/บันทึก per-division
+  const loadD=(key,fb)=>loadLS(divId+"_"+key,fb);
+  const saveD=(key,data)=>saveLS(divId+"_"+key,data);
+
+  const [levels,setLevels]=useState(()=>loadLS(divId+"_levels",DIVISIONS.find(d=>d.id===divId)?.defaultLevels.map(n=>({id:gid(),name:n}))||[]));
+  const [plans,setPlans]=useState(()=>loadLS(divId+"_plans",[]));
+  const [depts,setDepts]=useState(()=>loadLS(divId+"_depts",[]));
+  const [teachers,setTeachers]=useState(()=>loadLS(divId+"_teachers",[]));
+  const [subjects,setSubjects]=useState(()=>loadLS(divId+"_subjects",[]));
+  const [rooms,setRooms]=useState(()=>loadLS(divId+"_rooms",[]));
+  const [assigns,setAssigns]=useState(()=>loadLS(divId+"_assigns",[]));
+  const [meetings,setMeetings]=useState(()=>loadLS(divId+"_meetings",[]));
+  const [schedule,setSchedule]=useState(()=>loadLS(divId+"_schedule",{}));
+  const [locks,setLocks]=useState(()=>loadLS(divId+"_locks",{}));
 
   const [academicYear,setAcademicYear]=useState(()=>loadLS("academicYear",{year:"2568",semester:"1"}));
   const [schoolHeader,setSchoolHeader]=useState(()=>loadLS("schoolHeader",{name:"โรงเรียนดาราวิทยาลัย",logo:""}));
 
   useEffect(()=>saveLS("academicYear",academicYear),[academicYear]);
   useEffect(()=>saveLS("schoolHeader",schoolHeader),[schoolHeader]);
+  // บันทึก division ที่เลือกไว้
+  useEffect(()=>{ localStorage.setItem("dara_division",divId); },[divId]);
+
   const stateRef=useRef({});
   useEffect(()=>{stateRef.current={levels,plans,depts,teachers,subjects,rooms,assigns,meetings,schedule,locks}},[levels,plans,depts,teachers,subjects,rooms,assigns,meetings,schedule,locks]);
+
+  // เมื่อ switch division → โหลดข้อมูลชุดใหม่
+  const switchDivision=(newDivId)=>{
+    const d=DIVISIONS.find(x=>x.id===newDivId);
+    if(!d) return;
+    setDivId(newDivId);
+    setLevels(loadLS(newDivId+"_levels",d.defaultLevels.map(n=>({id:gid(),name:n}))));
+    setPlans(loadLS(newDivId+"_plans",[]));
+    setDepts(loadLS(newDivId+"_depts",[]));
+    setTeachers(loadLS(newDivId+"_teachers",[]));
+    setSubjects(loadLS(newDivId+"_subjects",[]));
+    setRooms(loadLS(newDivId+"_rooms",[]));
+    setAssigns(loadLS(newDivId+"_assigns",[]));
+    setMeetings(loadLS(newDivId+"_meetings",[]));
+    setSchedule(loadLS(newDivId+"_schedule",{}));
+    setLocks(loadLS(newDivId+"_locks",{}));
+    setGasReady(false);
+    setPage("dashboard");
+    st("เปลี่ยนเป็น "+d.name);
+  };
 
   const saveTimer=useRef(null);
   const syncToGas=useCallback(()=>{
@@ -179,9 +217,9 @@ export default function App() {
     clearTimeout(saveTimer.current);
     saveTimer.current=setTimeout(()=>{
       setSyncing(true);
-      gasPost(stateRef.current).catch(()=>{}).finally(()=>setSyncing(false));
+      gasPost({division:divId,...stateRef.current}).catch(()=>{}).finally(()=>setSyncing(false));
     },1500);
-  },[]);
+  },[divId]);
 
   // โหลดจาก GAS ตอนเริ่ม
   useEffect(()=>{
@@ -202,19 +240,19 @@ export default function App() {
         setGasReady(true);
       } else { setGasReady(true); }
     }).catch(()=>{ setGasReady(true); }).finally(()=>setSyncing(false));
-  },[]);
+  },[divId]);
 
-  // Auto-save ไป localStorage + GAS เมื่อข้อมูลเปลี่ยน
-  useEffect(()=>{ saveLS("levels",levels);   if(gasReady) syncToGas(); },[levels,gasReady]);
-  useEffect(()=>{ saveLS("plans",plans);     if(gasReady) syncToGas(); },[plans,gasReady]);
-  useEffect(()=>{ saveLS("depts",depts);     if(gasReady) syncToGas(); },[depts,gasReady]);
-  useEffect(()=>{ saveLS("teachers",teachers); if(gasReady) syncToGas(); },[teachers,gasReady]);
-  useEffect(()=>{ saveLS("subjects",subjects); if(gasReady) syncToGas(); },[subjects,gasReady]);
-  useEffect(()=>{ saveLS("rooms",rooms);     if(gasReady) syncToGas(); },[rooms,gasReady]);
-  useEffect(()=>{ saveLS("assigns",assigns); if(gasReady) syncToGas(); },[assigns,gasReady]);
-  useEffect(()=>{ saveLS("meetings",meetings); if(gasReady) syncToGas(); },[meetings,gasReady]);
-  useEffect(()=>{ saveLS("schedule",schedule); if(gasReady) syncToGas(); },[schedule,gasReady]);
-  useEffect(()=>{ saveLS("locks",locks);     if(gasReady) syncToGas(); },[locks,gasReady]);
+  // Auto-save ไป localStorage + GAS เมื่อข้อมูลเปลี่ยน (per-division key)
+  useEffect(()=>{ saveLS(divId+"_levels",levels);   if(gasReady) syncToGas(); },[levels,gasReady]);
+  useEffect(()=>{ saveLS(divId+"_plans",plans);     if(gasReady) syncToGas(); },[plans,gasReady]);
+  useEffect(()=>{ saveLS(divId+"_depts",depts);     if(gasReady) syncToGas(); },[depts,gasReady]);
+  useEffect(()=>{ saveLS(divId+"_teachers",teachers); if(gasReady) syncToGas(); },[teachers,gasReady]);
+  useEffect(()=>{ saveLS(divId+"_subjects",subjects); if(gasReady) syncToGas(); },[subjects,gasReady]);
+  useEffect(()=>{ saveLS(divId+"_rooms",rooms);     if(gasReady) syncToGas(); },[rooms,gasReady]);
+  useEffect(()=>{ saveLS(divId+"_assigns",assigns); if(gasReady) syncToGas(); },[assigns,gasReady]);
+  useEffect(()=>{ saveLS(divId+"_meetings",meetings); if(gasReady) syncToGas(); },[meetings,gasReady]);
+  useEffect(()=>{ saveLS(divId+"_schedule",schedule); if(gasReady) syncToGas(); },[schedule,gasReady]);
+  useEffect(()=>{ saveLS(divId+"_locks",locks);     if(gasReady) syncToGas(); },[locks,gasReady]);
 
   const st=(m,t="success")=>setToast({message:m,type:t});
   const gc=did=>{const i=depts.findIndex(d=>d.id===did);return DC[i%DC.length]||DC[0]};
@@ -248,6 +286,14 @@ export default function App() {
           <div><div style={{color:"#fff",fontSize:15,fontWeight:700}}>{schoolHeader.name||"ดาราวิทยาลัย"}</div><div style={{color:"rgba(255,255,255,0.6)",fontSize:11}}>ระบบจัดตารางสอน v3</div></div>
         </div>
       </div>
+      {/* Division selector */}
+      <div style={{padding:"12px 10px",borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
+        <div style={{fontSize:10,color:"rgba(255,255,255,0.45)",marginBottom:6,paddingLeft:4}}>ระดับการศึกษา</div>
+        {DIVISIONS.map(d=><div key={d.id} onClick={()=>switchDivision(d.id)} style={{padding:"8px 12px",borderRadius:8,cursor:"pointer",marginBottom:2,background:divId===d.id?"rgba(255,255,255,0.2)":"transparent",color:divId===d.id?"#fff":"rgba(255,255,255,0.6)",fontSize:12,fontWeight:divId===d.id?700:400,display:"flex",alignItems:"center",gap:8}}>
+          <div style={{width:6,height:6,borderRadius:"50%",background:divId===d.id?"#FCA5A5":"rgba(255,255,255,0.3)",flexShrink:0}}/>
+          {d.name}
+        </div>)}
+      </div>
       <nav style={{flex:1,padding:"12px 10px",overflowY:"auto"}}>
         {nav.map(n=><div key={n.id} className={`ni ${page===n.id?"a":""}`} onClick={()=>setPage(n.id)} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderRadius:10,cursor:"pointer",color:page===n.id?"#fff":"rgba(255,255,255,0.7)",fontSize:14,fontWeight:page===n.id?700:400,marginBottom:2}}><Icon name={n.icon} size={18}/>{n.label}</div>)}
       </nav>
@@ -261,6 +307,7 @@ export default function App() {
       <header style={{height:60,background:"#fff",borderBottom:"1px solid #E5E7EB",display:"flex",alignItems:"center",padding:"0 24px",gap:16,flexShrink:0}}>
         <button onClick={()=>setSide(!side)} style={{background:"none",border:"none",cursor:"pointer",color:"#6B7280",padding:4}}><Icon name="menu" size={22}/></button>
         <h2 style={{fontSize:18,fontWeight:700}}>{nav.find(n=>n.id===page)?.label}</h2>
+        <span style={{fontSize:12,background:"#FEE2E2",color:"#991B1B",padding:"3px 10px",borderRadius:20,fontWeight:600}}>{div.short}</span>
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
           {GAS_URL&&!GAS_URL.includes("YOUR_DEPLOYMENT_ID")
             ?syncing
@@ -283,7 +330,7 @@ export default function App() {
         {page==="meetings"&&<Meetings S={S} U={U} st={st} gc={gc}/>}
         {page==="scheduler"&&<Scheduler S={S} U={U} st={st} gc={gc}/>}
         {page==="reports"&&<Reports S={S} st={st} gc={gc} ay={academicYear} sh={schoolHeader}/>}
-        {page==="settings"&&<Settings S={S} U={U} st={st} ay={academicYear} setAY={setAcademicYear} sh={schoolHeader} setSH={setSchoolHeader}/>}
+        {page==="settings"&&<Settings S={S} U={U} st={st} ay={academicYear} setAY={setAcademicYear} sh={schoolHeader} setSH={setSchoolHeader} div={div}/>}
       </main>
     </div>
     {toast&&<Toast {...toast} onClose={()=>setToast(null)}/>}
@@ -926,29 +973,27 @@ function Reports({S,st,gc,ay,sh}){
   };
 
   // helper: สร้าง pages สำหรับห้องหนึ่ง
-  // จำนวนใบ = จำนวน entry สูงสุดในคาบที่ซ้อนมากที่สุด (ปกติ 1, ถ้ามีซ้อน 2→2ใบ, 3→3ใบ)
-  // ใบที่ i: แต่ละคาบเลือก entry[i] ถ้ามี, ถ้าไม่มีใช้ entry[0] (คาบปกติแสดงเหมือนกันทุกใบ)
+  // จำนวนใบ = maxEntries ในคาบที่ซ้อนมากที่สุด
+  // ใบที่ i: คาบปกติ→เหมือนกันทุกใบ, คาบซ้อน→entry[i]
   const buildRoomPages=(room)=>{
     const subtitle="ภาคเรียนที่ "+(ay?.semester||"1")+"/"+(ay?.year||"2568")+" "+(sh?.name||"โรงเรียนดาราวิทยาลัย");
-    // หา maxEntries ของห้องนี้
     let maxEntries=1;
     DAYS.forEach(day=>PERIODS.forEach(p=>{
       const len=(S.schedule[room.id+"_"+day+"_"+p.id]||[]).length;
       if(len>maxEntries) maxEntries=len;
     }));
-    // สร้าง maxEntries ใบ
     return Array.from({length:maxEntries},(_,sheetIdx)=>({
       title:"ตารางเรียน "+room.name+(maxEntries>1?" (ฉบับที่ "+(sheetIdx+1)+"/"+maxEntries+")":""),
       subtitle:subtitle,
       dayRows:DAYS.map(day=>({day,cells:PERIODS.map(p=>{
         const en=S.schedule[room.id+"_"+day+"_"+p.id]||[];
         if(!en.length) return [];
-        // คาบปกติ (1 entry) → ทุกใบแสดงเหมือนกัน
-        // คาบซ้อน (>1 entry) → ใบที่ i แสดง entry[i], ถ้า i เกิน → entry[0]
+        const isDouble=en.length>1;
         const e=en[sheetIdx]||en[0];
         const sub=S.subjects.find(s=>s.id===e.subjectId);
         const t2=S.teachers.find(x=>x.id===e.teacherId);
-        return[{sub:sub?.name||"",room:(t2?.prefix||"")+(t2?.firstName||""),room2:""}];
+        // room2 ใช้เก็บชื่อห้อง, double flag ส่งผ่าน sub prefix
+        return[{sub:sub?.name||"",room:(t2?.prefix||"")+(t2?.firstName||""),room2:room.name,double:isDouble}];
       })}))
     }));
   };
@@ -1055,12 +1100,12 @@ function Reports({S,st,gc,ay,sh}){
   </div>;
 }
 /* ===== SETTINGS (Fix#4: academic year, school header, reset) ===== */
-function Settings({S,U,st,ay,setAY,sh,setSH}){
+function Settings({S,U,st,ay,setAY,sh,setSH,div}){
   const logoRef=useRef(null);
   const resetAll=()=>{
     if(!confirm("⚠️ คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลทั้งหมด?\nข้อมูลที่จัดตารางไว้จะหายทั้งหมด!"))return;
     if(!confirm("ยืนยันอีกครั้ง — ลบข้อมูลทั้งหมดและเริ่มต้นใหม่?"))return;
-    U.setLevels([{id:gid(),name:"ม.4"},{id:gid(),name:"ม.5"},{id:gid(),name:"ม.6"}]);
+    U.setLevels((div?.defaultLevels||["ระดับ 1","ระดับ 2","ระดับ 3"]).map(n=>({id:gid(),name:n})));
     U.setPlans([]);U.setDepts([]);U.setTeachers([]);U.setSubjects([]);
     U.setRooms([]);U.setAssigns([]);U.setMeetings([]);U.setSchedule({});U.setLocks({});
     st("รีเซ็ทข้อมูลทั้งหมดแล้ว","warning");
@@ -1151,13 +1196,14 @@ function pdfPage(title, subtitle, dayRows, footerText, logoBase64) {
   const bodyRows = dayRows.map(function(r) {
     const dayCells = r.cells.map(function(entries) {
       if (!entries || !entries.length) return '<td class="slot"></td>';
+      const isDouble = entries.some(function(e){ return e.double; });
       const inner = entries.map(function(e) {
         let h = '<div class="ent"><div class="ent-sub">' + e.sub + '</div><div class="ent-room">' + e.room + '</div>';
         if (e.room2) h += '<div class="ent-room2">' + e.room2 + '</div>';
         h += '</div>';
         return h;
       }).join("");
-      return '<td class="slot">' + inner + '</td>';
+      return '<td class="slot' + (isDouble ? ' slot-hi' : '') + '">' + inner + '</td>';
     }).join("");
     return '<tr><td class="day-cell">' + r.day + '</td>' + dayCells + '</tr>';
   }).join("\n");
@@ -1186,6 +1232,7 @@ function pdfPage(title, subtitle, dayRows, footerText, logoBase64) {
     'th.day-col{width:52px;font-size:11px;font-weight:700}' +
     'td.day-cell{font-weight:700;font-size:12px;padding:4px 2px;width:52px}' +
     'td.slot{padding:3px 2px;vertical-align:top;height:68px}' +
+    'td.slot-hi{background:#FEF9C3}' +
     '.ent{margin-bottom:2px}' +
     '.ent-sub{font-weight:700;font-size:11px;line-height:1.3}' +
     '.ent-room{font-size:10px;color:#111;line-height:1.25}' +
@@ -1233,13 +1280,14 @@ function pdfMultiPage(pages, logoBase64) {
     const bodyRows = pg.dayRows.map(function(r) {
       const dayCells = r.cells.map(function(entries) {
         if (!entries || !entries.length) return '<td class="slot"></td>';
+        const isDouble = entries.some(function(e){ return e.double; });
         const inner = entries.map(function(e) {
           let h = '<div class="ent"><div class="ent-sub">' + e.sub + '</div><div class="ent-room">' + e.room + '</div>';
           if (e.room2) h += '<div class="ent-room2">' + e.room2 + '</div>';
           h += '</div>';
           return h;
         }).join("");
-        return '<td class="slot">' + inner + '</td>';
+        return '<td class="slot' + (isDouble ? ' slot-hi' : '') + '">' + inner + '</td>';
       }).join("");
       return '<tr><td class="day-cell">' + r.day + '</td>' + dayCells + '</tr>';
     }).join("\n");
@@ -1288,6 +1336,7 @@ function pdfMultiPage(pages, logoBase64) {
     'th.day-col{width:46px;font-size:10px;font-weight:700}' +
     'td.day-cell{font-weight:700;font-size:11px;padding:2px;width:46px}' +
     'td.slot{padding:2px 1px;vertical-align:top;height:56px}' +
+    'td.slot-hi{background:#FEF9C3}' +
     '.ent{margin-bottom:1px}' +
     '.ent-sub{font-weight:700;font-size:10px;line-height:1.25}' +
     '.ent-room{font-size:9px;color:#111;line-height:1.2}' +
