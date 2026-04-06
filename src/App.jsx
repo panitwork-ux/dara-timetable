@@ -251,6 +251,10 @@ export default function App() {
       <nav style={{flex:1,padding:"12px 10px",overflowY:"auto"}}>
         {nav.map(n=><div key={n.id} className={`ni ${page===n.id?"a":""}`} onClick={()=>setPage(n.id)} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderRadius:10,cursor:"pointer",color:page===n.id?"#fff":"rgba(255,255,255,0.7)",fontSize:14,fontWeight:page===n.id?700:400,marginBottom:2}}><Icon name={n.icon} size={18}/>{n.label}</div>)}
       </nav>
+      <div style={{padding:"16px 20px",borderTop:"1px solid rgba(255,255,255,0.1)"}}>
+        <div style={{color:"rgba(255,255,255,0.4)",fontSize:11}}>ผู้พัฒนา</div>
+        <div style={{color:"rgba(255,255,255,0.7)",fontSize:12,fontWeight:600,marginTop:2}}>พนิต เกิดมงคล</div>
+      </div>
     </div>
 
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
