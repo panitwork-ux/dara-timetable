@@ -931,7 +931,7 @@ function Reports({S,st,gc,ay,sh}){
     }));
     // สร้าง maxEntries ใบ
     return Array.from({length:maxEntries},(_,sheetIdx)=>({
-      title:"ตารางเรียน "+room.name+(maxEntries>1?" (ฉบับที่ "+(sheetIdx+1)+"/"+maxEntries+")"):""),
+      title:"ตารางเรียน "+room.name+(maxEntries>1?" (ฉบับที่ "+(sheetIdx+1)+"/"+maxEntries+")":""),
       subtitle:subtitle,
       dayRows:DAYS.map(day=>({day,cells:PERIODS.map(p=>{
         const en=S.schedule[room.id+"_"+day+"_"+p.id]||[];
