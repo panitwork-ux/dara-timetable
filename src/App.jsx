@@ -985,15 +985,21 @@ function Reports({S,st,gc,ay,sh}){
     st("กำลังพิมพ์ตารางสอน "+teachers.length+" คน ("+Math.ceil(teachers.length/2)+" หน้า)");
   };
 
-  // PDF: พิมพ์ตารางเรียนทุกห้อง — แยกใบตามครู 2 ใบ/หน้า
+  // PDF: พิมพ์ตารางเรียนทุกห้อง — เรียงระดับชั้น ม.4→ม.5→ม.6 แล้วเรียงห้อง, แยกใบตามวิชาซ้อน
   const printAllRoomsPDF=()=>{
     if(!S.rooms.length){st("ไม่มีห้องเรียน","error");return}
-    const pages=S.rooms.flatMap(room=>buildRoomPages(room));
+    const sorted=[...S.rooms].sort((a,b)=>{
+      const la=S.levels.find(l=>l.id===a.levelId)?.name||"";
+      const lb=S.levels.find(l=>l.id===b.levelId)?.name||"";
+      if(la!==lb) return la.localeCompare(lb,"th");
+      return a.name.localeCompare(b.name,"th");
+    });
+    const pages=sorted.flatMap(room=>buildRoomPages(room));
     if(!pages.length){st("ยังไม่มีตารางในระบบ","error");return}
     const w=window.open('','_blank');
     w.document.write(pdfMultiPage(pages,sh?.logo||null));
     w.document.close();setTimeout(()=>w.print(),800);
-    st("กำลังพิมพ์ตารางเรียน "+S.rooms.length+" ห้อง ("+pages.length+" ใบ)");
+    st("กำลังพิมพ์ตารางเรียน "+sorted.length+" ห้อง ("+pages.length+" ใบ)");
   };
 
   return <div style={{animation:"fadeIn 0.3s"}}>
