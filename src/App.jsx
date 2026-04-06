@@ -241,8 +241,11 @@ export default function App() {
     <div style={{width:side?260:0,background:"linear-gradient(180deg,#991B1B,#7F1D1D)",transition:"width 0.3s",overflow:"hidden",flexShrink:0,display:"flex",flexDirection:"column"}}>
       <div style={{padding:"24px 20px",borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <div style={{width:42,height:42,borderRadius:12,background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:800,color:"#fff"}}>ดว</div>
-          <div><div style={{color:"#fff",fontSize:15,fontWeight:700}}>ดาราวิทยาลัย</div><div style={{color:"rgba(255,255,255,0.6)",fontSize:11}}>ระบบจัดตารางสอน v3</div></div>
+          {schoolHeader.logo
+            ?<img src={schoolHeader.logo} alt="logo" style={{width:42,height:42,borderRadius:12,objectFit:"cover",flexShrink:0}}/>
+            :<div style={{width:42,height:42,borderRadius:12,background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:800,color:"#fff"}}>ดว</div>
+          }
+          <div><div style={{color:"#fff",fontSize:15,fontWeight:700}}>{schoolHeader.name||"ดาราวิทยาลัย"}</div><div style={{color:"rgba(255,255,255,0.6)",fontSize:11}}>ระบบจัดตารางสอน v3</div></div>
         </div>
       </div>
       <nav style={{flex:1,padding:"12px 10px",overflowY:"auto"}}>
