@@ -890,12 +890,12 @@ function Reports({S,st,gc,ay,sh}){
   };
 
   // PDF print for teacher
-  // PDF: ตารางสอนครู — แสดง วิชา / ห้อง / ครูร่วม
+  // PDF: ตารางสอนครู — แสดง วิชา + ห้อง (ไม่มีครูร่วม)
   const printTeacherPDF=(t)=>{
     const w=window.open('','_blank');
     let html=pdfPage(
-      `ตารางสอน ${t.prefix}${t.firstName} ${t.lastName}`,
-      `ภาคเรียนที่ ${ay?.semester||"1"}/${ay?.year||"2568"} ${sh?.name||"โรงเรียนดาราวิทยาลัย"}`,
+      "ตารางสอน "+(t.prefix||"")+(t.firstName||"")+" "+(t.lastName||""),
+      "ภาคเรียนที่ "+(ay?.semester||"1")+"/"+(ay?.year||"2568")+" "+(sh?.name||"โรงเรียนดาราวิทยาลัย"),
       DAYS.map(day=>({day,cells:PERIODS.map(p=>{
         let parts=[];
         Object.entries(S.schedule).forEach(([k,en])=>{
@@ -906,9 +906,7 @@ function Reports({S,st,gc,ay,sh}){
               const sub=S.subjects.find(s=>s.id===e.subjectId);
               const rid=k.split("_")[0];
               const rm=S.rooms.find(r=>r.id===rid);
-              const co=e.coTeacherId&&e.coTeacherId!==t.id?S.teachers.find(x=>x.id===e.coTeacherId):null;
-              const room2=co?"+ "+(co.prefix||"")+(co.firstName||""):"";
-              parts.push({sub:sub?.name||"",room:rm?.name||"",room2});
+              parts.push({sub:sub?.name||"",room:rm?.name||"",room2:""});
             }
           });
         });
@@ -919,30 +917,45 @@ function Reports({S,st,gc,ay,sh}){
     );
     w.document.write(html);w.document.close();setTimeout(()=>w.print(),600);
   };
-  // PDF: ตารางเรียนห้อง — แสดง วิชา / ครู
-  const printRoomPDF=(room)=>{
-    const w=window.open('','_blank');
-    let html=pdfPage(
-      "ตารางเรียน "+room.name,
-      "ภาคเรียนที่ "+(ay?.semester||"1")+"/"+(ay?.year||"2568")+" "+(sh?.name||"โรงเรียนดาราวิทยาลัย"),
-      DAYS.map(day=>({day,cells:PERIODS.map(p=>{
-        const key=room.id+"_"+day+"_"+p.id;
-        const en=S.schedule[key]||[];
-        return en.map(e=>{
-          const sub=S.subjects.find(s=>s.id===e.subjectId);
-          const t2=S.teachers.find(x=>x.id===e.teacherId);
-          const co=e.coTeacherId?S.teachers.find(x=>x.id===e.coTeacherId):null;
-          const room2=co?"+ "+(co.prefix||"")+(co.firstName||""):"";
-          return{sub:sub?.name||"",room:(t2?.prefix||"")+(t2?.firstName||""),room2};
-        });
-      })})),
-      "",
-      sh?.logo||null
-    );
-    w.document.write(html);w.document.close();setTimeout(()=>w.print(),600);
+
+  // helper: สร้าง pages สำหรับห้องหนึ่ง
+  // จำนวนใบ = จำนวน entry สูงสุดในคาบที่ซ้อนมากที่สุด (ปกติ 1, ถ้ามีซ้อน 2→2ใบ, 3→3ใบ)
+  // ใบที่ i: แต่ละคาบเลือก entry[i] ถ้ามี, ถ้าไม่มีใช้ entry[0] (คาบปกติแสดงเหมือนกันทุกใบ)
+  const buildRoomPages=(room)=>{
+    const subtitle="ภาคเรียนที่ "+(ay?.semester||"1")+"/"+(ay?.year||"2568")+" "+(sh?.name||"โรงเรียนดาราวิทยาลัย");
+    // หา maxEntries ของห้องนี้
+    let maxEntries=1;
+    DAYS.forEach(day=>PERIODS.forEach(p=>{
+      const len=(S.schedule[room.id+"_"+day+"_"+p.id]||[]).length;
+      if(len>maxEntries) maxEntries=len;
+    }));
+    // สร้าง maxEntries ใบ
+    return Array.from({length:maxEntries},(_,sheetIdx)=>({
+      title:"ตารางเรียน "+room.name+(maxEntries>1?" (ฉบับที่ "+(sheetIdx+1)+"/"+maxEntries+")"):""),
+      subtitle:subtitle,
+      dayRows:DAYS.map(day=>({day,cells:PERIODS.map(p=>{
+        const en=S.schedule[room.id+"_"+day+"_"+p.id]||[];
+        if(!en.length) return [];
+        // คาบปกติ (1 entry) → ทุกใบแสดงเหมือนกัน
+        // คาบซ้อน (>1 entry) → ใบที่ i แสดง entry[i], ถ้า i เกิน → entry[0]
+        const e=en[sheetIdx]||en[0];
+        const sub=S.subjects.find(s=>s.id===e.subjectId);
+        const t2=S.teachers.find(x=>x.id===e.teacherId);
+        return[{sub:sub?.name||"",room:(t2?.prefix||"")+(t2?.firstName||""),room2:""}];
+      })}))
+    }));
   };
 
-  // PDF: พิมพ์ตารางสอนครูทั้งหมด (2 คน/หน้า A4 landscape)
+  // PDF: ตารางเรียนห้อง — แยกใบตามครู
+  const printRoomPDF=(room)=>{
+    const pages=buildRoomPages(room);
+    if(!pages.length){st("ยังไม่มีตารางในห้องนี้","error");return}
+    const w=window.open('','_blank');
+    w.document.write(pdfMultiPage(pages,sh?.logo||null));
+    w.document.close();setTimeout(()=>w.print(),600);
+  };
+
+  // PDF: พิมพ์ตารางสอนครูทั้งหมด (2 คน/หน้า A4 แนวตั้ง)
   const printAllTeachersPDF=()=>{
     const teachers=S.teachers.filter(t=>t.totalPeriods>0);
     if(!teachers.length){st("ไม่มีครูที่กำหนดคาบ","error");return}
@@ -959,9 +972,7 @@ function Reports({S,st,gc,ay,sh}){
               const sub=S.subjects.find(s=>s.id===e.subjectId);
               const rid=k.split("_")[0];
               const rm=S.rooms.find(r=>r.id===rid);
-              const co=e.coTeacherId&&e.coTeacherId!==t.id?S.teachers.find(x=>x.id===e.coTeacherId):null;
-              const room2=co?"+ "+(co.prefix||"")+(co.firstName||""):"";
-              parts.push({sub:sub?.name||"",room:rm?.name||"",room2});
+              parts.push({sub:sub?.name||"",room:rm?.name||"",room2:""});
             }
           });
         });
@@ -971,31 +982,18 @@ function Reports({S,st,gc,ay,sh}){
     const w=window.open('','_blank');
     w.document.write(pdfMultiPage(pages,sh?.logo||null));
     w.document.close();setTimeout(()=>w.print(),800);
-    st(`กำลังพิมพ์ตารางสอน ${teachers.length} คน (${Math.ceil(teachers.length/2)} หน้า)`);
+    st("กำลังพิมพ์ตารางสอน "+teachers.length+" คน ("+Math.ceil(teachers.length/2)+" หน้า)");
   };
 
-  // PDF: พิมพ์ตารางเรียนทุกห้อง (2 ห้อง/หน้า A4 landscape)
+  // PDF: พิมพ์ตารางเรียนทุกห้อง — แยกใบตามครู 2 ใบ/หน้า
   const printAllRoomsPDF=()=>{
     if(!S.rooms.length){st("ไม่มีห้องเรียน","error");return}
-    const pages=S.rooms.map(room=>({
-      title:"ตารางเรียน "+room.name,
-      subtitle:"ภาคเรียนที่ "+(ay?.semester||"1")+"/"+(ay?.year||"2568")+" "+(sh?.name||"โรงเรียนดาราวิทยาลัย"),
-      dayRows:DAYS.map(day=>({day,cells:PERIODS.map(p=>{
-        const key=room.id+"_"+day+"_"+p.id;
-        const en=S.schedule[key]||[];
-        return en.map(e=>{
-          const sub=S.subjects.find(s=>s.id===e.subjectId);
-          const t2=S.teachers.find(x=>x.id===e.teacherId);
-          const co=e.coTeacherId?S.teachers.find(x=>x.id===e.coTeacherId):null;
-          const room2=co?"+ "+(co.prefix||"")+(co.firstName||""):"";
-          return{sub:sub?.name||"",room:(t2?.prefix||"")+(t2?.firstName||""),room2};
-        });
-      })}))
-    }));
+    const pages=S.rooms.flatMap(room=>buildRoomPages(room));
+    if(!pages.length){st("ยังไม่มีตารางในระบบ","error");return}
     const w=window.open('','_blank');
     w.document.write(pdfMultiPage(pages,sh?.logo||null));
     w.document.close();setTimeout(()=>w.print(),800);
-    st(`กำลังพิมพ์ตารางเรียน ${S.rooms.length} ห้อง (${Math.ceil(S.rooms.length/2)} หน้า)`);
+    st("กำลังพิมพ์ตารางเรียน "+S.rooms.length+" ห้อง ("+pages.length+" ใบ)");
   };
 
   return <div style={{animation:"fadeIn 0.3s"}}>
@@ -1125,7 +1123,7 @@ function Settings({S,U,st,ay,setAY,sh,setSH}){
 }
 
 
-/* ===== PDF HELPER — ตามแบบฟอร์มดาราวิทยาลัย (A4 แนวนอน) ===== */
+/* ===== PDF HELPER — ตามแบบฟอร์มดาราวิทยาลัย (A4 แนวตั้ง) ===== */
 function pdfPage(title, subtitle, dayRows, footerText, logoBase64) {
   const PLIST = [
     { id: 1, time: "08.30-09.20" }, { id: 2, time: "09.20-10.10" },
@@ -1152,44 +1150,46 @@ function pdfPage(title, subtitle, dayRows, footerText, logoBase64) {
   }).join("\n");
 
   const logoHtml = logoBase64
-    ? '<img src="' + logoBase64 + '" style="width:52px;height:52px;border-radius:50%;object-fit:cover;flex-shrink:0"/>'
+    ? '<img src="' + logoBase64 + '" style="width:48px;height:48px;border-radius:50%;object-fit:cover;flex-shrink:0"/>'
     : '<div class="logo">LOGO</div>';
 
   return '<!DOCTYPE html><html><head><meta charset="utf-8">' +
     '<style>' +
     "@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap');" +
-    '@page{size:A4 landscape;margin:10mm 8mm}' +
+    '@page{size:A4 portrait;margin:10mm 8mm}' +
     '*{margin:0;padding:0;box-sizing:border-box}' +
-    "body{font-family:'Sarabun','Noto Sans Thai',sans-serif;font-size:13px;color:#000}" +
+    "body{font-family:'Sarabun','Noto Sans Thai',sans-serif;font-size:11px;color:#000}" +
     '.page{width:100%;position:relative}' +
-    '.header-row{display:flex;align-items:center;margin-bottom:8px;gap:14px}' +
-    '.logo{width:52px;height:52px;border:1.5px solid #999;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;color:#666;flex-shrink:0}' +
-    '.title-text{font-size:16px;font-weight:700;flex:1}' +
+    '.header-row{display:flex;align-items:center;margin-bottom:6px;gap:12px}' +
+    '.logo{width:48px;height:48px;border:1.5px solid #999;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;color:#666;flex-shrink:0}' +
+    '.title-block{flex:1}' +
+    '.title-main{font-size:14px;font-weight:700}' +
+    '.title-sub{font-size:11px;color:#444;margin-top:2px}' +
     'table{width:100%;border-collapse:collapse;table-layout:fixed;margin-top:4px}' +
-    'th,td{border:1.5px solid #000;text-align:center;vertical-align:middle}' +
-    'th{padding:5px 2px;font-weight:700}' +
-    'th.period-num{font-size:16px;height:30px}' +
-    'th.period-time{font-size:11px;height:24px;font-weight:400}' +
-    'th.day-col{width:72px;font-size:14px;font-weight:700}' +
-    'td.day-cell{font-weight:700;font-size:15px;padding:6px 4px;width:72px}' +
-    'td.slot{padding:4px 3px;vertical-align:top;height:72px}' +
-    '.ent{margin-bottom:1px}' +
-    '.ent-sub{font-weight:700;font-size:13px;line-height:1.35}' +
-    '.ent-room{font-size:12px;color:#111;line-height:1.3}' +
-    '.ent-room2{font-size:11px;color:#333;line-height:1.3}' +
-    '.sig-area{margin-top:20px;font-size:13px}' +
-    '.sig-flex{display:flex;justify-content:space-between;padding:0 40px}' +
+    'th,td{border:1px solid #000;text-align:center;vertical-align:middle}' +
+    'th{padding:3px 1px;font-weight:700}' +
+    'th.period-num{font-size:13px;height:24px}' +
+    'th.period-time{font-size:9px;height:18px;font-weight:400}' +
+    'th.day-col{width:52px;font-size:11px;font-weight:700}' +
+    'td.day-cell{font-weight:700;font-size:12px;padding:4px 2px;width:52px}' +
+    'td.slot{padding:3px 2px;vertical-align:top;height:68px}' +
+    '.ent{margin-bottom:2px}' +
+    '.ent-sub{font-weight:700;font-size:11px;line-height:1.3}' +
+    '.ent-room{font-size:10px;color:#111;line-height:1.25}' +
+    '.ent-room2{font-size:9px;color:#333;line-height:1.2}' +
+    '.sig-area{margin-top:16px;font-size:11px}' +
+    '.sig-flex{display:flex;justify-content:space-between;padding:0 20px}' +
     '.sig-box{text-align:center}' +
-    '.sig-line{display:inline-block;width:220px;border-bottom:1.5px dotted #000;margin-bottom:4px}' +
+    '.sig-line{display:inline-block;width:160px;border-bottom:1px dotted #000;margin-bottom:3px}' +
     '@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}' +
     '</style></head><body>' +
     '<div class="page">' +
     '<div class="header-row">' +
     logoHtml +
-    '<div class="title-text">' + title + ' ' + subtitle + '</div>' +
+    '<div class="title-block"><div class="title-main">' + title + '</div><div class="title-sub">' + subtitle + '</div></div>' +
     '</div>' +
     '<table><thead>' +
-    '<tr><th class="day-col" rowspan="2">ชั่วโมงที่<br/><span style="font-size:11px;font-weight:400">เวลา</span></th>' + thNums + '</tr>' +
+    '<tr><th class="day-col" rowspan="2">วัน<br/><span style="font-size:9px;font-weight:400">คาบ/เวลา</span></th>' + thNums + '</tr>' +
     '<tr>' + thTimes + '</tr>' +
     '</thead><tbody>' +
     bodyRows +
@@ -1201,7 +1201,7 @@ function pdfPage(title, subtitle, dayRows, footerText, logoBase64) {
     '</div></body></html>';
 }
 
-/* ===== PDF: พิมพ์หลายตาราง 2 ต่อ 1 หน้า A4 landscape ===== */
+/* ===== PDF: พิมพ์หลายตาราง 2 ต่อ 1 หน้า A4 แนวตั้ง ===== */
 function pdfMultiPage(pages, logoBase64) {
   const PLIST = [
     { id: 1, time: "08.30-09.20" }, { id: 2, time: "09.20-10.10" },
@@ -1213,7 +1213,7 @@ function pdfMultiPage(pages, logoBase64) {
   const thTimes = PLIST.map(p => '<th class="period-time">' + p.time + '</th>').join("");
 
   const logoHtml = logoBase64
-    ? '<img src="' + logoBase64 + '" style="width:38px;height:38px;border-radius:50%;object-fit:cover;flex-shrink:0"/>'
+    ? '<img src="' + logoBase64 + '" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0"/>'
     : '<div class="logo">LOGO</div>';
 
   const buildBlock = (pg) => {
@@ -1233,10 +1233,10 @@ function pdfMultiPage(pages, logoBase64) {
 
     return '<div class="block">' +
       '<div class="header-row">' + logoHtml +
-      '<div class="title-text">' + pg.title + ' <span class="subtitle">' + pg.subtitle + '</span></div>' +
+      '<div class="title-block"><div class="title-main">' + pg.title + '</div><div class="title-sub">' + pg.subtitle + '</div></div>' +
       '</div>' +
       '<table><thead>' +
-      '<tr><th class="day-col" rowspan="2">ชั่วโมงที่<br/><span style="font-size:9px;font-weight:400">เวลา</span></th>' + thNums + '</tr>' +
+      '<tr><th class="day-col" rowspan="2">วัน<br/><span style="font-size:8px;font-weight:400">คาบ/เวลา</span></th>' + thNums + '</tr>' +
       '<tr>' + thTimes + '</tr>' +
       '</thead><tbody>' + bodyRows + '</tbody></table>' +
       '<div class="sig-area"><div class="sig-flex">' +
@@ -1256,33 +1256,34 @@ function pdfMultiPage(pages, logoBase64) {
   return '<!DOCTYPE html><html><head><meta charset="utf-8">' +
     '<style>' +
     "@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap');" +
-    '@page{size:A4 landscape;margin:6mm 8mm}' +
+    '@page{size:A4 portrait;margin:8mm 7mm}' +
     '*{margin:0;padding:0;box-sizing:border-box}' +
-    "body{font-family:'Sarabun','Noto Sans Thai',sans-serif;font-size:11px;color:#000}" +
+    "body{font-family:'Sarabun','Noto Sans Thai',sans-serif;font-size:10px;color:#000}" +
     '.sheet{page-break-after:always}' +
     '.sheet:last-child{page-break-after:avoid}' +
     '.block{}' +
-    '.header-row{display:flex;align-items:center;margin-bottom:4px;gap:10px}' +
-    '.logo{width:38px;height:38px;border:1px solid #999;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:7px;color:#666;flex-shrink:0}' +
-    '.title-text{font-size:13px;font-weight:700;flex:1}' +
-    '.subtitle{font-size:11px;font-weight:400;color:#444}' +
+    '.header-row{display:flex;align-items:center;margin-bottom:4px;gap:8px}' +
+    '.logo{width:36px;height:36px;border:1px solid #999;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:7px;color:#666;flex-shrink:0}' +
+    '.title-block{flex:1}' +
+    '.title-main{font-size:12px;font-weight:700}' +
+    '.title-sub{font-size:10px;color:#444;margin-top:1px}' +
     'table{width:100%;border-collapse:collapse;table-layout:fixed;margin-top:3px}' +
     'th,td{border:1px solid #000;text-align:center;vertical-align:middle}' +
-    'th{padding:2px 2px;font-weight:700}' +
-    'th.period-num{font-size:13px;height:22px}' +
-    'th.period-time{font-size:9px;height:18px;font-weight:400}' +
-    'th.day-col{width:58px;font-size:11px;font-weight:700}' +
-    'td.day-cell{font-weight:700;font-size:12px;padding:3px;width:58px}' +
-    'td.slot{padding:2px 2px;vertical-align:top;height:50px}' +
+    'th{padding:2px 1px;font-weight:700}' +
+    'th.period-num{font-size:12px;height:20px}' +
+    'th.period-time{font-size:8px;height:15px;font-weight:400}' +
+    'th.day-col{width:46px;font-size:10px;font-weight:700}' +
+    'td.day-cell{font-weight:700;font-size:11px;padding:2px;width:46px}' +
+    'td.slot{padding:2px 1px;vertical-align:top;height:56px}' +
     '.ent{margin-bottom:1px}' +
     '.ent-sub{font-weight:700;font-size:10px;line-height:1.25}' +
     '.ent-room{font-size:9px;color:#111;line-height:1.2}' +
-    '.ent-room2{font-size:9px;color:#333;line-height:1.2}' +
-    '.sig-area{margin-top:4px;font-size:10px}' +
-    '.sig-flex{display:flex;justify-content:space-between;padding:0 30px}' +
+    '.ent-room2{font-size:8px;color:#333;line-height:1.15}' +
+    '.sig-area{margin-top:4px;font-size:9px}' +
+    '.sig-flex{display:flex;justify-content:space-between;padding:0 15px}' +
     '.sig-box{text-align:center}' +
-    '.sig-line{display:inline-block;width:170px;border-bottom:1px dotted #000;margin-bottom:2px}' +
-    '.divider{border:none;border-top:1.5px dashed #aaa;margin:4px 0}' +
+    '.sig-line{display:inline-block;width:130px;border-bottom:1px dotted #000;margin-bottom:2px}' +
+    '.divider{border:none;border-top:1.5px dashed #aaa;margin:5px 0}' +
     '@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}' +
     '</style></head><body>' +
     pagesHtml +
