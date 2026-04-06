@@ -35,18 +35,19 @@ const saveLS = (key, data) => { try { localStorage.setItem(`dara_${key}`, JSON.s
 const loadLS = (key, fb) => { try { const d = localStorage.getItem(`dara_${key}`); return d ? JSON.parse(d) : fb; } catch(e) { return fb; } };
 
 // GAS helpers
-const gasGet = async () => {
-  const res = await fetch(GAS_URL);
+const gasGet = async (divId) => {
+  const url = divId ? GAS_URL+"?division="+divId : GAS_URL;
+  const res = await fetch(url);
   const json = await res.json();
   return json.ok ? json.data : null;
 };
-const gasPost = async (data) => {
-  // GAS ไม่รับ CORS preflight → ใช้ no-cors + mode fetch trick
+const gasPost = async (divId, data) => {
+  // GAS ไม่รับ CORS preflight → ใช้ no-cors
   await fetch(GAS_URL, {
     method: "POST",
     mode: "no-cors",
     headers: { "Content-Type": "text/plain" },
-    body: JSON.stringify({ action: "save", data }),
+    body: JSON.stringify({ action: "save", division: divId, data }),
   });
 };
 
@@ -217,7 +218,7 @@ export default function App() {
     clearTimeout(saveTimer.current);
     saveTimer.current=setTimeout(()=>{
       setSyncing(true);
-      gasPost({division:divId,...stateRef.current}).catch(()=>{}).finally(()=>setSyncing(false));
+      gasPost(divId, stateRef.current).catch(()=>{}).finally(()=>setSyncing(false));
     },1500);
   },[divId]);
 
@@ -225,7 +226,7 @@ export default function App() {
   useEffect(()=>{
     if(!GAS_URL||GAS_URL.includes("YOUR_DEPLOYMENT_ID"))return;
     setSyncing(true);
-    gasGet().then(d=>{
+    gasGet(divId).then(d=>{
       if(d){
         if(d.levels)   setLevels(d.levels);
         if(d.plans)    setPlans(d.plans);
@@ -286,13 +287,17 @@ export default function App() {
           <div><div style={{color:"#fff",fontSize:15,fontWeight:700}}>{schoolHeader.name||"ดาราวิทยาลัย"}</div><div style={{color:"rgba(255,255,255,0.6)",fontSize:11}}>ระบบจัดตารางสอน v3</div></div>
         </div>
       </div>
-      {/* Division selector */}
-      <div style={{padding:"12px 10px",borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
-        <div style={{fontSize:10,color:"rgba(255,255,255,0.45)",marginBottom:6,paddingLeft:4}}>ระดับการศึกษา</div>
-        {DIVISIONS.map(d=><div key={d.id} onClick={()=>switchDivision(d.id)} style={{padding:"8px 12px",borderRadius:8,cursor:"pointer",marginBottom:2,background:divId===d.id?"rgba(255,255,255,0.2)":"transparent",color:divId===d.id?"#fff":"rgba(255,255,255,0.6)",fontSize:12,fontWeight:divId===d.id?700:400,display:"flex",alignItems:"center",gap:8}}>
-          <div style={{width:6,height:6,borderRadius:"50%",background:divId===d.id?"#FCA5A5":"rgba(255,255,255,0.3)",flexShrink:0}}/>
-          {d.name}
-        </div>)}
+      {/* Division selector — dropdown */}
+      <div style={{padding:"10px 12px",borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
+        <div style={{fontSize:10,color:"rgba(255,255,255,0.45)",marginBottom:5,paddingLeft:2}}>ระดับการศึกษา</div>
+        <div style={{position:"relative"}}>
+          <select value={divId} onChange={e=>switchDivision(e.target.value)} style={{width:"100%",padding:"8px 32px 8px 10px",borderRadius:8,border:"1px solid rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.15)",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",outline:"none",appearance:"none",backgroundImage:"none"}}>
+            {DIVISIONS.map(d=><option key={d.id} value={d.id} style={{background:"#7F1D1D",color:"#fff"}}>{d.name}</option>)}
+          </select>
+          <div style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",color:"rgba(255,255,255,0.7)"}}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+        </div>
       </div>
       <nav style={{flex:1,padding:"12px 10px",overflowY:"auto"}}>
         {nav.map(n=><div key={n.id} className={`ni ${page===n.id?"a":""}`} onClick={()=>setPage(n.id)} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderRadius:10,cursor:"pointer",color:page===n.id?"#fff":"rgba(255,255,255,0.7)",fontSize:14,fontWeight:page===n.id?700:400,marginBottom:2}}><Icon name={n.icon} size={18}/>{n.label}</div>)}
