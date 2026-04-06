@@ -350,8 +350,7 @@ function Levels({S,U,st}){
           <div style={{fontSize:12,fontWeight:600,color:"#9CA3AF",marginBottom:6}}>ห้องเรียน:</div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
             {S.rooms.filter(r=>r.levelId===lv.id).map(rm=>{const plan=S.plans.find(p=>p.id===rm.planId);return<span key={rm.id} style={{background:"#DBEAFE",color:"#1E40AF",fontSize:12,padding:"4px 12px",borderRadius:20,fontWeight:600,display:"inline-flex",alignItems:"center",gap:4}}>
-              {rm.name}{plan?` (${plan.name}${plan.subPlans?.length?` — ${plan.subPlans.join(", ")}`:""})`:""}
-              <button onClick={()=>{const n=prompt("แก้ไขชื่อห้อง:",rm.name);if(n){U.setRooms(p=>p.map(r=>r.id===rm.id?{...r,name:n}:r));st("แก้ไขสำเร็จ")}}} style={{background:"none",border:"none",cursor:"pointer",color:"#1E40AF",padding:0}}><Icon name="edit" size={10}/></button>
+              {rm.name}{plan?" ("+plan.name+(plan.subPlans?.length?" \u2014 "+plan.subPlans.join(", "):"")+")":""}              <button onClick={()=>{const n=prompt("แก้ไขชื่อห้อง:",rm.name);if(n){U.setRooms(p=>p.map(r=>r.id===rm.id?{...r,name:n}:r));st("แก้ไขสำเร็จ")}}} style={{background:"none",border:"none",cursor:"pointer",color:"#1E40AF",padding:0}}><Icon name="edit" size={10}/></button>
               <button onClick={()=>U.setRooms(p=>p.filter(r=>r.id!==rm.id))} style={{background:"none",border:"none",cursor:"pointer",color:"#1E40AF",padding:0}}><Icon name="x" size={10}/></button>
             </span>})}
             {!S.rooms.filter(r=>r.levelId===lv.id).length&&<span style={{fontSize:12,color:"#9CA3AF"}}>ยังไม่มี</span>}
@@ -897,7 +896,24 @@ function Reports({S,st,gc,ay,sh}){
     let html=pdfPage(
       `ตารางสอน ${t.prefix}${t.firstName} ${t.lastName}`,
       `ภาคเรียนที่ ${ay?.semester||"1"}/${ay?.year||"2568"} ${sh?.name||"โรงเรียนดาราวิทยาลัย"}`,
-      DAYS.map(day=>({day,cells:PERIODS.map(p=>{let parts=[];Object.entries(S.schedule).forEach(([k,en])=>{if(!k.endsWith(`_${day}_${p.id}`))return;en?.forEach(e=>{if(e.teacherId===t.id||e.coTeacherId===t.id){const sub=S.subjects.find(s=>s.id===e.subjectId);const rid=k.split("_")[0];const rm=S.rooms.find(r=>r.id===rid);const co=e.coTeacherId&&e.coTeacherId!==t.id?S.teachers.find(x=>x.id===e.coTeacherId):null;parts.push({sub:sub?.name||"",room:rm?.name||"",room2:co?`+ ${co.prefix||""}${co.firstName||""}`:""})}}});return parts})})),
+      DAYS.map(day=>({day,cells:PERIODS.map(p=>{
+        let parts=[];
+        Object.entries(S.schedule).forEach(([k,en])=>{
+          const keySuffix="_"+day+"_"+p.id;
+          if(!k.endsWith(keySuffix))return;
+          en?.forEach(e=>{
+            if(e.teacherId===t.id||e.coTeacherId===t.id){
+              const sub=S.subjects.find(s=>s.id===e.subjectId);
+              const rid=k.split("_")[0];
+              const rm=S.rooms.find(r=>r.id===rid);
+              const co=e.coTeacherId&&e.coTeacherId!==t.id?S.teachers.find(x=>x.id===e.coTeacherId):null;
+              const room2=co?"+ "+(co.prefix||"")+(co.firstName||""):"";
+              parts.push({sub:sub?.name||"",room:rm?.name||"",room2});
+            }
+          });
+        });
+        return parts;
+      })})),
       "",
       sh?.logo||null
     );
@@ -907,9 +923,19 @@ function Reports({S,st,gc,ay,sh}){
   const printRoomPDF=(room)=>{
     const w=window.open('','_blank');
     let html=pdfPage(
-      `ตารางเรียน ${room.name}`,
-      `ภาคเรียนที่ ${ay?.semester||"1"}/${ay?.year||"2568"} ${sh?.name||"โรงเรียนดาราวิทยาลัย"}`,
-      DAYS.map(day=>({day,cells:PERIODS.map(p=>{const en=S.schedule[`${room.id}_${day}_${p.id}`]||[];return en.map(e=>{const sub=S.subjects.find(s=>s.id===e.subjectId);const t2=S.teachers.find(x=>x.id===e.teacherId);const co=e.coTeacherId?S.teachers.find(x=>x.id===e.coTeacherId):null;return{sub:sub?.name||"",room:`${t2?.prefix||""}${t2?.firstName||""}`,room2:co?`+ ${co.prefix||""}${co.firstName||""}`:""}})})})),
+      "ตารางเรียน "+room.name,
+      "ภาคเรียนที่ "+(ay?.semester||"1")+"/"+(ay?.year||"2568")+" "+(sh?.name||"โรงเรียนดาราวิทยาลัย"),
+      DAYS.map(day=>({day,cells:PERIODS.map(p=>{
+        const key=room.id+"_"+day+"_"+p.id;
+        const en=S.schedule[key]||[];
+        return en.map(e=>{
+          const sub=S.subjects.find(s=>s.id===e.subjectId);
+          const t2=S.teachers.find(x=>x.id===e.teacherId);
+          const co=e.coTeacherId?S.teachers.find(x=>x.id===e.coTeacherId):null;
+          const room2=co?"+ "+(co.prefix||"")+(co.firstName||""):"";
+          return{sub:sub?.name||"",room:(t2?.prefix||"")+(t2?.firstName||""),room2};
+        });
+      })})),
       "",
       sh?.logo||null
     );
@@ -921,9 +947,26 @@ function Reports({S,st,gc,ay,sh}){
     const teachers=S.teachers.filter(t=>t.totalPeriods>0);
     if(!teachers.length){st("ไม่มีครูที่กำหนดคาบ","error");return}
     const pages=teachers.map(t=>({
-      title:`ตารางสอน ${t.prefix}${t.firstName} ${t.lastName}`,
-      subtitle:`ภาคเรียนที่ ${ay?.semester||"1"}/${ay?.year||"2568"} ${sh?.name||"โรงเรียนดาราวิทยาลัย"}`,
-      dayRows:DAYS.map(day=>({day,cells:PERIODS.map(p=>{let parts=[];Object.entries(S.schedule).forEach(([k,en])=>{if(!k.endsWith(`_${day}_${p.id}`))return;en?.forEach(e=>{if(e.teacherId===t.id||e.coTeacherId===t.id){const sub=S.subjects.find(s=>s.id===e.subjectId);const rid=k.split("_")[0];const rm=S.rooms.find(r=>r.id===rid);const co=e.coTeacherId&&e.coTeacherId!==t.id?S.teachers.find(x=>x.id===e.coTeacherId):null;parts.push({sub:sub?.name||"",room:rm?.name||"",room2:co?`+ ${co.prefix||""}${co.firstName||""}`:""})}}});return parts})}))
+      title:"ตารางสอน "+(t.prefix||"")+(t.firstName||"")+" "+(t.lastName||""),
+      subtitle:"ภาคเรียนที่ "+(ay?.semester||"1")+"/"+(ay?.year||"2568")+" "+(sh?.name||"โรงเรียนดาราวิทยาลัย"),
+      dayRows:DAYS.map(day=>({day,cells:PERIODS.map(p=>{
+        const keySuffix="_"+day+"_"+p.id;
+        let parts=[];
+        Object.entries(S.schedule).forEach(([k,en])=>{
+          if(!k.endsWith(keySuffix))return;
+          en?.forEach(e=>{
+            if(e.teacherId===t.id||e.coTeacherId===t.id){
+              const sub=S.subjects.find(s=>s.id===e.subjectId);
+              const rid=k.split("_")[0];
+              const rm=S.rooms.find(r=>r.id===rid);
+              const co=e.coTeacherId&&e.coTeacherId!==t.id?S.teachers.find(x=>x.id===e.coTeacherId):null;
+              const room2=co?"+ "+(co.prefix||"")+(co.firstName||""):"";
+              parts.push({sub:sub?.name||"",room:rm?.name||"",room2});
+            }
+          });
+        });
+        return parts;
+      })}))
     }));
     const w=window.open('','_blank');
     w.document.write(pdfMultiPage(pages,sh?.logo||null));
@@ -935,9 +978,20 @@ function Reports({S,st,gc,ay,sh}){
   const printAllRoomsPDF=()=>{
     if(!S.rooms.length){st("ไม่มีห้องเรียน","error");return}
     const pages=S.rooms.map(room=>({
-      title:`ตารางเรียน ${room.name}`,
-      subtitle:`ภาคเรียนที่ ${ay?.semester||"1"}/${ay?.year||"2568"} ${sh?.name||"โรงเรียนดาราวิทยาลัย"}`,
-      dayRows:DAYS.map(day=>({day,cells:PERIODS.map(p=>{const en=S.schedule[`${room.id}_${day}_${p.id}`]||[];return en.map(e=>{const sub=S.subjects.find(s=>s.id===e.subjectId);const t2=S.teachers.find(x=>x.id===e.teacherId);const co=e.coTeacherId?S.teachers.find(x=>x.id===e.coTeacherId):null;return{sub:sub?.name||"",room:`${t2?.prefix||""}${t2?.firstName||""}`,room2:co?`+ ${co.prefix||""}${co.firstName||""}`:""}})})}))}));
+      title:"ตารางเรียน "+room.name,
+      subtitle:"ภาคเรียนที่ "+(ay?.semester||"1")+"/"+(ay?.year||"2568")+" "+(sh?.name||"โรงเรียนดาราวิทยาลัย"),
+      dayRows:DAYS.map(day=>({day,cells:PERIODS.map(p=>{
+        const key=room.id+"_"+day+"_"+p.id;
+        const en=S.schedule[key]||[];
+        return en.map(e=>{
+          const sub=S.subjects.find(s=>s.id===e.subjectId);
+          const t2=S.teachers.find(x=>x.id===e.teacherId);
+          const co=e.coTeacherId?S.teachers.find(x=>x.id===e.coTeacherId):null;
+          const room2=co?"+ "+(co.prefix||"")+(co.firstName||""):"";
+          return{sub:sub?.name||"",room:(t2?.prefix||"")+(t2?.firstName||""),room2};
+        });
+      })}))
+    }));
     const w=window.open('','_blank');
     w.document.write(pdfMultiPage(pages,sh?.logo||null));
     w.document.close();setTimeout(()=>w.print(),800);
