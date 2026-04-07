@@ -118,6 +118,8 @@ function AdminPanel({user,onBack}){
   };
 
   // เพิ่ม / อัปเดตผู้ใช้จากอีเมล (ใช้อีเมลเป็น uid placeholder)
+  const makePreKey=(email)=>"pre_"+email.trim().toLowerCase().replace(/[@.]/g,"_");
+
   const handleAddEmail=async()=>{
     const email=addEmail.trim().toLowerCase();
     if(!email){showToast("กรุณากรอกอีเมล","error");return;}
@@ -126,21 +128,26 @@ function AdminPanel({user,onBack}){
     const {db}=getFB();
     if(!db){showToast("Firebase ไม่พร้อม","error");setAddLoading(false);return;}
 
-    // ค้นหาว่ามี doc ที่มี email นี้อยู่แล้วไหม (จาก users ที่โหลดมา)
-    const existing=users.find(u=>u.email===email);
-    const uid=existing?existing.uid:("pre_"+email.replace(/[@.]/g,"_"));
+    // ค้นหาว่ามี doc ที่มี email นี้อยู่แล้วไหม (จาก users ที่โหลดมา = login จริงแล้ว)
+    const existing=users.find(u=>u.email===email&&!u.preAdded);
+    const uid=existing?existing.uid:makePreKey(email);
 
     await setDoc(doc(db,"permissions",uid),{
       email,
       displayName:existing?.displayName||"",
       divisions:addPerms,
       preAdded:!existing,
+      merged:false,
     },{merge:true});
 
     if(existing){
       setUsers(p=>p.map(u=>u.uid===uid?{...u,divisions:addPerms}:u));
     } else {
-      setUsers(p=>[...p,{uid,email,displayName:"",divisions:addPerms,preAdded:true}]);
+      // ลบ pre doc เก่าถ้ามี แล้วเพิ่มใหม่
+      setUsers(p=>{
+        const filtered=p.filter(u=>u.uid!==uid);
+        return [...filtered,{uid,email,displayName:"",divisions:addPerms,preAdded:true}];
+      });
     }
     setAddEmail("");
     setAddPerms({p1:false,p2:false,m1:false,m2:false});
@@ -500,31 +507,41 @@ export default function App() {
     const unsub=onAuthStateChanged(auth,async u=>{
       setAuthUser(u||null);
       if(u){
-        // โหลด permissions จาก Firestore
+        const {db}=getFB();
+        // helper สร้าง pre-key จากอีเมล (ต้องตรงกับที่ admin ใช้)
+        const makePreKey=(email)=>"pre_"+email.trim().toLowerCase().replace(/[@.]/g,"_");
+
+        // โหลด permissions จาก Firestore ด้วย uid จริงก่อน
         let perms=await fsGetPermissions(u.uid);
-        if(!perms){
-          // ลอง lookup จาก pre-added email (uid = "pre_...")
-          const {db}=getFB();
-          if(db){
-            const emailKey="pre_"+u.email.replace(/[@.]/g,"_");
-            const preSnap=await getDoc(doc(db,"permissions",emailKey));
-            if(preSnap.exists()){
-              const preData=preSnap.data();
-              // ย้ายสิทธิ์จาก pre key → uid จริง แล้วลบ pre key
-              await setDoc(doc(db,"permissions",u.uid),{displayName:u.displayName,email:u.email,divisions:preData.divisions||{p1:false,p2:false,m1:false,m2:false},preAdded:false},{merge:false});
-              // ลบ pre doc (ไม่ต้องรอ)
-              setDoc(doc(db,"permissions",emailKey),{merged:true},{merge:true});
-              perms={divisions:preData.divisions||{p1:false,p2:false,m1:false,m2:false}};
-            }
+
+        if(!perms&&db){
+          // ลอง lookup จาก pre-added email key
+          const emailKey=makePreKey(u.email);
+          const preSnap=await getDoc(doc(db,"permissions",emailKey));
+          if(preSnap.exists()&&!preSnap.data().merged){
+            const preData=preSnap.data();
+            const divs=preData.divisions||{p1:false,p2:false,m1:false,m2:false};
+            // ย้ายสิทธิ์จาก pre key → uid จริง
+            await setDoc(doc(db,"permissions",u.uid),{
+              displayName:u.displayName||"",
+              email:u.email,
+              divisions:divs,
+              preAdded:false,
+            });
+            // mark pre doc ว่า merged แล้ว (ไม่ลบเพื่อให้ admin เห็น)
+            await setDoc(doc(db,"permissions",emailKey),{merged:true},{merge:true});
+            perms={divisions:divs};
           }
         }
+
         if(!perms){
           // Login ครั้งแรก ไม่มีสิทธิ์ล่วงหน้า → สร้าง doc ว่าง
-          await fsSetPermissions(u.uid,{displayName:u.displayName,email:u.email,divisions:{p1:false,p2:false,m1:false,m2:false}});
-          setUserPerms({divisions:{p1:false,p2:false,m1:false,m2:false}});
+          const emptyDivs={p1:false,p2:false,m1:false,m2:false};
+          await fsSetPermissions(u.uid,{displayName:u.displayName||"",email:u.email,divisions:emptyDivs});
+          setUserPerms({divisions:emptyDivs});
         } else {
-          // อัปเดตชื่อ/email ล่าสุด
-          await fsSetPermissions(u.uid,{displayName:u.displayName,email:u.email});
+          // อัปเดตชื่อ/email ล่าสุด (ไม่ทับ divisions)
+          await fsSetPermissions(u.uid,{displayName:u.displayName||"",email:u.email});
           setUserPerms(perms);
         }
       } else {
@@ -601,23 +618,24 @@ export default function App() {
     },1500);
   },[divId]);
 
-  // โหลดจาก GAS ตอนเริ่ม
+  // โหลดจาก GAS ตอนเริ่ม — ทับ localStorage เฉพาะเมื่อ GAS มีข้อมูลจริง
   useEffect(()=>{
     if(!GAS_URL||GAS_URL.includes("YOUR_DEPLOYMENT_ID"))return;
     setSyncing(true);
     gasGet(divId).then(d=>{
       if(d){
-        if(d.levels)   setLevels(d.levels);
-        if(d.plans)    setPlans(d.plans);
-        if(d.depts)    setDepts(d.depts);
-        if(d.teachers) setTeachers(d.teachers);
-        if(d.subjects) setSubjects(d.subjects);
-        if(d.rooms)    setRooms(d.rooms);
-        if(d.specialRooms) setSpecialRooms(d.specialRooms);
-        if(d.assigns)  setAssigns(d.assigns);
-        if(d.meetings) setMeetings(d.meetings);
-        if(d.schedule) setSchedule(d.schedule);
-        if(d.locks)    setLocks(d.locks);
+        // ทับเฉพาะ field ที่มีข้อมูลจริง (array ไม่ว่าง หรือ object ไม่ว่าง)
+        if(d.levels?.length)       setLevels(d.levels);
+        if(d.plans?.length)        setPlans(d.plans);
+        if(d.depts?.length)        setDepts(d.depts);
+        if(d.teachers?.length)     setTeachers(d.teachers);
+        if(d.subjects?.length)     setSubjects(d.subjects);
+        if(d.rooms?.length)        setRooms(d.rooms);
+        if(d.specialRooms?.length) setSpecialRooms(d.specialRooms);
+        if(d.assigns?.length)      setAssigns(d.assigns);
+        if(d.meetings?.length)     setMeetings(d.meetings);
+        if(d.schedule&&Object.keys(d.schedule).length) setSchedule(d.schedule);
+        if(d.locks&&Object.keys(d.locks).length)       setLocks(d.locks);
         setGasReady(true);
       } else { setGasReady(true); }
     }).catch(()=>{ setGasReady(true); }).finally(()=>setSyncing(false));
