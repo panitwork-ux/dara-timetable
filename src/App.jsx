@@ -88,10 +88,21 @@ function AdminPanel({user,onBack}){
   const [users,setUsers]=useState([]);
   const [loading,setLoading]=useState(false);
   const [search,setSearch]=useState("");
+  const [saving,setSaving]=useState(false);
+  const [toast,setToast]=useState(null);
 
-  // Division permissions ที่จะแก้
+  // เพิ่มอีเมลล่วงหน้า
+  const [addEmail,setAddEmail]=useState("");
+  const [addPerms,setAddPerms]=useState({p1:false,p2:false,m1:false,m2:false});
+  const [addLoading,setAddLoading]=useState(false);
+
+  // Edit existing user
   const [editUid,setEditUid]=useState(null);
   const [editPerms,setEditPerms]=useState({});
+
+  const divNames={p1:"ประถมต้น",p2:"ประถมปลาย",m1:"มัธยมต้น",m2:"มัธยมปลาย"};
+
+  const showToast=(msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),3000);};
 
   const tryPin=()=>{
     if(pin===ADMIN_PIN){setUnlocked(true);loadUsers();}
@@ -101,17 +112,58 @@ function AdminPanel({user,onBack}){
   const loadUsers=async()=>{
     setLoading(true);
     const {db}=getFB();if(!db){setLoading(false);return;}
-    // โหลดทุก doc ใน collection permissions
     const snap=await getDocs(collection(db,"permissions"));
     setUsers(snap.docs.map(d=>({uid:d.id,...d.data()})));
     setLoading(false);
   };
 
+  // เพิ่ม / อัปเดตผู้ใช้จากอีเมล (ใช้อีเมลเป็น uid placeholder)
+  const handleAddEmail=async()=>{
+    const email=addEmail.trim().toLowerCase();
+    if(!email){showToast("กรุณากรอกอีเมล","error");return;}
+    if(!email.includes("@")){showToast("รูปแบบอีเมลไม่ถูกต้อง","error");return;}
+    setAddLoading(true);
+    const {db}=getFB();
+    if(!db){showToast("Firebase ไม่พร้อม","error");setAddLoading(false);return;}
+
+    // ค้นหาว่ามี doc ที่มี email นี้อยู่แล้วไหม (จาก users ที่โหลดมา)
+    const existing=users.find(u=>u.email===email);
+    const uid=existing?existing.uid:("pre_"+email.replace(/[@.]/g,"_"));
+
+    await setDoc(doc(db,"permissions",uid),{
+      email,
+      displayName:existing?.displayName||"",
+      divisions:addPerms,
+      preAdded:!existing,
+    },{merge:true});
+
+    if(existing){
+      setUsers(p=>p.map(u=>u.uid===uid?{...u,divisions:addPerms}:u));
+    } else {
+      setUsers(p=>[...p,{uid,email,displayName:"",divisions:addPerms,preAdded:true}]);
+    }
+    setAddEmail("");
+    setAddPerms({p1:false,p2:false,m1:false,m2:false});
+    showToast("บันทึกสิทธิ์สำเร็จ: "+email);
+    setAddLoading(false);
+  };
+
   const savePerms=async()=>{
     if(!editUid)return;
+    setSaving(true);
     await fsSetPermissions(editUid,{divisions:editPerms});
     setUsers(p=>p.map(u=>u.uid===editUid?{...u,divisions:editPerms}:u));
+    setSaving(false);
     setEditUid(null);setEditPerms({});
+    showToast("บันทึกสิทธิ์สำเร็จ");
+  };
+
+  const deleteUser=async(uid)=>{
+    if(!confirm("ลบผู้ใช้นี้ออกจากระบบ?"))return;
+    const {db}=getFB();if(!db)return;
+    await setDoc(doc(db,"permissions",uid),{divisions:{p1:false,p2:false,m1:false,m2:false}},{merge:true});
+    setUsers(p=>p.map(u=>u.uid===uid?{...u,divisions:{p1:false,p2:false,m1:false,m2:false}}:u));
+    showToast("ถอนสิทธิ์แล้ว","warning");
   };
 
   if(!unlocked) return(
@@ -136,18 +188,55 @@ function AdminPanel({user,onBack}){
     </div>
   );
 
-  const divNames={p1:"ประถมต้น",p2:"ประถมปลาย",m1:"มัธยมต้น",m2:"มัธยมปลาย"};
   const filtered=users.filter(u=>(u.email||u.displayName||u.uid).toLowerCase().includes(search.toLowerCase()));
 
   return(
-    <div style={{minHeight:"100vh",background:"#F3F4F6",padding:24}}>
-      <div style={{maxWidth:900,margin:"0 auto"}}>
+    <div style={{minHeight:"100vh",background:"#F3F4F6",padding:24,fontFamily:"'Sarabun','Noto Sans Thai',sans-serif"}}>
+      {toast&&<div style={{position:"fixed",top:20,right:20,zIndex:9999,background:toast.type==="error"?"#DC2626":toast.type==="warning"?"#D97706":"#059669",color:"#fff",padding:"12px 20px",borderRadius:10,fontSize:14,fontWeight:600,boxShadow:"0 4px 20px rgba(0,0,0,0.2)"}}>{toast.msg}</div>}
+      <div style={{maxWidth:960,margin:"0 auto"}}>
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24}}>
           <button onClick={onBack} style={{background:"none",border:"none",cursor:"pointer",color:"#6B7280"}}><Icon name="x" size={20}/></button>
           <h1 style={{fontSize:20,fontWeight:700}}>Admin Panel — จัดการสิทธิ์</h1>
         </div>
 
-        {/* Search */}
+        {/* ── เพิ่มอีเมลล่วงหน้า ── */}
+        <div style={{background:"#fff",borderRadius:14,padding:24,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",marginBottom:20}}>
+          <h2 style={{fontSize:15,fontWeight:700,marginBottom:4}}>➕ กำหนดสิทธิ์ล่วงหน้า (Admin พิมพ์อีเมลเอง)</h2>
+          <p style={{fontSize:12,color:"#6B7280",marginBottom:16}}>เพิ่มอีเมลพร้อมสิทธิ์ได้เลย — เมื่อผู้ใช้ login ครั้งแรกระบบจะจำสิทธิ์ที่ตั้งไว้</p>
+          <div style={{display:"flex",gap:10,alignItems:"flex-end",flexWrap:"wrap"}}>
+            <div style={{flex:"1 1 280px"}}>
+              <label style={LS}>อีเมล</label>
+              <input
+                style={IS}
+                value={addEmail}
+                onChange={e=>setAddEmail(e.target.value)}
+                onKeyDown={e=>e.key==="Enter"&&handleAddEmail()}
+                placeholder="teacher@web1.dara.ac.th"
+                type="email"
+              />
+            </div>
+            <div style={{flex:"1 1 auto"}}>
+              <label style={LS}>ระดับที่เข้าได้</label>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {Object.entries(divNames).map(([k,name])=>(
+                  <label key={k} style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",padding:"8px 12px",borderRadius:8,border:`2px solid ${addPerms[k]?"#DC2626":"#D1D5DB"}`,background:addPerms[k]?"#FEE2E2":"#F9FAFB",userSelect:"none"}}>
+                    <input type="checkbox" checked={!!addPerms[k]} onChange={e=>setAddPerms(p=>({...p,[k]:e.target.checked}))} style={{width:15,height:15,accentColor:"#DC2626"}}/>
+                    <span style={{fontSize:13,fontWeight:addPerms[k]?700:400,color:addPerms[k]?"#991B1B":"#374151"}}>{name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <button
+              onClick={handleAddEmail}
+              disabled={addLoading}
+              style={{...BS(),flexShrink:0,opacity:addLoading?0.6:1}}
+            >
+              {addLoading?"กำลังบันทึก...":"บันทึกสิทธิ์"}
+            </button>
+          </div>
+        </div>
+
+        {/* ── ค้นหา ── */}
         <div style={{background:"#fff",borderRadius:12,padding:16,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",marginBottom:16}}>
           <div style={{position:"relative"}}>
             <input style={{...IS,paddingLeft:36}} value={search} onChange={e=>setSearch(e.target.value)} placeholder="ค้นหาชื่อหรืออีเมล..."/>
@@ -157,12 +246,12 @@ function AdminPanel({user,onBack}){
 
         {loading&&<div style={{textAlign:"center",padding:40,color:"#6B7280"}}>กำลังโหลด...</div>}
 
-        {/* Users table */}
+        {/* ── ตารางผู้ใช้ ── */}
         <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",overflow:"hidden"}}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
             <thead>
               <tr style={{background:"#F9FAFB"}}>
-                {["ชื่อ / อีเมล","ระดับที่เข้าได้","จัดการ"].map(h=>(
+                {["ชื่อ / อีเมล","สถานะ","ระดับที่เข้าได้","จัดการ"].map(h=>(
                   <th key={h} style={{padding:"12px 16px",textAlign:"left",fontWeight:600,color:"#6B7280",fontSize:12}}>{h}</th>
                 ))}
               </tr>
@@ -175,6 +264,12 @@ function AdminPanel({user,onBack}){
                     <div style={{fontSize:11,color:"#6B7280"}}>{u.email||u.uid}</div>
                   </td>
                   <td style={{padding:"12px 16px"}}>
+                    {u.preAdded
+                      ?<span style={{background:"#FEF3C7",color:"#92400E",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>⏳ รอ Login</span>
+                      :<span style={{background:"#D1FAE5",color:"#065F46",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>✓ ใช้งานแล้ว</span>
+                    }
+                  </td>
+                  <td style={{padding:"12px 16px"}}>
                     <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                       {Object.entries(u.divisions||{}).filter(([,v])=>v).map(([k])=>(
                         <span key={k} style={{background:"#FEE2E2",color:"#991B1B",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>{divNames[k]||k}</span>
@@ -183,33 +278,45 @@ function AdminPanel({user,onBack}){
                     </div>
                   </td>
                   <td style={{padding:"12px 16px"}}>
-                    <button
-                      onClick={()=>{setEditUid(u.uid);setEditPerms(u.divisions||{});}}
-                      style={{background:"none",border:"1px solid #D1D5DB",borderRadius:8,padding:"4px 12px",cursor:"pointer",fontSize:12}}
-                    >แก้ไขสิทธิ์</button>
+                    <div style={{display:"flex",gap:6}}>
+                      <button
+                        onClick={()=>{setEditUid(u.uid);setEditPerms(u.divisions||{p1:false,p2:false,m1:false,m2:false});}}
+                        style={{background:"none",border:"1px solid #D1D5DB",borderRadius:8,padding:"4px 12px",cursor:"pointer",fontSize:12}}
+                      >แก้ไขสิทธิ์</button>
+                      <button
+                        onClick={()=>deleteUser(u.uid)}
+                        style={{background:"none",border:"1px solid #FECACA",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontSize:12,color:"#DC2626"}}
+                        title="ถอนสิทธิ์ทั้งหมด"
+                      >✕</button>
+                    </div>
                   </td>
                 </tr>
               ))}
-              {!filtered.length&&<tr><td colSpan={3} style={{padding:32,textAlign:"center",color:"#9CA3AF"}}>ยังไม่มีผู้ใช้ในระบบ (ผู้ใช้จะปรากฏหลังจาก login ครั้งแรก)</td></tr>}
+              {!loading&&!filtered.length&&(
+                <tr><td colSpan={4} style={{padding:32,textAlign:"center",color:"#9CA3AF"}}>
+                  {users.length===0?"ยังไม่มีผู้ใช้ — เพิ่มอีเมลได้ที่กล่องด้านบน":"ไม่พบผู้ใช้ที่ค้นหา"}
+                </td></tr>
+              )}
             </tbody>
           </table>
         </div>
 
-        {/* Edit permissions modal */}
+        {/* ── Edit permissions modal ── */}
         {editUid&&(
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
-            <div style={{background:"#fff",borderRadius:16,padding:28,width:400}}>
-              <h3 style={{fontSize:16,fontWeight:700,marginBottom:16}}>แก้ไขสิทธิ์ระดับการศึกษา</h3>
+            <div style={{background:"#fff",borderRadius:16,padding:28,width:420}}>
+              <h3 style={{fontSize:16,fontWeight:700,marginBottom:4}}>แก้ไขสิทธิ์</h3>
+              <p style={{fontSize:12,color:"#6B7280",marginBottom:16}}>{users.find(u=>u.uid===editUid)?.email||editUid}</p>
               <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
                 {Object.entries(divNames).map(([k,name])=>(
-                  <label key={k} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",padding:"8px 12px",borderRadius:8,background:editPerms[k]?"#FEE2E2":"#F9FAFB"}}>
+                  <label key={k} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",padding:"10px 14px",borderRadius:10,background:editPerms[k]?"#FEE2E2":"#F9FAFB",border:`1.5px solid ${editPerms[k]?"#DC2626":"#E5E7EB"}`}}>
                     <input type="checkbox" checked={!!editPerms[k]} onChange={e=>setEditPerms(p=>({...p,[k]:e.target.checked}))} style={{width:16,height:16,accentColor:"#DC2626"}}/>
-                    <span style={{fontWeight:editPerms[k]?700:400,color:editPerms[k]?"#991B1B":"#374151"}}>{name}</span>
+                    <span style={{fontWeight:editPerms[k]?700:400,color:editPerms[k]?"#991B1B":"#374151",fontSize:14}}>{name}</span>
                   </label>
                 ))}
               </div>
               <div style={{display:"flex",gap:8}}>
-                <button onClick={savePerms} style={BS()}>บันทึก</button>
+                <button onClick={savePerms} disabled={saving} style={{...BS(),opacity:saving?0.6:1}}>{saving?"กำลังบันทึก...":"บันทึก"}</button>
                 <button onClick={()=>{setEditUid(null);setEditPerms({});}} style={BO()}>ยกเลิก</button>
               </div>
             </div>
@@ -394,9 +501,25 @@ export default function App() {
       setAuthUser(u||null);
       if(u){
         // โหลด permissions จาก Firestore
-        const perms=await fsGetPermissions(u.uid);
+        let perms=await fsGetPermissions(u.uid);
         if(!perms){
-          // Login ครั้งแรก → สร้าง doc ว่างและรอ admin grant
+          // ลอง lookup จาก pre-added email (uid = "pre_...")
+          const {db}=getFB();
+          if(db){
+            const emailKey="pre_"+u.email.replace(/[@.]/g,"_");
+            const preSnap=await getDoc(doc(db,"permissions",emailKey));
+            if(preSnap.exists()){
+              const preData=preSnap.data();
+              // ย้ายสิทธิ์จาก pre key → uid จริง แล้วลบ pre key
+              await setDoc(doc(db,"permissions",u.uid),{displayName:u.displayName,email:u.email,divisions:preData.divisions||{p1:false,p2:false,m1:false,m2:false},preAdded:false},{merge:false});
+              // ลบ pre doc (ไม่ต้องรอ)
+              setDoc(doc(db,"permissions",emailKey),{merged:true},{merge:true});
+              perms={divisions:preData.divisions||{p1:false,p2:false,m1:false,m2:false}};
+            }
+          }
+        }
+        if(!perms){
+          // Login ครั้งแรก ไม่มีสิทธิ์ล่วงหน้า → สร้าง doc ว่าง
           await fsSetPermissions(u.uid,{displayName:u.displayName,email:u.email,divisions:{p1:false,p2:false,m1:false,m2:false}});
           setUserPerms({divisions:{p1:false,p2:false,m1:false,m2:false}});
         } else {
