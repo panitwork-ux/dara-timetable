@@ -1,5 +1,224 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import * as XLSX from 'xlsx';
+import { initializeApp } from "firebase/app";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
+import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from "firebase/firestore";
+
+// ===== FIREBASE CONFIG — ใส่ค่าจาก Firebase Console =====
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyC_anUKRySlNxZSoM5euqWqaM3amgskUIk",
+  authDomain:        "dara-timetable.firebaseapp.com",
+  projectId:         "dara-timetable",
+  storageBucket:     "dara-timetable.firebasestorage.app",
+  messagingSenderId: "773925099624",
+  appId:             "1:773925099624:web:8ff141bbf52db0030303dd",
+};
+// =========================================================
+
+const ADMIN_PIN = "100625";
+
+// Firebase instances (lazy init เพื่อกัน crash ถ้ายังไม่ได้ตั้งค่า)
+let _fbApp=null, _auth=null, _db=null;
+const getFB=()=>{
+  if(!_fbApp&&!FIREBASE_CONFIG.apiKey.includes("YOUR")){
+    _fbApp=initializeApp(FIREBASE_CONFIG);
+    _auth=getAuth(_fbApp);
+    _db=getFirestore(_fbApp);
+  }
+  return{auth:_auth,db:_db};
+};
+
+// Firestore helpers
+const fsGetPermissions=async(uid)=>{
+  const {db}=getFB();if(!db)return null;
+  const snap=await getDoc(doc(db,"permissions",uid));
+  return snap.exists()?snap.data():null;
+};
+const fsSetPermissions=async(uid,data)=>{
+  const {db}=getFB();if(!db)return;
+  await setDoc(doc(db,"permissions",uid),data,{merge:true});
+};
+
+// ===== LOGIN SCREEN =====
+function LoginScreen({onLogin}){
+  const [loading,setLoading]=useState(false);
+  const [err,setErr]=useState("");
+
+  const handleGoogle=async()=>{
+    const {auth}=getFB();
+    if(!auth){setErr("ยังไม่ได้ตั้งค่า Firebase Config ใน App.jsx");return;}
+    setLoading(true);setErr("");
+    try{
+      const provider=new GoogleAuthProvider();
+      provider.setCustomParameters({hd:"web1.dara.ac.th"}); // จำกัดเฉพาะ domain โรงเรียน
+      const result=await signInWithPopup(auth,provider);
+      onLogin(result.user);
+    } catch(e){
+      setErr(e.code==="auth/popup-closed-by-user"?"ปิด popup ก่อนเลือกบัญชี":e.message);
+    }
+    setLoading(false);
+  };
+
+  return(
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#991B1B,#7F1D1D)"}}>
+      <div style={{background:"#fff",borderRadius:20,padding:"48px 40px",width:400,textAlign:"center",boxShadow:"0 25px 60px rgba(0,0,0,0.3)"}}>
+        <div style={{fontSize:48,marginBottom:16}}>📋</div>
+        <h1 style={{fontSize:22,fontWeight:700,marginBottom:4}}>ระบบจัดตารางสอน</h1>
+        <p style={{color:"#6B7280",fontSize:13,marginBottom:32}}>โรงเรียนดาราวิทยาลัย</p>
+        <button
+          onClick={handleGoogle}
+          disabled={loading}
+          style={{width:"100%",padding:"13px 0",background:loading?"#F3F4F6":"#fff",border:"1.5px solid #D1D5DB",borderRadius:12,fontSize:14,fontWeight:600,cursor:loading?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:16}}
+        >
+          <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.35-8.16 2.35-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+          {loading?"กำลังเข้าสู่ระบบ...":"เข้าสู่ระบบด้วย Google โรงเรียน"}
+        </button>
+        {err&&<div style={{padding:10,background:"#FEE2E2",borderRadius:8,color:"#991B1B",fontSize:12,marginBottom:8}}>{err}</div>}
+        <p style={{color:"#9CA3AF",fontSize:11}}>ใช้บัญชี @web1.dara.ac.th เท่านั้น</p>
+      </div>
+    </div>
+  );
+}
+
+// ===== ADMIN PANEL =====
+function AdminPanel({user,onBack}){
+  const [pin,setPin]=useState("");
+  const [unlocked,setUnlocked]=useState(false);
+  const [pinErr,setPinErr]=useState("");
+  const [users,setUsers]=useState([]);
+  const [loading,setLoading]=useState(false);
+  const [search,setSearch]=useState("");
+
+  // Division permissions ที่จะแก้
+  const [editUid,setEditUid]=useState(null);
+  const [editPerms,setEditPerms]=useState({});
+
+  const tryPin=()=>{
+    if(pin===ADMIN_PIN){setUnlocked(true);loadUsers();}
+    else{setPinErr("รหัสไม่ถูกต้อง");setPin("");}
+  };
+
+  const loadUsers=async()=>{
+    setLoading(true);
+    const {db}=getFB();if(!db){setLoading(false);return;}
+    // โหลดทุก doc ใน collection permissions
+    const snap=await getDocs(collection(db,"permissions"));
+    setUsers(snap.docs.map(d=>({uid:d.id,...d.data()})));
+    setLoading(false);
+  };
+
+  const savePerms=async()=>{
+    if(!editUid)return;
+    await fsSetPermissions(editUid,{divisions:editPerms});
+    setUsers(p=>p.map(u=>u.uid===editUid?{...u,divisions:editPerms}:u));
+    setEditUid(null);setEditPerms({});
+  };
+
+  if(!unlocked) return(
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#F3F4F6"}}>
+      <div style={{background:"#fff",borderRadius:16,padding:"40px 36px",width:360,textAlign:"center",boxShadow:"0 4px 20px rgba(0,0,0,0.1)"}}>
+        <div style={{fontSize:36,marginBottom:12}}>🔐</div>
+        <h2 style={{fontSize:18,fontWeight:700,marginBottom:4}}>Admin Panel</h2>
+        <p style={{color:"#6B7280",fontSize:12,marginBottom:24}}>ใส่รหัสผู้ดูแลระบบ</p>
+        <input
+          type="password"
+          style={{...IS,textAlign:"center",letterSpacing:6,fontSize:20,marginBottom:12}}
+          value={pin}
+          onChange={e=>setPin(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&tryPin()}
+          placeholder="• • • • • •"
+          maxLength={10}
+        />
+        {pinErr&&<div style={{color:"#DC2626",fontSize:12,marginBottom:8}}>{pinErr}</div>}
+        <button onClick={tryPin} style={{...BS(),width:"100%",justifyContent:"center"}}>ยืนยัน</button>
+        <button onClick={onBack} style={{marginTop:10,background:"none",border:"none",color:"#6B7280",cursor:"pointer",fontSize:13}}>← กลับ</button>
+      </div>
+    </div>
+  );
+
+  const divNames={p1:"ประถมต้น",p2:"ประถมปลาย",m1:"มัธยมต้น",m2:"มัธยมปลาย"};
+  const filtered=users.filter(u=>(u.email||u.displayName||u.uid).toLowerCase().includes(search.toLowerCase()));
+
+  return(
+    <div style={{minHeight:"100vh",background:"#F3F4F6",padding:24}}>
+      <div style={{maxWidth:900,margin:"0 auto"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24}}>
+          <button onClick={onBack} style={{background:"none",border:"none",cursor:"pointer",color:"#6B7280"}}><Icon name="x" size={20}/></button>
+          <h1 style={{fontSize:20,fontWeight:700}}>Admin Panel — จัดการสิทธิ์</h1>
+        </div>
+
+        {/* Search */}
+        <div style={{background:"#fff",borderRadius:12,padding:16,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",marginBottom:16}}>
+          <div style={{position:"relative"}}>
+            <input style={{...IS,paddingLeft:36}} value={search} onChange={e=>setSearch(e.target.value)} placeholder="ค้นหาชื่อหรืออีเมล..."/>
+            <div style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"#9CA3AF"}}><Icon name="search" size={14}/></div>
+          </div>
+        </div>
+
+        {loading&&<div style={{textAlign:"center",padding:40,color:"#6B7280"}}>กำลังโหลด...</div>}
+
+        {/* Users table */}
+        <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",overflow:"hidden"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+            <thead>
+              <tr style={{background:"#F9FAFB"}}>
+                {["ชื่อ / อีเมล","ระดับที่เข้าได้","จัดการ"].map(h=>(
+                  <th key={h} style={{padding:"12px 16px",textAlign:"left",fontWeight:600,color:"#6B7280",fontSize:12}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(u=>(
+                <tr key={u.uid} style={{borderTop:"1px solid #F3F4F6"}}>
+                  <td style={{padding:"12px 16px"}}>
+                    <div style={{fontWeight:600}}>{u.displayName||"—"}</div>
+                    <div style={{fontSize:11,color:"#6B7280"}}>{u.email||u.uid}</div>
+                  </td>
+                  <td style={{padding:"12px 16px"}}>
+                    <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                      {Object.entries(u.divisions||{}).filter(([,v])=>v).map(([k])=>(
+                        <span key={k} style={{background:"#FEE2E2",color:"#991B1B",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>{divNames[k]||k}</span>
+                      ))}
+                      {!Object.values(u.divisions||{}).some(Boolean)&&<span style={{color:"#9CA3AF",fontSize:12}}>ไม่มีสิทธิ์</span>}
+                    </div>
+                  </td>
+                  <td style={{padding:"12px 16px"}}>
+                    <button
+                      onClick={()=>{setEditUid(u.uid);setEditPerms(u.divisions||{});}}
+                      style={{background:"none",border:"1px solid #D1D5DB",borderRadius:8,padding:"4px 12px",cursor:"pointer",fontSize:12}}
+                    >แก้ไขสิทธิ์</button>
+                  </td>
+                </tr>
+              ))}
+              {!filtered.length&&<tr><td colSpan={3} style={{padding:32,textAlign:"center",color:"#9CA3AF"}}>ยังไม่มีผู้ใช้ในระบบ (ผู้ใช้จะปรากฏหลังจาก login ครั้งแรก)</td></tr>}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Edit permissions modal */}
+        {editUid&&(
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
+            <div style={{background:"#fff",borderRadius:16,padding:28,width:400}}>
+              <h3 style={{fontSize:16,fontWeight:700,marginBottom:16}}>แก้ไขสิทธิ์ระดับการศึกษา</h3>
+              <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
+                {Object.entries(divNames).map(([k,name])=>(
+                  <label key={k} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",padding:"8px 12px",borderRadius:8,background:editPerms[k]?"#FEE2E2":"#F9FAFB"}}>
+                    <input type="checkbox" checked={!!editPerms[k]} onChange={e=>setEditPerms(p=>({...p,[k]:e.target.checked}))} style={{width:16,height:16,accentColor:"#DC2626"}}/>
+                    <span style={{fontWeight:editPerms[k]?700:400,color:editPerms[k]?"#991B1B":"#374151"}}>{name}</span>
+                  </label>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={savePerms} style={BS()}>บันทึก</button>
+                <button onClick={()=>{setEditUid(null);setEditPerms({});}} style={BO()}>ยกเลิก</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const DAYS = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์"];
 const PERIODS = [
@@ -162,6 +381,41 @@ export default function App() {
   const [syncing,setSyncing]=useState(false);
   const [gasReady,setGasReady]=useState(false);
 
+  // ===== AUTH STATE =====
+  const [authUser,setAuthUser]=useState(undefined); // undefined=loading, null=ออก, object=เข้า
+  const [userPerms,setUserPerms]=useState(null);    // {divisions:{p1:true,m2:true,...}}
+  const [showAdmin,setShowAdmin]=useState(false);
+
+  // ฟัง Firebase auth state
+  useEffect(()=>{
+    const {auth}=getFB();
+    if(!auth){setAuthUser(null);return;} // ไม่ได้ตั้งค่า Firebase → bypass auth
+    const unsub=onAuthStateChanged(auth,async u=>{
+      setAuthUser(u||null);
+      if(u){
+        // โหลด permissions จาก Firestore
+        const perms=await fsGetPermissions(u.uid);
+        if(!perms){
+          // Login ครั้งแรก → สร้าง doc ว่างและรอ admin grant
+          await fsSetPermissions(u.uid,{displayName:u.displayName,email:u.email,divisions:{p1:false,p2:false,m1:false,m2:false}});
+          setUserPerms({divisions:{p1:false,p2:false,m1:false,m2:false}});
+        } else {
+          // อัปเดตชื่อ/email ล่าสุด
+          await fsSetPermissions(u.uid,{displayName:u.displayName,email:u.email});
+          setUserPerms(perms);
+        }
+      } else {
+        setUserPerms(null);
+      }
+    });
+    return()=>unsub();
+  },[]);
+
+  const handleLogout=async()=>{
+    const {auth}=getFB();
+    if(auth)await signOut(auth);
+  };
+
   // division state — persist ใน localStorage (ไม่ใช่ per-division key)
   const [divId,setDivId]=useState(()=>localStorage.getItem("dara_division")||"m2");
   const div=DIVISIONS.find(d=>d.id===divId)||DIVISIONS[3];
@@ -279,6 +533,38 @@ export default function App() {
   const S={levels,plans,depts,teachers,subjects,rooms,specialRooms,assigns,meetings,schedule,locks};
   const U={setLevels,setPlans,setDepts,setTeachers,setSubjects,setRooms,setSpecialRooms,setAssigns,setMeetings,setSchedule,setLocks};
 
+  // ===== AUTH GUARDS =====
+  const firebaseConfigured=!FIREBASE_CONFIG.apiKey.includes("YOUR");
+
+  // Loading
+  if(firebaseConfigured&&authUser===undefined){
+    return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#991B1B,#7F1D1D)"}}>
+      <div style={{color:"#fff",fontSize:16,fontWeight:600}}>⏳ กำลังโหลด...</div>
+    </div>;
+  }
+
+  // Not logged in
+  if(firebaseConfigured&&!authUser){
+    return <LoginScreen onLogin={u=>setAuthUser(u)}/>;
+  }
+
+  // Admin panel
+  if(showAdmin){
+    return <AdminPanel user={authUser} onBack={()=>setShowAdmin(false)}/>;
+  }
+
+  // Logged in but no permission for this division
+  const allowedDivs=firebaseConfigured
+    ?DIVISIONS.filter(d=>userPerms?.divisions?.[d.id]!==false) // ถ้าไม่มี key → อนุญาต (backward compat)
+    :DIVISIONS;
+
+  // Filter division selector ตาม permissions
+  const availDivs=firebaseConfigured
+    ?DIVISIONS.filter(d=>userPerms?.divisions?.[d.id]===true)
+    :DIVISIONS;
+
+  const divHasAccess=!firebaseConfigured||userPerms?.divisions?.[divId]===true;
+
   return <div style={{display:"flex",height:"100vh",fontFamily:"'Sarabun','Noto Sans Thai',sans-serif",background:"#F3F4F6",overflow:"hidden"}}>
     <style>{`@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:6px}::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:3px}@keyframes slideIn{from{transform:translateX(100px);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}.ni:hover{background:rgba(255,255,255,0.15)!important}.ni.a{background:rgba(255,255,255,0.2)!important}input:focus,select:focus{border-color:#DC2626!important;box-shadow:0 0 0 3px rgba(220,38,38,0.1)!important}.drag-card{cursor:grab;user-select:none}.drag-card:active{cursor:grabbing}.dz{transition:background 0.2s}.dz.over{background:#FEE2E2!important;outline:2px dashed #DC2626}button:hover{opacity:0.85}select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:36px!important}.div-sel{appearance:none!important;background:#00000030!important;background-image:none!important;border:1px solid rgba(255,255,255,0.3)!important;border-radius:8px!important;color:#fff!important;font-size:13px!important;font-weight:700!important;font-family:inherit!important;padding:9px 32px 9px 12px!important;width:100%!important;cursor:pointer!important;outline:none!important}.div-sel:focus{box-shadow:0 0 0 2px rgba(255,255,255,0.3)!important;border-color:rgba(255,255,255,0.6)!important}.div-sel option{background:#7F1D1D;color:#fff}`}</style>
 
@@ -297,7 +583,7 @@ export default function App() {
         <div style={{fontSize:10,color:"rgba(255,255,255,0.45)",marginBottom:5,paddingLeft:2}}>ระดับการศึกษา</div>
         <div style={{position:"relative"}}>
           <select className="div-sel" value={divId} onChange={e=>switchDivision(e.target.value)}>
-            {DIVISIONS.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+            {(firebaseConfigured?availDivs:DIVISIONS).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
           <div style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",color:"rgba(255,255,255,0.7)"}}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
@@ -307,9 +593,18 @@ export default function App() {
       <nav style={{flex:1,padding:"12px 10px",overflowY:"auto"}}>
         {nav.map(n=><div key={n.id} className={`ni ${page===n.id?"a":""}`} onClick={()=>setPage(n.id)} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderRadius:10,cursor:"pointer",color:page===n.id?"#fff":"rgba(255,255,255,0.7)",fontSize:14,fontWeight:page===n.id?700:400,marginBottom:2}}><Icon name={n.icon} size={18}/>{n.label}</div>)}
       </nav>
-      <div style={{padding:"16px 20px",borderTop:"1px solid rgba(255,255,255,0.1)"}}>
-        <div style={{color:"rgba(255,255,255,0.4)",fontSize:11}}>ผู้พัฒนา</div>
-        <div style={{color:"rgba(255,255,255,0.7)",fontSize:12,fontWeight:600,marginTop:2}}>พนิต เกิดมงคล</div>
+      <div style={{padding:"14px 16px",borderTop:"1px solid rgba(255,255,255,0.1)"}}>
+        {/* User info */}
+        {firebaseConfigured&&authUser&&<div style={{marginBottom:10}}>
+          <div style={{color:"rgba(255,255,255,0.85)",fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{authUser.displayName||authUser.email}</div>
+          <div style={{color:"rgba(255,255,255,0.45)",fontSize:10,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{authUser.email}</div>
+        </div>}
+        <div style={{display:"flex",gap:6,marginBottom:8}}>
+          {firebaseConfigured&&<button onClick={handleLogout} style={{flex:1,padding:"6px 0",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,color:"rgba(255,255,255,0.7)",fontSize:11,fontWeight:600,cursor:"pointer"}}>ออกจากระบบ</button>}
+          {firebaseConfigured&&<button onClick={()=>setShowAdmin(true)} style={{flex:1,padding:"6px 0",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,color:"rgba(255,255,255,0.7)",fontSize:11,fontWeight:600,cursor:"pointer"}}>🔐 Admin</button>}
+        </div>
+        <div style={{color:"rgba(255,255,255,0.4)",fontSize:10}}>ผู้พัฒนา</div>
+        <div style={{color:"rgba(255,255,255,0.65)",fontSize:11,fontWeight:600,marginTop:1}}>พนิต เกิดมงคล</div>
       </div>
     </div>
 
@@ -318,7 +613,7 @@ export default function App() {
         <button onClick={()=>setSide(!side)} style={{background:"none",border:"none",cursor:"pointer",color:"#6B7280",padding:4}}><Icon name="menu" size={22}/></button>
         <h2 style={{fontSize:18,fontWeight:700}}>{nav.find(n=>n.id===page)?.label}</h2>
         <span style={{fontSize:12,background:"#FEE2E2",color:"#991B1B",padding:"3px 10px",borderRadius:20,fontWeight:600}}>{div.short}</span>
-        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:10}}>
           {GAS_URL&&!GAS_URL.includes("YOUR_DEPLOYMENT_ID")
             ?syncing
               ?<span style={{fontSize:12,color:"#D97706",display:"flex",alignItems:"center",gap:4}}>⏳ กำลัง sync...</span>
@@ -327,21 +622,34 @@ export default function App() {
                 :null
             :<span style={{fontSize:12,color:"#9CA3AF",display:"flex",alignItems:"center",gap:4}}>💾 local only</span>
           }
+          {firebaseConfigured&&authUser?.photoURL&&(
+            <img src={authUser.photoURL} alt="avatar" style={{width:32,height:32,borderRadius:"50%",objectFit:"cover",border:"2px solid #E5E7EB"}}/>
+          )}
         </div>
       </header>
       <main style={{flex:1,overflow:"auto",padding:24}}>
-        {page==="dashboard"&&<Dash S={S} setPage={setPage}/>}
-        {page==="levels"&&<Levels S={S} U={U} st={st}/>}
-        {page==="plans"&&<Plans S={S} U={U} st={st}/>}
-        {page==="departments"&&<Depts S={S} U={U} st={st} gc={gc}/>}
-        {page==="teachers"&&<Teachers S={S} U={U} st={st} gc={gc}/>}
-        {page==="subjects"&&<Subjects S={S} U={U} st={st} gc={gc}/>}
-        {page==="specialrooms"&&<SpecialRooms S={S} U={U} st={st}/>}
-        {page==="assignments"&&<Assigns S={S} U={U} st={st} gc={gc}/>}
-        {page==="meetings"&&<Meetings S={S} U={U} st={st} gc={gc}/>}
-        {page==="scheduler"&&<Scheduler S={S} U={U} st={st} gc={gc}/>}
-        {page==="reports"&&<Reports S={S} st={st} gc={gc} ay={academicYear} sh={schoolHeader}/>}
-        {page==="settings"&&<Settings S={S} U={U} st={st} ay={academicYear} setAY={setAcademicYear} sh={schoolHeader} setSH={setSchoolHeader} div={div}/>}
+        {/* No access guard */}
+        {firebaseConfigured&&!divHasAccess
+          ?<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:16}}>
+              <div style={{fontSize:48}}>🔒</div>
+              <h2 style={{fontSize:20,fontWeight:700,color:"#374151"}}>ไม่มีสิทธิ์เข้าระดับนี้</h2>
+              <p style={{color:"#6B7280",fontSize:14}}>กรุณาติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์ {div.name}</p>
+            </div>
+          :<>
+            {page==="dashboard"&&<Dash S={S} setPage={setPage}/>}
+            {page==="levels"&&<Levels S={S} U={U} st={st}/>}
+            {page==="plans"&&<Plans S={S} U={U} st={st}/>}
+            {page==="departments"&&<Depts S={S} U={U} st={st} gc={gc}/>}
+            {page==="teachers"&&<Teachers S={S} U={U} st={st} gc={gc}/>}
+            {page==="subjects"&&<Subjects S={S} U={U} st={st} gc={gc}/>}
+            {page==="specialrooms"&&<SpecialRooms S={S} U={U} st={st}/>}
+            {page==="assignments"&&<Assigns S={S} U={U} st={st} gc={gc}/>}
+            {page==="meetings"&&<Meetings S={S} U={U} st={st} gc={gc}/>}
+            {page==="scheduler"&&<Scheduler S={S} U={U} st={st} gc={gc}/>}
+            {page==="reports"&&<Reports S={S} st={st} gc={gc} ay={academicYear} sh={schoolHeader}/>}
+            {page==="settings"&&<Settings S={S} U={U} st={st} ay={academicYear} setAY={setAcademicYear} sh={schoolHeader} setSH={setSchoolHeader} div={div}/>}
+          </>
+        }
       </main>
     </div>
     {toast&&<Toast {...toast} onClose={()=>setToast(null)}/>}
@@ -926,295 +1234,486 @@ function Meetings({S,U,st,gc}){
   </div>;
 }
 
+/* ===== EMPTY STATE HELPER ===== */
+function EmptyState({icon,title}){
+  return <div style={{background:"#fff",borderRadius:14,padding:60,textAlign:"center"}}>
+    <div style={{fontSize:48,marginBottom:16}}>{icon}</div>
+    <h3 style={{fontSize:18,fontWeight:700,color:"#374151"}}>{title}</h3>
+  </div>;
+}
+
+/* ===== SCHEDULER ENTRY CARD (top-level เพื่อกัน React recreate) ===== */
+function SchedulerEntryCard({entry,cellKey,lk,cellCount,selT,mode,S,U,gc,setDrag,setCoM}){
+  const sub=S.subjects.find(s=>s.id===entry.subjectId);
+  const dept=S.depts.find(d=>d.id===sub?.departmentId);
+  const c=dept?gc(dept.id):{bg:"#6B7280",lt:"#F3F4F6",tx:"#374151",bd:"#D1D5DB"};
+  const et=S.teachers.find(t=>t.id===entry.teacherId);
+  const ct=entry.coTeacherId?S.teachers.find(t=>t.id===entry.coTeacherId):null;
+  const isOwn=entry.teacherId===selT||entry.coTeacherId===selT;
+  const dimmed=mode==="teacher"&&!!selT&&!isOwn;
+  const compact=cellCount>1;
+
+  const removeEntry=()=>U.setSchedule(prev=>({...prev,[cellKey]:(prev[cellKey]||[]).filter(e=>e.id!==entry.id)}));
+  const lockEntry=()=>U.setLocks(prev=>({...prev,[cellKey]:true}));
+  const unlockEntry=()=>U.setLocks(prev=>({...prev,[cellKey]:false}));
+
+  return (
+    <div
+      draggable={!lk}
+      onDragStart={e=>{e.stopPropagation();setDrag({fromKey:cellKey,entry});}}
+      onDragEnd={()=>setDrag(null)}
+      style={{
+        background:dimmed?"#F9FAFB":c.lt,
+        border:"2px solid "+(dimmed?"#E5E7EB":c.bd),
+        borderRadius:6,
+        padding:compact?"3px 5px":"5px 7px",
+        marginBottom:2,
+        fontSize:11,
+        position:"relative",
+        cursor:lk?"default":"grab",
+        opacity:dimmed?0.45:1,
+        transition:"opacity 0.15s",
+        userSelect:"none",
+      }}
+    >
+      {compact
+        ?<div style={{fontWeight:700,color:dimmed?"#9CA3AF":c.tx,fontSize:10,lineHeight:1.3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+            {sub?.name||sub?.code}
+          </div>
+        :<>
+            <div style={{fontWeight:700,color:dimmed?"#9CA3AF":c.tx,fontSize:11}}>{sub?.code}</div>
+            <div style={{fontWeight:600,color:dimmed?"#9CA3AF":c.tx,fontSize:10}}>{sub?.name}</div>
+            <div style={{color:dimmed?"#9CA3AF":c.tx,opacity:0.7,fontSize:10}}>
+              {et?.firstName}{ct?" + "+ct.firstName:""}
+            </div>
+          </>
+      }
+      {/* action buttons */}
+      {!lk&&!compact&&(
+        <div style={{display:"flex",gap:3,marginTop:3}}>
+          <button onClick={removeEntry} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,lineHeight:1}}><Icon name="x" size={10}/></button>
+          <button onClick={()=>setCoM({key:cellKey,entryId:entry.id})} style={{background:"none",border:"none",cursor:"pointer",color:"#2563EB",padding:0,lineHeight:1}}><Icon name="users" size={10}/></button>
+          <button onClick={lockEntry} style={{background:"none",border:"none",cursor:"pointer",color:"#059669",padding:0,lineHeight:1}}><Icon name="lock" size={10}/></button>
+        </div>
+      )}
+      {!lk&&compact&&(
+        <button onClick={removeEntry} style={{position:"absolute",top:1,right:1,background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,lineHeight:1}}><Icon name="x" size={9}/></button>
+      )}
+      {lk&&(
+        <div style={{position:"absolute",top:2,right:4}}>
+          <button onClick={unlockEntry} style={{background:"none",border:"none",cursor:"pointer",color:"#059669",padding:0,lineHeight:1}}><Icon name="unlock" size={10}/></button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ===== SCHEDULER ===== */
 function Scheduler({S,U,st,gc}){
-  const [mode,setMode]=useState("teacher"); // "teacher" | "room"
+  const [mode,setMode]=useState("teacher");
   const [selDept,setSelDept]=useState("");
   const [selT,setSelT]=useState("");
   const [selRoom,setSelRoom]=useState("");
   const [drag,setDrag]=useState(null);
-  const [coM,setCoM]=useState(null);  // {key, entryId}
+  const [coM,setCoM]=useState(null);   // {key, entryId} — modal บนการ์ดที่วางแล้ว
   const [coS,setCoS]=useState("");
   const [coDept,setCoDept]=useState("");
-  // co-teacher on sidebar card (before drop)
-  const [cardCoM,setCardCoM]=useState(null); // assignId
+  const [cardCoM,setCardCoM]=useState(null); // assignId — modal บน sidebar card
   const [cardCoS,setCardCoS]=useState("");
   const [cardCoDept,setCardCoDept]=useState("");
-  // extra co-teachers per assign: Map assignId → teacherId
-  const [cardCoMap,setCardCoMap]=useState({});
+  const [cardCoMap,setCardCoMap]=useState({}); // {assignId: teacherId}
 
-  const teacher=S.teachers.find(t=>t.id===selT);
-  const asgns=S.assigns.filter(a=>a.teacherId===selT);
-  const tRooms=[...new Set(asgns.flatMap(a=>a.roomIds))];
-  const fTeachers=selDept?S.teachers.filter(t=>t.departmentId===selDept):S.teachers;
+  const teacher  = S.teachers.find(t=>t.id===selT);
+  const asgns    = S.assigns.filter(a=>a.teacherId===selT);
+  const tRooms   = [...new Set(asgns.flatMap(a=>a.roomIds))];
+  const fTeachers= selDept ? S.teachers.filter(t=>t.departmentId===selDept) : S.teachers;
 
-  // sorted rooms for room-mode
-  const sortedRooms=useMemo(()=>[...S.rooms].sort((a,b)=>{
+  const sortedRooms = useMemo(()=>[...S.rooms].sort((a,b)=>{
     const la=S.levels.find(l=>l.id===a.levelId)?.name||"";
     const lb=S.levels.find(l=>l.id===b.levelId)?.name||"";
-    if(la!==lb)return la.localeCompare(lb,"th");
-    return a.name.localeCompare(b.name,"th");
+    return la!==lb ? la.localeCompare(lb,"th") : a.name.localeCompare(b.name,"th");
   }),[S.rooms,S.levels]);
 
-  const blocked=useCallback(tid=>{const t=S.teachers.find(x=>x.id===tid);if(!t)return[];const b=[];(t.specialRoles||[]).forEach(rid=>{const r=SROLES.find(x=>x.id===rid);r?.blocked?.forEach(bl=>bl.periods.forEach(p=>b.push({day:bl.day,period:p,reason:r.name})))});S.meetings.filter(m=>m.departmentId===t.departmentId).forEach(m=>m.periods.forEach(p=>b.push({day:m.day,period:p,reason:"ประชุม"})));return b},[S.teachers,S.meetings]);
+  /* ── helpers ── */
+  const blocked=useCallback(tid=>{
+    const t=S.teachers.find(x=>x.id===tid);
+    if(!t)return[];
+    const b=[];
+    (t.specialRoles||[]).forEach(rid=>{
+      const r=SROLES.find(x=>x.id===rid);
+      r?.blocked?.forEach(bl=>bl.periods.forEach(p=>b.push({day:bl.day,period:p,reason:r.name})));
+    });
+    S.meetings.filter(m=>m.departmentId===t.departmentId)
+      .forEach(m=>m.periods.forEach(p=>b.push({day:m.day,period:p,reason:"ประชุม"})));
+    return b;
+  },[S.teachers,S.meetings]);
 
   const isBlk=(tid,day,p)=>blocked(tid).some(b=>b.day===day&&b.period===p);
   const sk=(rid,day,p)=>rid+"_"+day+"_"+p;
 
-  const countSubjectInRoom=(assignId,roomId)=>{let c=0;Object.entries(S.schedule).forEach(([k,en])=>{if(!k.startsWith(roomId+"_"))return;en?.forEach(e=>{if(e.assignmentId===assignId)c++})});return c};
-  const getPerRoomLimit=(assignId)=>{const a=S.assigns.find(x=>x.id===assignId);if(!a)return 999;const sub=S.subjects.find(s=>s.id===a.subjectId);return sub?.periodsPerWeek||999};
-  const aUsed=(aid)=>{let c=0;Object.entries(S.schedule).forEach(([k,en])=>{en?.forEach(e=>{if(e.assignmentId===aid)c++})});return c};
-  const teacherScheduledTotal=(tid)=>{let c=0;Object.values(S.schedule).forEach(en=>{en?.forEach(e=>{if(e.teacherId===tid||e.coTeacherId===tid)c++})});return c};
-
   const teacherBusy=(tid,day,period,excludeKey)=>{
-    let busy=false;
-    Object.entries(S.schedule).forEach(([k,en])=>{
-      if(k===excludeKey)return;
-      if(!k.endsWith("_"+day+"_"+period))return;
-      en?.forEach(e=>{if(e.teacherId===tid||e.coTeacherId===tid)busy=true});
-    });
-    return busy;
+    for(const [k,en] of Object.entries(S.schedule)){
+      if(k===excludeKey)continue;
+      if(!k.endsWith("_"+day+"_"+period))continue;
+      if(en?.some(e=>e.teacherId===tid||e.coTeacherId===tid))return true;
+    }
+    return false;
   };
 
-  // ข้อ 1: ตรวจ specialRoom conflict ข้ามทุกห้อง
   const specialRoomBusy=(subjectId,day,period,excludeKey)=>{
-    const sub=S.subjects.find(s=>s.id===subjectId);
-    if(!sub?.specialRoomId)return false;
-    const srId=sub.specialRoomId;
-    let busy=false;
-    Object.entries(S.schedule).forEach(([k,en])=>{
-      if(k===excludeKey)return;
-      if(!k.endsWith("_"+day+"_"+period))return;
-      en?.forEach(e=>{
-        const es=S.subjects.find(s=>s.id===e.subjectId);
-        if(es?.specialRoomId===srId)busy=true;
-      });
-    });
-    return busy;
+    const srId=S.subjects.find(s=>s.id===subjectId)?.specialRoomId;
+    if(!srId)return false;
+    for(const [k,en] of Object.entries(S.schedule)){
+      if(k===excludeKey)continue;
+      if(!k.endsWith("_"+day+"_"+period))continue;
+      if(en?.some(e=>S.subjects.find(s=>s.id===e.subjectId)?.specialRoomId===srId))return true;
+    }
+    return false;
   };
 
-  // ข้อ 9: ตรวจวิชาเดียวกัน>1คาบ/วัน (ยกเว้น consecutiveAllowed)
   const sameSubjectSameDay=(subjectId,roomId,day,excludeKey)=>{
-    const sub=S.subjects.find(s=>s.id===subjectId);
-    const allowed=sub?.consecutiveAllowed||0;
-    if(allowed>0)return false; // วิชาที่อนุญาตพิเศษ
+    const allowed=S.subjects.find(s=>s.id===subjectId)?.consecutiveAllowed||0;
+    if(allowed>0)return false;
     let count=0;
-    Object.entries(S.schedule).forEach(([k,en])=>{
-      if(k===excludeKey)return;
-      const parts=k.split("_");const kRoom=parts[0];const kDay=parts[1];
-      if(kRoom!==roomId||kDay!==day)return;
-      en?.forEach(e=>{if(e.subjectId===subjectId)count++});
-    });
+    for(const [k,en] of Object.entries(S.schedule)){
+      if(k===excludeKey)continue;
+      const pts=k.split("_");
+      if(pts[0]!==roomId||pts[1]!==day)continue;
+      en?.forEach(e=>{if(e.subjectId===subjectId)count++;});
+    }
     return count>=1;
   };
 
+  const countSubjectInRoom=(assignId,roomId)=>{
+    let c=0;
+    Object.entries(S.schedule).forEach(([k,en])=>{
+      if(!k.startsWith(roomId+"_"))return;
+      en?.forEach(e=>{if(e.assignmentId===assignId)c++;});
+    });
+    return c;
+  };
+
+  const getPerRoomLimit=(assignId)=>{
+    const a=S.assigns.find(x=>x.id===assignId);
+    if(!a)return 999;
+    return S.subjects.find(s=>s.id===a.subjectId)?.periodsPerWeek||999;
+  };
+
+  const aUsed=(aid)=>{
+    let c=0;
+    Object.values(S.schedule).forEach(en=>en?.forEach(e=>{if(e.assignmentId===aid)c++;}));
+    return c;
+  };
+
+  const teacherScheduledTotal=(tid)=>{
+    let c=0;
+    Object.values(S.schedule).forEach(en=>en?.forEach(e=>{if(e.teacherId===tid||e.coTeacherId===tid)c++;}));
+    return c;
+  };
+
+  /* ── drop handler ── */
   const handleDrop=(rid,day,p)=>{
     const key=sk(rid,day,p);
-    if(S.locks[key]){st("ล็อคแล้ว","error");return}
-    if((S.schedule[key]||[]).length>=3){st("ครบ 3 วิชาแล้ว","error");return}
+    if(S.locks[key]){st("ล็อคแล้ว","error");return;}
+    if((S.schedule[key]||[]).length>=3){st("ครบ 3 วิชาแล้ว","error");return;}
 
-    // Re-drag existing entry (ใช้ได้ทั้ง teacher-mode และ room-mode)
+    // กรณี re-drag การ์ดที่วางอยู่แล้ว → ย้ายช่อง (ทำได้ทั้ง 2 mode)
     if(drag?.fromKey){
       if(drag.fromKey===key)return;
       const entry=drag.entry;
-      // teacher conflict check เฉพาะเมื่อมีการเลือกครู (teacher-mode)
-      if(selT&&isBlk(entry.teacherId,day,p)){st("ครูถูกล็อคคาบนี้","error");return}
-      if(selT&&teacherBusy(entry.teacherId,day,p,drag.fromKey)){st("ครูคนนี้สอนคาบนี้อยู่แล้ว (ห้องอื่น)","error");return}
-      if(specialRoomBusy(entry.subjectId,day,p,drag.fromKey)){const sr=S.specialRooms.find(r=>r.id===S.subjects.find(s=>s.id===entry.subjectId)?.specialRoomId);st("ห้องพิเศษ '"+( sr?.name||"")+"' ถูกใช้อยู่","error");return}
-      const room=S.rooms.find(r=>r.id===rid);
       const sub=S.subjects.find(s=>s.id===entry.subjectId);
-      if(room&&sub&&room.levelId!==sub.levelId){st("ระดับชั้นไม่ตรงกัน!","error");return}
+      const room=S.rooms.find(r=>r.id===rid);
+      if(room&&sub&&room.levelId!==sub.levelId){st("ระดับชั้นไม่ตรงกัน!","error");return;}
+      if(specialRoomBusy(entry.subjectId,day,p,drag.fromKey)){
+        const sr=S.specialRooms.find(r=>r.id===sub?.specialRoomId);
+        st("ห้องพิเศษ '"+(sr?.name||"")+"' ถูกใช้อยู่","error");return;
+      }
+      // ตรวจ teacher conflict เฉพาะ teacher-mode
+      if(selT){
+        if(isBlk(entry.teacherId,day,p)){st("ครูถูกล็อคคาบนี้","error");return;}
+        if(teacherBusy(entry.teacherId,day,p,drag.fromKey)){st("ครูคนนี้สอนคาบนี้อยู่แล้ว","error");return;}
+      }
       U.setSchedule(prev=>{
-        const updated={...prev};
-        updated[drag.fromKey]=(updated[drag.fromKey]||[]).filter(e=>e.id!==entry.id);
-        updated[key]=[...(updated[key]||[]),entry];
-        return updated;
+        const u={...prev};
+        u[drag.fromKey]=(u[drag.fromKey]||[]).filter(e=>e.id!==entry.id);
+        u[key]=[...(u[key]||[]),entry];
+        return u;
       });
       setDrag(null);return;
     }
 
-    // ลากจาก sidebar (teacher-mode เท่านั้น)
-    if(!drag||!drag.teacherId)return;
-    if(isBlk(drag.teacherId,day,p)){st("ครูถูกล็อคคาบนี้","error");return}
-    if(teacherBusy(drag.teacherId,day,p,null)){st("ครูคนนี้สอนคาบนี้อยู่แล้ว (ห้องอื่น)","error");return}
-    if(specialRoomBusy(drag.subjectId,day,p,null)){const sr=S.specialRooms.find(r=>r.id===S.subjects.find(s=>s.id===drag.subjectId)?.specialRoomId);st("ห้องพิเศษ '"+(sr?.name||"")+"' ถูกใช้อยู่แล้วในคาบนี้","error");return}
-    const room=S.rooms.find(r=>r.id===rid);
+    // กรณีลากจาก sidebar (teacher-mode เท่านั้น)
+    if(!drag?.teacherId)return;
     const sub=S.subjects.find(s=>s.id===drag.subjectId);
-    if(room&&sub&&room.levelId!==sub.levelId){st("ระดับชั้นไม่ตรงกัน!","error");return}
-    if(sameSubjectSameDay(drag.subjectId,rid,day,null)){st("วิชานี้มีในวัน"+day+"แล้ว (ห้ามซ้ำ/วัน)","error");return}
+    const room=S.rooms.find(r=>r.id===rid);
+    if(isBlk(drag.teacherId,day,p)){st("ครูถูกล็อคคาบนี้","error");return;}
+    if(teacherBusy(drag.teacherId,day,p,null)){st("ครูคนนี้สอนคาบนี้อยู่แล้ว (ห้องอื่น)","error");return;}
+    if(specialRoomBusy(drag.subjectId,day,p,null)){
+      const sr=S.specialRooms.find(r=>r.id===sub?.specialRoomId);
+      st("ห้องพิเศษ '"+(sr?.name||"")+"' ถูกใช้อยู่แล้วในคาบนี้","error");return;
+    }
+    if(room&&sub&&room.levelId!==sub.levelId){st("ระดับชั้นไม่ตรงกัน!","error");return;}
+    if(sameSubjectSameDay(drag.subjectId,rid,day,null)){st("วิชานี้มีในวัน"+day+"แล้ว (ห้ามซ้ำ/วัน)","error");return;}
     const placed=countSubjectInRoom(drag.assignmentId,rid);
     const limit=getPerRoomLimit(drag.assignmentId);
-    if(placed>=limit){st("ห้องนี้ลงครบ "+limit+" คาบแล้ว","error");return}
+    if(placed>=limit){st("ห้องนี้ลงครบ "+limit+" คาบแล้ว","error");return;}
     const coTid=cardCoMap[drag.assignmentId]||null;
-    U.setSchedule(prev=>({...prev,[key]:[...(prev[key]||[]),{id:gid(),teacherId:drag.teacherId,subjectId:drag.subjectId,assignmentId:drag.assignmentId,coTeacherId:coTid}]}));
+    U.setSchedule(prev=>({
+      ...prev,
+      [key]:[...(prev[key]||[]),{id:gid(),teacherId:drag.teacherId,subjectId:drag.subjectId,assignmentId:drag.assignmentId,coTeacherId:coTid}]
+    }));
     setDrag(null);
   };
 
-  // render cell entry card — compact if multiple entries in same cell
-  const EntryCard=({entry,cellKey,lk,cellCount})=>{
-    const sub=S.subjects.find(s=>s.id===entry.subjectId);
-    const dept=S.depts.find(d=>d.id===sub?.departmentId);
-    const c=dept?gc(dept.id):{bg:"#6B7280",lt:"#F3F4F6",tx:"#374151",bd:"#D1D5DB"};
-    const et=S.teachers.find(t=>t.id===entry.teacherId);
-    const ct=entry.coTeacherId?S.teachers.find(t=>t.id===entry.coTeacherId):null;
-    const isOwn=entry.teacherId===selT||entry.coTeacherId===selT;
-    // dim เฉพาะ teacher-mode และไม่ใช่การ์ดของครูที่เลือก
-    const dimmed=mode==="teacher"&&selT&&!isOwn;
-    const compact=cellCount>1;
-    return<div key={entry.id} draggable={!lk} onDragStart={e=>{e.stopPropagation();setDrag({fromKey:cellKey,entry})}} onDragEnd={()=>setDrag(null)}
-      style={{background:dimmed?"#F9FAFB":c.lt,border:"2px solid "+(dimmed?"#E5E7EB":c.bd),borderRadius:6,padding:compact?"3px 5px":"5px 7px",marginBottom:2,fontSize:11,position:"relative",cursor:lk?"default":"grab",opacity:dimmed?0.5:1,transition:"opacity 0.15s"}}>
-      {compact
-        ? <div style={{fontWeight:700,color:dimmed?"#9CA3AF":c.tx,fontSize:10,lineHeight:1.3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sub?.name||sub?.code}</div>
-        : <>
-            <div style={{fontWeight:700,color:dimmed?"#9CA3AF":c.tx,fontSize:11}}>{sub?.code}</div>
-            <div style={{fontWeight:600,color:dimmed?"#9CA3AF":c.tx,fontSize:10}}>{sub?.name}</div>
-            <div style={{color:dimmed?"#9CA3AF":c.tx,opacity:0.7,fontSize:10}}>{et?.firstName}{ct?" + "+ct.firstName:""}</div>
-          </>
-      }
-      {!lk&&!compact&&<div style={{display:"flex",gap:2,marginTop:2}}>
-        <button onClick={()=>U.setSchedule(prev=>({...prev,[cellKey]:(prev[cellKey]||[]).filter(e=>e.id!==entry.id)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0}}><Icon name="x" size={10}/></button>
-        <button onClick={()=>setCoM({key:cellKey,entryId:entry.id})} style={{background:"none",border:"none",cursor:"pointer",color:"#2563EB",padding:0}}><Icon name="users" size={10}/></button>
-        <button onClick={()=>{U.setLocks(prev=>({...prev,[cellKey]:true}));st("ล็อคแล้ว")}} style={{background:"none",border:"none",cursor:"pointer",color:"#059669",padding:0}}><Icon name="lock" size={10}/></button>
-      </div>}
-      {!lk&&compact&&<button onClick={()=>U.setSchedule(prev=>({...prev,[cellKey]:(prev[cellKey]||[]).filter(e=>e.id!==entry.id)}))} style={{position:"absolute",top:1,right:1,background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,lineHeight:1}}><Icon name="x" size={9}/></button>}
-      {lk&&<div style={{position:"absolute",top:2,right:4}}><button onClick={()=>{U.setLocks(prev=>({...prev,[cellKey]:false}));st("ปลดล็อค")}} style={{background:"none",border:"none",cursor:"pointer",color:"#059669",padding:0}}><Icon name="unlock" size={10}/></button></div>}
-    </div>;
-  };
-
-  // ตาราง (ใช้ทั้ง teacher-mode และ room-mode)
-  const renderTable=(roomIds)=><div style={{flex:1,overflowX:"auto"}}>
-    {roomIds.map(rid=>{const rm=S.rooms.find(r=>r.id===rid);return<div key={rid} style={{marginBottom:28}}>
-      <h4 style={{fontSize:14,fontWeight:700,marginBottom:8}}><span style={{background:"#DC2626",color:"#fff",padding:"3px 12px",borderRadius:8,fontSize:12}}>{rm?.name}</span></h4>
-      <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 4px rgba(0,0,0,0.08)",overflow:"hidden"}}>
-        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:820}}>
-          <thead><tr style={{borderBottom:"2px solid #DC2626"}}>
-            <th style={{padding:"10px 12px",background:"#FEF2F2",fontWeight:700,color:"#991B1B",width:80,textAlign:"left",fontSize:13}}>วัน</th>
-            {PERIODS.map(p=><th key={p.id} style={{padding:"8px 4px",background:"#FEF2F2",fontWeight:600,color:"#6B7280",textAlign:"center",minWidth:110,borderLeft:"1px solid #FECACA"}}>
-              <div style={{fontSize:12,color:"#991B1B",fontWeight:700}}>คาบ {p.id}</div>
-              <div style={{fontSize:10,fontWeight:400}}>{p.time}</div>
-            </th>)}
-          </tr></thead>
-          <tbody>{DAYS.map((day,di)=><tr key={day} style={{borderBottom:"1px solid #F3F4F6",background:di%2===0?"#fff":"#FAFAFA"}}>
-            <td style={{padding:"8px 12px",fontWeight:700,fontSize:13,color:"#374151",borderRight:"2px solid #FECACA"}}>{day}</td>
-            {PERIODS.map(p=>{const key=sk(rid,day,p.id);const en=S.schedule[key]||[];const lk=S.locks[key];const bl=mode==="teacher"&&isBlk(selT,day,p.id);
-              return<td key={p.id} className="dz" onDragOver={e=>{e.preventDefault();e.currentTarget.classList.add("over")}} onDragLeave={e=>e.currentTarget.classList.remove("over")} onDrop={e=>{e.preventDefault();e.currentTarget.classList.remove("over");handleDrop(rid,day,p.id)}}
-                style={{padding:3,verticalAlign:"top",background:bl?"#FEF9C3":lk?"#F0FDF4":"transparent",minHeight:64,borderLeft:"1px solid #F3F4F6"}}>
-                {bl&&!en.length&&<div style={{fontSize:9,color:"#92400E",textAlign:"center",padding:3}}>🔒 {blocked(selT).find(b=>b.day===day&&b.period===p.id)?.reason}</div>}
-                {en.map(entry=><EntryCard key={entry.id} entry={entry} cellKey={key} lk={lk} cellCount={en.length}/>)}
-              </td>;
-            })}
-          </tr>)}</tbody>
-        </table>
-      </div>
-    </div>})}
-  </div>;
-
-  const coTeacherSelect=(coSVal,setCoSFn,coDeptVal,setCoDeptFn,label)=><div style={{display:"flex",flexDirection:"column",gap:10}}>
-    <div><label style={LS}>{label}</label>
-      <select style={{...IS,marginBottom:8}} value={coDeptVal} onChange={e=>{setCoDeptFn(e.target.value);setCoSFn("")}}>
-        <option value="">-- เลือกกลุ่มสาระก่อน --</option>{S.depts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+  /* ── co-teacher dept+teacher selector ── */
+  const CoTeacherSelect=({coSVal,setCoSFn,coDeptVal,setCoDeptFn,excludeId})=>(
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      <select style={IS} value={coDeptVal} onChange={e=>{setCoDeptFn(e.target.value);setCoSFn("");}}>
+        <option value="">-- เลือกกลุ่มสาระก่อน --</option>
+        {S.depts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
       </select>
-      {coDeptVal&&<select style={IS} value={coSVal} onChange={e=>setCoSFn(e.target.value)}>
-        <option value="">-- เลือกครู --</option>
-        {S.teachers.filter(t=>t.departmentId===coDeptVal&&t.id!==selT).map(t=>{
-          const sched=teacherScheduledTotal(t.id);const rem=(t.totalPeriods||0)-sched;
-          return<option key={t.id} value={t.id}>{t.prefix}{t.firstName} {t.lastName} — เหลือ {rem} คาบ</option>
-        })}
-      </select>}
+      {coDeptVal&&(
+        <select style={IS} value={coSVal} onChange={e=>setCoSFn(e.target.value)}>
+          <option value="">-- เลือกครู --</option>
+          {S.teachers.filter(t=>t.departmentId===coDeptVal&&t.id!==excludeId).map(t=>{
+            const rem=(t.totalPeriods||0)-teacherScheduledTotal(t.id);
+            return <option key={t.id} value={t.id}>{t.prefix}{t.firstName} {t.lastName} — เหลือ {rem} คาบ</option>;
+          })}
+        </select>
+      )}
     </div>
-  </div>;
+  );
 
-  return <div style={{animation:"fadeIn 0.3s"}}>
-    {/* Mode toggle */}
-    <div style={{display:"flex",gap:8,marginBottom:16,alignItems:"center",flexWrap:"wrap"}}>
-      <div style={{display:"flex",borderRadius:10,overflow:"hidden",border:"1.5px solid #DC2626"}}>
-        <button onClick={()=>{setMode("teacher");setSelRoom("")}} style={{padding:"8px 18px",background:mode==="teacher"?"#DC2626":"#fff",color:mode==="teacher"?"#fff":"#DC2626",border:"none",fontWeight:700,fontSize:13,cursor:"pointer"}}>จัดรายครู</button>
-        <button onClick={()=>{setMode("room");setSelT("");setSelDept("")}} style={{padding:"8px 18px",background:mode==="room"?"#DC2626":"#fff",color:mode==="room"?"#fff":"#DC2626",border:"none",fontWeight:700,fontSize:13,cursor:"pointer"}}>จัดรายห้อง</button>
-      </div>
-
-      {mode==="teacher"&&<>
-        <select style={{...IS,maxWidth:220}} value={selDept} onChange={e=>{setSelDept(e.target.value);setSelT("")}}><option value="">-- ทุกกลุ่มสาระ --</option>{S.depts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select>
-        <select style={{...IS,maxWidth:280}} value={selT} onChange={e=>setSelT(e.target.value)}><option value="">-- เลือกครู --</option>{fTeachers.map(t=>{const sched=teacherScheduledTotal(t.id);const rem=(t.totalPeriods||0)-sched;return<option key={t.id} value={t.id}>{t.prefix}{t.firstName} {t.lastName} (เหลือ {rem})</option>})}</select>
-      </>}
-
-      {mode==="room"&&<select style={{...IS,maxWidth:280}} value={selRoom} onChange={e=>setSelRoom(e.target.value)}>
-        <option value="">-- เลือกห้องเรียน --</option>
-        {sortedRooms.map(r=>{const lv=S.levels.find(l=>l.id===r.levelId);return<option key={r.id} value={r.id}>{lv?.name} — {r.name}</option>})}
-      </select>}
-    </div>
-
-    {/* Teacher summary bar */}
-    {mode==="teacher"&&teacher&&<div style={{background:"#fff",borderRadius:12,padding:"10px 18px",marginBottom:14,display:"flex",gap:14,alignItems:"center",flexWrap:"wrap",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
-      <div style={{fontSize:15,fontWeight:700}}>{teacher.prefix}{teacher.firstName} {teacher.lastName}</div>
-      <div style={{fontSize:12,color:"#6B7280"}}>{S.depts.find(d=>d.id===teacher.departmentId)?.name}</div>
-      <div style={{marginLeft:"auto",display:"flex",gap:10}}>
-        <div style={{background:"#DBEAFE",color:"#1E40AF",padding:"5px 14px",borderRadius:8,fontWeight:700,fontSize:13}}>ได้รับ {teacher.totalPeriods||0}</div>
-        <div style={{background:"#FEF3C7",color:"#92400E",padding:"5px 14px",borderRadius:8,fontWeight:700,fontSize:13}}>จัดแล้ว {teacherScheduledTotal(teacher.id)}</div>
-        <div style={{background:(teacher.totalPeriods||0)-teacherScheduledTotal(teacher.id)>0?"#D1FAE5":"#FEE2E2",color:(teacher.totalPeriods||0)-teacherScheduledTotal(teacher.id)>0?"#065F46":"#991B1B",padding:"5px 14px",borderRadius:8,fontWeight:700,fontSize:13}}>เหลือ {(teacher.totalPeriods||0)-teacherScheduledTotal(teacher.id)}</div>
-      </div>
-    </div>}
-
-    {/* Teacher mode */}
-    {mode==="teacher"&&(teacher
-      ?<div style={{display:"flex",gap:14}}>
-        <div style={{width:280,flexShrink:0,position:"sticky",top:0,alignSelf:"flex-start",maxHeight:"calc(100vh - 200px)",overflowY:"auto"}}>
-          <h4 style={{fontSize:14,fontWeight:700,color:"#374151",marginBottom:10}}>วิชา — ลากวาง</h4>
-          {asgns.map(a=>{const sub=S.subjects.find(s=>s.id===a.subjectId);const dept=S.depts.find(d=>d.id===sub?.departmentId);const c=dept?gc(dept.id):{bg:"#6B7280",lt:"#F3F4F6",tx:"#374151",bd:"#D1D5DB"};const u=aUsed(a.id);const rem=a.totalPeriods-u;const coCid=cardCoMap[a.id];const coTeacher=coCid?S.teachers.find(t=>t.id===coCid):null;
-            return<div key={a.id} style={{background:c.lt,border:"2px solid "+c.bd,borderRadius:12,padding:12,opacity:rem<=0?0.4:1,marginBottom:10}}>
-              <div className="drag-card" draggable={rem>0} onDragStart={()=>setDrag({teacherId:selT,subjectId:a.subjectId,assignmentId:a.id})} onDragEnd={()=>setDrag(null)}>
-                <div style={{fontSize:14,fontWeight:700,color:c.tx}}>{sub?.code} — {sub?.name}</div>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
-                  <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{a.roomIds.map(rid=><span key={rid} style={{background:"rgba(0,0,0,0.1)",padding:"2px 8px",borderRadius:10,fontSize:11,fontWeight:600}}>{S.rooms.find(r=>r.id===rid)?.name}</span>)}</div>
-                  <span style={{background:rem>0?c.bg:"#9CA3AF",color:"#fff",padding:"3px 12px",borderRadius:20,fontSize:12,fontWeight:700}}>{rem}/{a.totalPeriods}</span>
-                </div>
-              </div>
-              {/* ข้อ 4: เพิ่มครูร่วมบน sidebar card */}
-              <div style={{marginTop:8,borderTop:"1px solid rgba(0,0,0,0.08)",paddingTop:8}}>
-                {coTeacher
-                  ?<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <span style={{fontSize:11,color:c.tx}}>ร่วม: {coTeacher.prefix}{coTeacher.firstName}</span>
-                    <button onClick={()=>setCardCoMap(p=>({...p,[a.id]:null}))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,fontSize:11}}>✕</button>
-                  </div>
-                  :<button onClick={()=>setCardCoM(a.id)} style={{fontSize:11,color:c.tx,background:"rgba(0,0,0,0.06)",border:"none",borderRadius:6,padding:"3px 8px",cursor:"pointer",width:"100%",textAlign:"left"}}>+ เพิ่มครูสอนร่วม</button>
-                }
-              </div>
-            </div>})}
-        </div>
-        {renderTable(tRooms)}
-      </div>
-      :<div style={{background:"#fff",borderRadius:14,padding:60,textAlign:"center"}}><div style={{fontSize:48,marginBottom:16}}>📋</div><h3 style={{fontSize:18,fontWeight:700,marginBottom:8}}>เลือกครูเพื่อจัดตาราง</h3></div>
-    )}
-
-    {/* Room mode */}
-    {mode==="room"&&(selRoom
-      ?<div>{renderTable([selRoom])}</div>
-      :<div style={{background:"#fff",borderRadius:14,padding:60,textAlign:"center"}}><div style={{fontSize:48,marginBottom:16}}>🏫</div><h3 style={{fontSize:18,fontWeight:700,marginBottom:8}}>เลือกห้องเรียนเพื่อจัดตาราง</h3></div>
-    )}
-
-    {/* Co-teacher modal (on placed card) */}
-    <Modal open={!!coM} onClose={()=>{setCoM(null);setCoS("");setCoDept("")}} title="เพิ่มครูสอนร่วม (บนตาราง)">
-      <div style={{display:"flex",flexDirection:"column",gap:14}}>
-        {coTeacherSelect(coS,setCoS,coDept,setCoDept,"เลือกครูสอนร่วม")}
-        {coS&&(()=>{const parts=coM?.key?.split("_")||[];const cDay=parts[1];const cPer=parseInt(parts[2]);const isBusy=teacherBusy(coS,cDay,cPer,null);const coTeacher=S.teachers.find(t=>t.id===coS);const sched=teacherScheduledTotal(coS);const rem=(coTeacher?.totalPeriods||0)-sched;
-          return<div>
-            {isBusy&&<div style={{padding:10,background:"#FEE2E2",borderRadius:8,color:"#991B1B",fontSize:12,fontWeight:600,marginBottom:6}}>⚠️ ครูท่านนี้สอนคาบนี้อยู่แล้ว</div>}
-            {rem<=0&&<div style={{padding:10,background:"#FEF3C7",borderRadius:8,color:"#92400E",fontSize:12,fontWeight:600,marginBottom:6}}>⚠️ คาบเต็มแล้ว ({coTeacher?.totalPeriods} คาบ)</div>}
-            <div style={{fontSize:12,color:"#6B7280"}}>จัดแล้ว: {sched}/{coTeacher?.totalPeriods||0} | เหลือ: {rem}</div>
+  /* ── render timetable table ── */
+  const renderTable=(roomIds)=>(
+    <div style={{flex:1,overflowX:"auto"}}>
+      {roomIds.map(rid=>{
+        const rm=S.rooms.find(r=>r.id===rid);
+        return (
+          <div key={rid} style={{marginBottom:28}}>
+            <div style={{marginBottom:8}}>
+              <span style={{background:"#DC2626",color:"#fff",padding:"4px 14px",borderRadius:8,fontSize:12,fontWeight:700}}>{rm?.name}</span>
+            </div>
+            <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 4px rgba(0,0,0,0.08)",overflow:"hidden"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed",minWidth:820}}>
+                <thead>
+                  <tr style={{borderBottom:"2px solid #DC2626"}}>
+                    <th style={{padding:"10px 12px",background:"#FEF2F2",fontWeight:700,color:"#991B1B",width:72,textAlign:"left",fontSize:13}}>วัน</th>
+                    {PERIODS.map(p=>(
+                      <th key={p.id} style={{padding:"7px 4px",background:"#FEF2F2",textAlign:"center",borderLeft:"1px solid #FECACA"}}>
+                        <div style={{fontSize:12,color:"#991B1B",fontWeight:700}}>คาบ {p.id}</div>
+                        <div style={{fontSize:10,color:"#9CA3AF",fontWeight:400}}>{p.time}</div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {DAYS.map((day,di)=>(
+                    <tr key={day} style={{background:di%2===0?"#fff":"#FAFAFA"}}>
+                      <td style={{padding:"8px 10px",fontWeight:700,fontSize:13,color:"#374151",borderRight:"2px solid #FECACA",borderBottom:"1px solid #F3F4F6"}}>{day}</td>
+                      {PERIODS.map(p=>{
+                        const key=sk(rid,day,p.id);
+                        const en=S.schedule[key]||[];
+                        const lk=!!S.locks[key];
+                        const bl=mode==="teacher"&&!!selT&&isBlk(selT,day,p.id);
+                        return (
+                          <td key={p.id}
+                            className="dz"
+                            onDragOver={e=>{e.preventDefault();e.currentTarget.classList.add("over");}}
+                            onDragLeave={e=>e.currentTarget.classList.remove("over")}
+                            onDrop={e=>{e.preventDefault();e.currentTarget.classList.remove("over");handleDrop(rid,day,p.id);}}
+                            style={{padding:3,verticalAlign:"top",minHeight:68,borderLeft:"1px solid #F0F0F0",borderBottom:"1px solid #F0F0F0",background:bl?"#FEF9C3":lk?"#F0FDF4":"transparent"}}
+                          >
+                            {bl&&en.length===0&&(
+                              <div style={{fontSize:9,color:"#92400E",textAlign:"center",padding:4}}>
+                                🔒 {blocked(selT).find(b=>b.day===day&&b.period===p.id)?.reason}
+                              </div>
+                            )}
+                            {en.map(entry=>(
+                              <SchedulerEntryCard
+                                key={entry.id}
+                                entry={entry}
+                                cellKey={key}
+                                lk={lk}
+                                cellCount={en.length}
+                                selT={selT}
+                                mode={mode}
+                                S={S}
+                                U={U}
+                                gc={gc}
+                                setDrag={setDrag}
+                                setCoM={setCoM}
+                              />
+                            ))}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        })()}
-        <button onClick={()=>{if(!coS||!coM)return;const parts=coM.key.split("_");const cDay=parts[1];const cPer=parseInt(parts[2]);if(teacherBusy(coS,cDay,cPer,null)){st("ครูท่านนี้สอนคาบนี้อยู่แล้ว","error");return}U.setSchedule(prev=>({...prev,[coM.key]:(prev[coM.key]||[]).map(e=>e.id===coM.entryId?{...e,coTeacherId:coS}:e)}));setCoM(null);setCoS("");setCoDept("");st("เพิ่มครูร่วมสำเร็จ")}} style={BS()}>ยืนยัน</button>
-      </div>
-    </Modal>
+        );
+      })}
+    </div>
+  );
 
-    {/* Co-teacher modal (on sidebar card before drop) */}
-    <Modal open={!!cardCoM} onClose={()=>{setCardCoM(null);setCardCoS("");setCardCoDept("")}} title="กำหนดครูสอนร่วม (ติดไปกับการ์ด)">
-      <div style={{display:"flex",flexDirection:"column",gap:14}}>
-        <div style={{fontSize:13,color:"#6B7280"}}>ครูร่วมที่เลือกจะถูกกำหนดทุกครั้งที่ลากการ์ดนี้ลงตาราง</div>
-        {coTeacherSelect(cardCoS,setCardCoS,cardCoDept,setCardCoDept,"เลือกครูสอนร่วม")}
-        <button onClick={()=>{if(!cardCoS)return;setCardCoMap(p=>({...p,[cardCoM]:cardCoS}));setCardCoM(null);setCardCoS("");setCardCoDept("");st("กำหนดครูร่วมสำเร็จ")}} style={BS()}>ยืนยัน</button>
+  /* ── render ── */
+  return (
+    <div style={{animation:"fadeIn 0.3s"}}>
+
+      {/* Mode + selector bar */}
+      <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
+        <div style={{display:"flex",borderRadius:10,overflow:"hidden",border:"1.5px solid #DC2626"}}>
+          <button onClick={()=>{setMode("teacher");setSelRoom("");}} style={{padding:"8px 18px",background:mode==="teacher"?"#DC2626":"#fff",color:mode==="teacher"?"#fff":"#DC2626",border:"none",fontWeight:700,fontSize:13,cursor:"pointer",transition:"background 0.15s"}}>จัดรายครู</button>
+          <button onClick={()=>{setMode("room");setSelT("");setSelDept("");}} style={{padding:"8px 18px",background:mode==="room"?"#DC2626":"#fff",color:mode==="room"?"#fff":"#DC2626",border:"none",fontWeight:700,fontSize:13,cursor:"pointer",transition:"background 0.15s"}}>จัดรายห้อง</button>
+        </div>
+
+        {mode==="teacher"&&<>
+          <select style={{...IS,maxWidth:200}} value={selDept} onChange={e=>{setSelDept(e.target.value);setSelT("");}}>
+            <option value="">-- ทุกกลุ่มสาระ --</option>
+            {S.depts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+          <select style={{...IS,maxWidth:280}} value={selT} onChange={e=>setSelT(e.target.value)}>
+            <option value="">-- เลือกครู --</option>
+            {fTeachers.map(t=>{
+              const rem=(t.totalPeriods||0)-teacherScheduledTotal(t.id);
+              return <option key={t.id} value={t.id}>{t.prefix}{t.firstName} {t.lastName} (เหลือ {rem})</option>;
+            })}
+          </select>
+        </>}
+
+        {mode==="room"&&(
+          <select style={{...IS,maxWidth:300}} value={selRoom} onChange={e=>setSelRoom(e.target.value)}>
+            <option value="">-- เลือกห้องเรียน --</option>
+            {sortedRooms.map(r=>{
+              const lv=S.levels.find(l=>l.id===r.levelId);
+              return <option key={r.id} value={r.id}>{lv?.name} — {r.name}</option>;
+            })}
+          </select>
+        )}
       </div>
-    </Modal>
-  </div>;
+
+      {/* Teacher summary bar */}
+      {mode==="teacher"&&teacher&&(
+        <div style={{background:"#fff",borderRadius:10,padding:"10px 16px",marginBottom:12,display:"flex",gap:12,alignItems:"center",flexWrap:"wrap",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+          <div style={{fontSize:15,fontWeight:700}}>{teacher.prefix}{teacher.firstName} {teacher.lastName}</div>
+          <div style={{fontSize:12,color:"#6B7280"}}>{S.depts.find(d=>d.id===teacher.departmentId)?.name}</div>
+          <div style={{marginLeft:"auto",display:"flex",gap:8}}>
+            {[
+              {label:"ได้รับ",val:teacher.totalPeriods||0,bg:"#DBEAFE",tx:"#1E40AF"},
+              {label:"จัดแล้ว",val:teacherScheduledTotal(teacher.id),bg:"#FEF3C7",tx:"#92400E"},
+              {label:"เหลือ",val:(teacher.totalPeriods||0)-teacherScheduledTotal(teacher.id),bg:(teacher.totalPeriods||0)-teacherScheduledTotal(teacher.id)>0?"#D1FAE5":"#FEE2E2",tx:(teacher.totalPeriods||0)-teacherScheduledTotal(teacher.id)>0?"#065F46":"#991B1B"},
+            ].map(({label,val,bg,tx})=>(
+              <div key={label} style={{background:bg,color:tx,padding:"4px 12px",borderRadius:8,fontWeight:700,fontSize:13}}>{label} {val}</div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Teacher mode */}
+      {mode==="teacher"&&(teacher
+        ?<div style={{display:"flex",gap:14}}>
+            {/* Sidebar */}
+            <div style={{width:270,flexShrink:0,position:"sticky",top:0,alignSelf:"flex-start",maxHeight:"calc(100vh - 200px)",overflowY:"auto"}}>
+              <div style={{fontSize:13,fontWeight:700,color:"#374151",marginBottom:10}}>วิชา — ลากวาง</div>
+              {asgns.map(a=>{
+                const sub=S.subjects.find(s=>s.id===a.subjectId);
+                const dept=S.depts.find(d=>d.id===sub?.departmentId);
+                const c=dept?gc(dept.id):{bg:"#6B7280",lt:"#F3F4F6",tx:"#374151",bd:"#D1D5DB"};
+                const u=aUsed(a.id);
+                const rem=a.totalPeriods-u;
+                const coCid=cardCoMap[a.id];
+                const coTeacher=coCid?S.teachers.find(t=>t.id===coCid):null;
+                return (
+                  <div key={a.id} style={{background:c.lt,border:"2px solid "+c.bd,borderRadius:12,padding:12,opacity:rem<=0?0.4:1,marginBottom:10}}>
+                    <div
+                      className="drag-card"
+                      draggable={rem>0}
+                      onDragStart={()=>setDrag({teacherId:selT,subjectId:a.subjectId,assignmentId:a.id})}
+                      onDragEnd={()=>setDrag(null)}
+                      style={{cursor:rem>0?"grab":"default"}}
+                    >
+                      <div style={{fontSize:13,fontWeight:700,color:c.tx}}>{sub?.code} — {sub?.name}</div>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
+                        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                          {a.roomIds.map(rid=>(
+                            <span key={rid} style={{background:"rgba(0,0,0,0.1)",padding:"2px 8px",borderRadius:10,fontSize:11,fontWeight:600}}>{S.rooms.find(r=>r.id===rid)?.name}</span>
+                          ))}
+                        </div>
+                        <span style={{background:rem>0?c.bg:"#9CA3AF",color:"#fff",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>{rem}/{a.totalPeriods}</span>
+                      </div>
+                    </div>
+                    {/* ข้อ 4: เพิ่มครูร่วมบน sidebar */}
+                    <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid rgba(0,0,0,0.07)"}}>
+                      {coTeacher
+                        ?<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                            <span style={{fontSize:11,color:c.tx}}>ร่วม: {coTeacher.prefix}{coTeacher.firstName}</span>
+                            <button onClick={()=>setCardCoMap(p=>({...p,[a.id]:null}))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,fontSize:11}}>✕</button>
+                          </div>
+                        :<button onClick={()=>setCardCoM(a.id)} style={{fontSize:11,color:c.tx,background:"rgba(0,0,0,0.06)",border:"none",borderRadius:6,padding:"3px 8px",cursor:"pointer",width:"100%",textAlign:"left"}}>+ เพิ่มครูสอนร่วม</button>
+                      }
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {renderTable(tRooms)}
+          </div>
+        :<EmptyState icon="📋" title="เลือกครูเพื่อจัดตาราง"/>
+      )}
+
+      {/* Room mode */}
+      {mode==="room"&&(selRoom
+        ?<div>{renderTable([selRoom])}</div>
+        :<EmptyState icon="🏫" title="เลือกห้องเรียนเพื่อจัดตาราง"/>
+      )}
+
+      {/* Modal: co-teacher บนการ์ดที่วางแล้ว */}
+      <Modal open={!!coM} onClose={()=>{setCoM(null);setCoS("");setCoDept("");}} title="เพิ่มครูสอนร่วม">
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <CoTeacherSelect coSVal={coS} setCoSFn={setCoS} coDeptVal={coDept} setCoDeptFn={setCoDept} excludeId={selT}/>
+          {coS&&(()=>{
+            const pts=coM?.key?.split("_")||[];
+            const cDay=pts[1];const cPer=parseInt(pts[2]);
+            const isBusy=teacherBusy(coS,cDay,cPer,null);
+            const ct=S.teachers.find(t=>t.id===coS);
+            const rem=(ct?.totalPeriods||0)-teacherScheduledTotal(coS);
+            return <div>
+              {isBusy&&<div style={{padding:10,background:"#FEE2E2",borderRadius:8,color:"#991B1B",fontSize:12,fontWeight:600,marginBottom:6}}>⚠️ ครูท่านนี้สอนคาบนี้อยู่แล้ว</div>}
+              {rem<=0&&<div style={{padding:10,background:"#FEF3C7",borderRadius:8,color:"#92400E",fontSize:12,fontWeight:600,marginBottom:6}}>⚠️ คาบเต็มแล้ว</div>}
+              <div style={{fontSize:12,color:"#6B7280"}}>จัดแล้ว {teacherScheduledTotal(coS)}/{ct?.totalPeriods||0} | เหลือ {rem}</div>
+            </div>;
+          })()}
+          <button
+            onClick={()=>{
+              if(!coS||!coM)return;
+              const pts=coM.key.split("_");const cDay=pts[1];const cPer=parseInt(pts[2]);
+              if(teacherBusy(coS,cDay,cPer,null)){st("ครูท่านนี้สอนคาบนี้อยู่แล้ว","error");return;}
+              U.setSchedule(prev=>({...prev,[coM.key]:(prev[coM.key]||[]).map(e=>e.id===coM.entryId?{...e,coTeacherId:coS}:e)}));
+              setCoM(null);setCoS("");setCoDept("");st("เพิ่มครูร่วมสำเร็จ");
+            }}
+            style={BS()}>ยืนยัน</button>
+        </div>
+      </Modal>
+
+      {/* Modal: co-teacher บน sidebar card */}
+      <Modal open={!!cardCoM} onClose={()=>{setCardCoM(null);setCardCoS("");setCardCoDept("");}} title="กำหนดครูสอนร่วม (ติดไปกับการ์ด)">
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <div style={{fontSize:12,color:"#6B7280"}}>ครูร่วมจะถูกกำหนดทุกครั้งที่ลากการ์ดนี้ลงตาราง</div>
+          <CoTeacherSelect coSVal={cardCoS} setCoSFn={setCardCoS} coDeptVal={cardCoDept} setCoDeptFn={setCardCoDept} excludeId={selT}/>
+          <button
+            onClick={()=>{
+              if(!cardCoS)return;
+              setCardCoMap(p=>({...p,[cardCoM]:cardCoS}));
+              setCardCoM(null);setCardCoS("");setCardCoDept("");st("กำหนดครูร่วมสำเร็จ");
+            }}
+            style={BS()}>ยืนยัน</button>
+        </div>
+      </Modal>
+    </div>
+  );
 }
 
 /* ===== REPORTS (fix#10: working page) ===== */
