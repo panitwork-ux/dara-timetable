@@ -1013,16 +1013,17 @@ function Scheduler({S,U,st,gc}){
     if(S.locks[key]){st("ล็อคแล้ว","error");return}
     if((S.schedule[key]||[]).length>=3){st("ครบ 3 วิชาแล้ว","error");return}
 
+    // Re-drag existing entry (ใช้ได้ทั้ง teacher-mode และ room-mode)
     if(drag?.fromKey){
       if(drag.fromKey===key)return;
       const entry=drag.entry;
-      if(isBlk(entry.teacherId,day,p)){st("ครูถูกล็อคคาบนี้","error");return}
-      if(teacherBusy(entry.teacherId,day,p,drag.fromKey)){st("ครูคนนี้สอนคาบนี้อยู่แล้ว (ห้องอื่น)","error");return}
+      // teacher conflict check เฉพาะเมื่อมีการเลือกครู (teacher-mode)
+      if(selT&&isBlk(entry.teacherId,day,p)){st("ครูถูกล็อคคาบนี้","error");return}
+      if(selT&&teacherBusy(entry.teacherId,day,p,drag.fromKey)){st("ครูคนนี้สอนคาบนี้อยู่แล้ว (ห้องอื่น)","error");return}
       if(specialRoomBusy(entry.subjectId,day,p,drag.fromKey)){const sr=S.specialRooms.find(r=>r.id===S.subjects.find(s=>s.id===entry.subjectId)?.specialRoomId);st("ห้องพิเศษ '"+( sr?.name||"")+"' ถูกใช้อยู่","error");return}
       const room=S.rooms.find(r=>r.id===rid);
       const sub=S.subjects.find(s=>s.id===entry.subjectId);
       if(room&&sub&&room.levelId!==sub.levelId){st("ระดับชั้นไม่ตรงกัน!","error");return}
-      if(sameSubjectSameDay(entry.subjectId,rid,day,drag.fromKey)){st("วิชานี้มีในวัน"+day+"แล้ว (ห้ามซ้ำ/วัน)","error");return}
       U.setSchedule(prev=>{
         const updated={...prev};
         updated[drag.fromKey]=(updated[drag.fromKey]||[]).filter(e=>e.id!==entry.id);
@@ -1032,7 +1033,8 @@ function Scheduler({S,U,st,gc}){
       setDrag(null);return;
     }
 
-    if(!drag)return;
+    // ลากจาก sidebar (teacher-mode เท่านั้น)
+    if(!drag||!drag.teacherId)return;
     if(isBlk(drag.teacherId,day,p)){st("ครูถูกล็อคคาบนี้","error");return}
     if(teacherBusy(drag.teacherId,day,p,null)){st("ครูคนนี้สอนคาบนี้อยู่แล้ว (ห้องอื่น)","error");return}
     if(specialRoomBusy(drag.subjectId,day,p,null)){const sr=S.specialRooms.find(r=>r.id===S.subjects.find(s=>s.id===drag.subjectId)?.specialRoomId);st("ห้องพิเศษ '"+(sr?.name||"")+"' ถูกใช้อยู่แล้วในคาบนี้","error");return}
@@ -1043,7 +1045,6 @@ function Scheduler({S,U,st,gc}){
     const placed=countSubjectInRoom(drag.assignmentId,rid);
     const limit=getPerRoomLimit(drag.assignmentId);
     if(placed>=limit){st("ห้องนี้ลงครบ "+limit+" คาบแล้ว","error");return}
-    // ใช้ coTeacherId จาก cardCoMap ถ้ามี
     const coTid=cardCoMap[drag.assignmentId]||null;
     U.setSchedule(prev=>({...prev,[key]:[...(prev[key]||[]),{id:gid(),teacherId:drag.teacherId,subjectId:drag.subjectId,assignmentId:drag.assignmentId,coTeacherId:coTid}]}));
     setDrag(null);
@@ -1057,9 +1058,9 @@ function Scheduler({S,U,st,gc}){
     const et=S.teachers.find(t=>t.id===entry.teacherId);
     const ct=entry.coTeacherId?S.teachers.find(t=>t.id===entry.coTeacherId):null;
     const isOwn=entry.teacherId===selT||entry.coTeacherId===selT;
-    // ข้อ 7: highlight own card, dim others
-    const dimmed=selT&&!isOwn;
-    const compact=cellCount>1; // ข้อ 6: compact when stacked
+    // dim เฉพาะ teacher-mode และไม่ใช่การ์ดของครูที่เลือก
+    const dimmed=mode==="teacher"&&selT&&!isOwn;
+    const compact=cellCount>1;
     return<div key={entry.id} draggable={!lk} onDragStart={e=>{e.stopPropagation();setDrag({fromKey:cellKey,entry})}} onDragEnd={()=>setDrag(null)}
       style={{background:dimmed?"#F9FAFB":c.lt,border:"2px solid "+(dimmed?"#E5E7EB":c.bd),borderRadius:6,padding:compact?"3px 5px":"5px 7px",marginBottom:2,fontSize:11,position:"relative",cursor:lk?"default":"grab",opacity:dimmed?0.5:1,transition:"opacity 0.15s"}}>
       {compact
