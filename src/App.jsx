@@ -1927,6 +1927,128 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
   );
 }
 
+
+/* ===== PDF: ตารางสอนรวมแบบตาราง ครูเป็นแถว × วัน/คาบเป็นคอลัมน์ ===== */
+/* mode: "dept" = แยกกลุ่มสาระ, "level" = กรองระดับชั้น (levelId) */
+function buildMasterTableHTML(S, ay, sh, filterLevelId) {
+  const subtitle = "ภาคเรียนที่ "+(ay?.semester||"1")+"/"+(ay?.year||"2568")+" "+(sh?.name||"โรงเรียนดาราวิทยาลัย");
+  const logoHtml = sh?.logo
+    ? '<img src="'+sh.logo+'" style="width:40px;height:40px;border-radius:50%;object-fit:cover;flex-shrink:0"/>'
+    : '<div style="width:40px;height:40px;border:1px solid #999;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:7px;color:#666;flex-shrink:0">LOGO</div>';
+
+  // helper: ดึงห้องที่ครูสอน กรอง levelId ถ้ามี
+  const getRoomShort = (rmId) => {
+    const rm = S.rooms.find(r=>r.id===rmId);
+    if(!rm) return null;
+    if(filterLevelId && rm.levelId!==filterLevelId) return null;
+    // แสดงเลขห้องสั้น เช่น "ม.5/1" → "5/1", "ม.4/3" → "4/3"
+    const m = rm.name.match(/(\d+\/\d+|\d+)$/);
+    return m ? m[1] : rm.name;
+  };
+
+  // สำหรับครูแต่ละคน หา cell[day][period] = รายการห้องย่อ
+  const getTeacherCells = (tid) => {
+    const cells = {};
+    DAYS.forEach(d => { cells[d]={}; PERIODS.forEach(p=>{ cells[d][p.id]=[]; }); });
+    Object.entries(S.schedule).forEach(([k,en])=>{
+      en?.forEach(e=>{
+        if(e.teacherId!==tid && e.coTeacherId!==tid) return;
+        const parts = k.split("_");
+        const rmId = parts.slice(0, parts.length-2).join("_");
+        const day = parts[parts.length-2];
+        const per = parseInt(parts[parts.length-1]);
+        const short = getRoomShort(rmId);
+        if(short && cells[day] && cells[day][per] !== undefined){
+          cells[day][per].push(short);
+        }
+      });
+    });
+    return cells;
+  };
+
+  // จัดกลุ่มครูตามกลุ่มสาระ กรองเฉพาะครูที่มีคาบ (ถ้า filter level ให้กรองเฉพาะครูที่สอนระดับนั้น)
+  const depts = S.depts;
+  const teacherGroups = depts.map(dept=>{
+    let teachers = S.teachers.filter(t=>t.departmentId===dept.id && (t.totalPeriods||0)>0);
+    if(filterLevelId){
+      // กรองเฉพาะครูที่มีคาบในระดับนั้น
+      teachers = teachers.filter(t=>{
+        const cells = getTeacherCells(t.id);
+        return DAYS.some(d=>PERIODS.some(p=>(cells[d][p.id]||[]).length>0));
+      });
+    }
+    return {dept, teachers};
+  }).filter(g=>g.teachers.length>0);
+
+  // สร้าง column headers: วันจันทร์ คาบ1..7, วันอังคาร คาบ1..7, ...
+  const P = PERIODS.length; // 7
+  const totalCols = DAYS.length * P; // 35
+
+  let headRow1 = '<th rowspan="2" style="width:90px;min-width:80px">ครูผู้สอน</th>';
+  DAYS.forEach(day=>{
+    headRow1 += '<th colspan="'+P+'" style="background:#DC2626;color:#fff;font-size:9px;padding:3px 1px">'+day+'</th>';
+  });
+
+  let headRow2 = '';
+  DAYS.forEach(()=>{
+    PERIODS.forEach(p=>{
+      headRow2 += '<th style="font-size:8px;padding:2px 1px;width:'+(580/totalCols).toFixed(1)+'px">'+p.id+'</th>';
+    });
+  });
+
+  // สร้าง body
+  let bodyHTML = '';
+  teacherGroups.forEach(({dept,teachers})=>{
+    // group header row
+    bodyHTML += '<tr><td colspan="'+(totalCols+1)+'" style="background:#991B1B;color:#fff;font-size:9px;font-weight:700;padding:3px 6px">'+dept.name+'</td></tr>';
+    teachers.forEach(t=>{
+      const cells = getTeacherCells(t.id);
+      let row = '<tr>';
+      row += '<td style="font-size:8px;padding:2px 4px;border:1px solid #ccc;white-space:nowrap;font-weight:600">'+(t.prefix||"")+(t.firstName||"")+'<br/><span style="font-weight:400;color:#555">'+(t.lastName||"")+'</span></td>';
+      DAYS.forEach(day=>{
+        PERIODS.forEach(p=>{
+          const rooms = cells[day]?.[p.id]||[];
+          const hasX = rooms.length===0; // ว่าง
+          // ตรวจ blocked (ประชุม)
+          const isBlocked = (S.meetings||[]).some(m=>m.departmentId===t.departmentId&&m.day===day&&m.periods.includes(p.id));
+          let cellTxt = '';
+          let cellStyle = 'font-size:8px;padding:1px 2px;border:1px solid #ddd;text-align:center;vertical-align:middle;min-width:14px;';
+          if(isBlocked && rooms.length===0){
+            cellTxt='X'; cellStyle+='background:#FEF3C7;color:#92400E;';
+          } else if(rooms.length>0){
+            cellTxt=rooms.join('<br/>'); cellStyle+='background:#FFF7F7;font-weight:700;color:#991B1B;';
+          }
+          row += '<td style="'+cellStyle+'">'+cellTxt+'</td>';
+        });
+      });
+      row += '</tr>';
+      bodyHTML += row;
+    });
+  });
+
+  return '<!DOCTYPE html><html><head><meta charset="utf-8">'
+    +'<style>'
+    +"@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap');"
+    +'@page{size:A4 landscape;margin:6mm 5mm}'
+    +'*{margin:0;padding:0;box-sizing:border-box}'
+    +"body{font-family:'Sarabun','Noto Sans Thai',sans-serif;font-size:9px;color:#000}"
+    +'.header-row{display:flex;align-items:center;gap:8px;margin-bottom:4px}'
+    +'.title-main{font-size:13px;font-weight:700}'
+    +'.title-sub{font-size:9px;color:#444;margin-top:1px}'
+    +'table{width:100%;border-collapse:collapse;table-layout:fixed}'
+    +'th{border:1px solid #aaa;padding:2px 1px;font-weight:700;font-size:8px;background:#FEF2F2;text-align:center}'
+    +'@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'
+    +'</style></head><body>'
+    +'<div class="header-row">'+logoHtml
+    +'<div><div class="title-main">ตารางสอนครู'+(filterLevelId?' — '+(S.levels.find(l=>l.id===filterLevelId)?.name||''):'รวมทุกระดับ')+'</div>'
+    +'<div class="title-sub">'+subtitle+'</div></div></div>'
+    +'<table><thead>'
+    +'<tr>'+headRow1+'</tr>'
+    +'<tr>'+headRow2+'</tr>'
+    +'</thead><tbody>'+bodyHTML+'</tbody></table>'
+    +'</body></html>';
+}
+
 /* ===== REPORTS (fix#10: working page) ===== */
 function Reports({S,st,gc,ay,sh}){
   const roomSt=S.rooms.map(rm=>{let f=0;DAYS.forEach(d=>PERIODS.forEach(p=>{const k=`${rm.id}_${d}_${p.id}`;if(S.schedule[k]?.length)f++}));const total=DAYS.length*PERIODS.length;return{room:rm,filled:f,total,pct:Math.round(f/total*100)}});
@@ -2056,6 +2178,25 @@ function Reports({S,st,gc,ay,sh}){
     st("กำลังพิมพ์ตารางเรียน "+sorted.length+" ห้อง ("+pages.length+" ใบ)");
   };
 
+  // PDF: ตารางสอนรวมกลุ่มสาระ (landscape)
+  const printMasterByDept=()=>{
+    const w=window.open('','_blank');
+    w.document.write(buildMasterTableHTML(S,ay,sh,null));
+    w.document.close();setTimeout(()=>w.print(),600);
+    st("กำลังพิมพ์ตารางรวมกลุ่มสาระ");
+  };
+
+  // PDF: ตารางสอนรวมระดับชั้น
+  const [masterLevel,setMasterLevel]=useState("");
+  const printMasterByLevel=()=>{
+    if(!masterLevel){st("เลือกระดับชั้นก่อน","error");return;}
+    const w=window.open('','_blank');
+    w.document.write(buildMasterTableHTML(S,ay,sh,masterLevel));
+    w.document.close();setTimeout(()=>w.print(),600);
+    const lvName=S.levels.find(l=>l.id===masterLevel)?.name||"";
+    st("กำลังพิมพ์ตารางรวม "+lvName);
+  };
+
   return <div style={{animation:"fadeIn 0.3s"}}>
     <div style={{display:"flex",gap:10,marginBottom:24,flexWrap:"wrap"}}>
       <button onClick={exportAllRooms} style={BS("#2563EB")}><Icon name="download" size={16}/>ตารางทุกห้อง (.xlsx)</button>
@@ -2064,6 +2205,15 @@ function Reports({S,st,gc,ay,sh}){
       <div style={{width:"100%",height:0,borderTop:"1px solid #E5E7EB",margin:"4px 0"}}/>
       <button onClick={printAllTeachersPDF} style={BS("#DC2626")}><Icon name="file" size={16}/>พิมพ์ตารางสอนทุกคน (PDF)</button>
       <button onClick={printAllRoomsPDF} style={BS("#DB2777")}><Icon name="file" size={16}/>พิมพ์ตารางเรียนทุกห้อง (PDF)</button>
+      <div style={{width:"100%",height:0,borderTop:"1px solid #E5E7EB",margin:"4px 0"}}/>
+      <button onClick={printMasterByDept} style={BS("#B45309")}><Icon name="file" size={16}/>พิมพ์ตารางรวมกลุ่มสาระ (PDF landscape)</button>
+      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        <select style={{...IS,maxWidth:200}} value={masterLevel} onChange={e=>setMasterLevel(e.target.value)}>
+          <option value="">-- เลือกระดับชั้น --</option>
+          {S.levels.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}
+        </select>
+        <button onClick={printMasterByLevel} style={BS("#0369A1")}><Icon name="file" size={16}/>พิมพ์ตารางรวมระดับชั้น (PDF landscape)</button>
+      </div>
     </div>
 
     <h3 style={{fontSize:18,fontWeight:700,marginBottom:20}}>สถานะห้องเรียน</h3>
