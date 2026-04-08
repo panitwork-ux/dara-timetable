@@ -1482,7 +1482,6 @@ function Scheduler({S,U,st,gc}){
 
   const teacher  = S.teachers.find(t=>t.id===selT);
   const asgns    = S.assigns.filter(a=>a.teacherId===selT);
-  const tRooms   = [...new Set(asgns.flatMap(a=>a.roomIds))];
   const fTeachers= selDept ? S.teachers.filter(t=>t.departmentId===selDept) : S.teachers;
 
   // helper: ดึงตัวเลขจากชื่อ เช่น "ม.5" → 5, "ป.3" → 3, "ม.6/2" → 6.2
@@ -1497,6 +1496,9 @@ function Scheduler({S,U,st,gc}){
     return levelSortKey(lvName)*10000+parseInt(roomNum);
   };
   const sortedRooms = useMemo(()=>[...S.rooms].sort((a,b)=>roomSortKey(a)-roomSortKey(b)),[S.rooms,S.levels]);
+  // tRooms: รายการห้องของครูที่เลือก เรียงตาม sortedRooms order (ม.4→ม.5→ม.6, เลขห้องน้อย→มาก)
+  const tRoomsRaw = [...new Set(asgns.flatMap(a=>a.roomIds))];
+  const tRooms = sortedRooms.filter(r=>tRoomsRaw.includes(r.id)).map(r=>r.id);
 
   /* ── helpers ── */
   const blocked=useCallback(tid=>{
