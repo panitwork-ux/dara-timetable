@@ -1484,21 +1484,19 @@ function Scheduler({S,U,st,gc}){
   const asgns    = S.assigns.filter(a=>a.teacherId===selT);
   const fTeachers= selDept ? S.teachers.filter(t=>t.departmentId===selDept) : S.teachers;
 
-  // helper: ดึงตัวเลขจากชื่อ เช่น "ม.5" → 5, "ป.3" → 3, "ม.6/2" → 6.2
-  const levelSortKey=(name="")=>{
-    const m=name.match(/(\d+)(?:[/.](\d+))?/);
-    if(!m)return 9999;
-    return parseFloat(m[1]+"."+( m[2]||"0"));
-  };
-  const roomSortKey=(r)=>{
-    const lvName=S.levels.find(l=>l.id===r.levelId)?.name||"";
-    const roomNum=r.name.match(/(\d+)/)?.[1]||"0";
-    return levelSortKey(lvName)*10000+parseInt(roomNum);
-  };
-  const sortedRooms = useMemo(()=>[...S.rooms].sort((a,b)=>roomSortKey(a)-roomSortKey(b)),[S.rooms,S.levels]);
-  // tRooms: รายการห้องของครูที่เลือก เรียงตาม sortedRooms order (ม.4→ม.5→ม.6, เลขห้องน้อย→มาก)
-  const tRoomsRaw = [...new Set(asgns.flatMap(a=>a.roomIds))];
-  const tRooms = sortedRooms.filter(r=>tRoomsRaw.includes(r.id)).map(r=>r.id);
+  // sort helper: inline ใน useMemo เพื่อกัน stale closure
+  const sortedRooms = useMemo(()=>{
+    const key=(r)=>{
+      const lvName=S.levels.find(l=>l.id===r.levelId)?.name||"";
+      const lvNum=parseInt((lvName.match(/(\d+)/)||[0,999])[1]);
+      const rmNum=parseInt((r.name.match(/(\d+)$/) || r.name.match(/(\d+)/) ||[0,0])[1]||0);
+      return lvNum*10000+rmNum;
+    };
+    return [...S.rooms].sort((a,b)=>key(a)-key(b));
+  },[S.rooms,S.levels]);
+  // tRooms: ห้องของครูที่เลือก เรียงตาม sortedRooms (ม.4→ม.5→ม.6, เลขห้องน้อย→มาก)
+  const tRoomsSet = new Set(asgns.flatMap(a=>a.roomIds));
+  const tRooms = sortedRooms.filter(r=>tRoomsSet.has(r.id)).map(r=>r.id);
 
   /* ── helpers ── */
   const blocked=useCallback(tid=>{
