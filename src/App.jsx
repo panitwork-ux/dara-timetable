@@ -1651,6 +1651,9 @@ function Scheduler({S,U,st,gc}){
     if(!drag?.teacherId)return;
     const sub=S.subjects.find(s=>s.id===drag.subjectId);
     const room=S.rooms.find(r=>r.id===rid);
+    // ห้ามวางในห้องที่ไม่ได้อยู่ใน assignment
+    const asgn=S.assigns.find(a=>a.id===drag.assignmentId);
+    if(!asgn?.roomIds?.includes(rid)){st("ห้องนี้ไม่ได้รับมอบหมายวิชานี้!","error");setDragBoth(null);return;}
     if(isBlk(drag.teacherId,day,p)){st("ครูถูกล็อคคาบนี้","error");return;}
     if(teacherBusy(drag.teacherId,day,p,null,drag.subjectId)){st("ครูคนนี้สอนคาบนี้อยู่แล้ว (ห้องอื่น)","error");return;}
     if(specialRoomBusy(drag.subjectId,day,p,null)){
@@ -1724,7 +1727,10 @@ function Scheduler({S,U,st,gc}){
                         return (
                           <td key={p.id}
                             className="dz"
-                            onDragOver={e=>{const d=dragRef.current;if(d?.fromRoomId&&d.fromRoomId!==rid){e.currentTarget.classList.remove("over");return;}e.preventDefault();e.currentTarget.classList.add("over");}}
+                            onDragOver={e=>{const d=dragRef.current;if(!d){e.currentTarget.classList.remove("over");return;}// ลากจากการ์ด: ตรวจ fromRoomId; ลากจาก sidebar: ตรวจ assignment roomIds
+if(d.fromRoomId&&d.fromRoomId!==rid){e.currentTarget.classList.remove("over");return;}
+if(d.assignmentId){const a=S.assigns.find(x=>x.id===d.assignmentId);if(!a?.roomIds?.includes(rid)){e.currentTarget.classList.remove("over");return;}}
+e.preventDefault();e.currentTarget.classList.add("over");}}
                             onDragLeave={e=>e.currentTarget.classList.remove("over")}
                             onDrop={e=>{e.preventDefault();e.currentTarget.classList.remove("over");handleDrop(rid,day,p.id);}}
                             style={{padding:3,verticalAlign:"top",minHeight:68,borderLeft:"1px solid #F0F0F0",borderBottom:"1px solid #F0F0F0",background:bl?"#FEF9C3":lk?"#F0FDF4":"transparent"}}
