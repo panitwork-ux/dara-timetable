@@ -1417,7 +1417,7 @@ function SchedulerEntryCard({entry,cellKey,lk,cellCount,selT,mode,S,U,gc,setDrag
   return (
     <div
       draggable={!lk&&!dimmed}
-      onDragStart={e=>{if(dimmed){e.preventDefault();return;}e.stopPropagation();setDragBoth({fromKey:cellKey,entry});}}
+      onDragStart={e=>{if(dimmed){e.preventDefault();return;}e.stopPropagation();const parts=cellKey.split('_');const fromRoomId=parts.slice(0,parts.length-2).join('_');setDragBoth({fromKey:cellKey,fromRoomId,entry});}}
       onDragEnd={()=>setDragBoth(null)}
       style={{
         background:dimmed?"#F9FAFB":c.lt,
@@ -1623,9 +1623,8 @@ function Scheduler({S,U,st,gc}){
     if(drag?.fromKey){
       if(drag.fromKey===key)return;
       // ข้อ 3: ห้ามลากข้ามห้อง — เปรียบเทียบ roomId โดยตรงจาก entry กับ target room
-      const fromRoomId=drag.entry?.roomId||drag.fromKey.split("_").slice(0,-2).join("_");
-      // วิธีที่ reliable ที่สุด: ตรวจว่า fromKey ขึ้นต้นด้วย rid+"_" หรือไม่
-      if(!drag.fromKey.startsWith(rid+"_")){st("ห้ามลากข้ามห้องเรียน!","error");setDragBoth(null);return;}
+      // ตรวจ cross-room โดยใช้ fromRoomId ที่ฝังไว้ตั้งแต่ onDragStart
+      if(drag.fromRoomId!==rid){st("ห้ามลากข้ามห้องเรียน!","error");setDragBoth(null);return;}
       const entry=drag.entry;
       const sub=S.subjects.find(s=>s.id===entry.subjectId);
       const room=S.rooms.find(r=>r.id===rid);
@@ -1725,7 +1724,7 @@ function Scheduler({S,U,st,gc}){
                         return (
                           <td key={p.id}
                             className="dz"
-                            onDragOver={e=>{e.preventDefault();e.currentTarget.classList.add("over");}}
+                            onDragOver={e=>{const d=dragRef.current;if(d?.fromRoomId&&d.fromRoomId!==rid){e.currentTarget.classList.remove("over");return;}e.preventDefault();e.currentTarget.classList.add("over");}}
                             onDragLeave={e=>e.currentTarget.classList.remove("over")}
                             onDrop={e=>{e.preventDefault();e.currentTarget.classList.remove("over");handleDrop(rid,day,p.id);}}
                             style={{padding:3,verticalAlign:"top",minHeight:68,borderLeft:"1px solid #F0F0F0",borderBottom:"1px solid #F0F0F0",background:bl?"#FEF9C3":lk?"#F0FDF4":"transparent"}}
