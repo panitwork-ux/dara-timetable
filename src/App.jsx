@@ -1417,8 +1417,8 @@ function SchedulerEntryCard({entry,cellKey,lk,cellCount,selT,mode,S,U,gc,setDrag
   return (
     <div
       draggable={!lk&&!dimmed}
-      onDragStart={e=>{if(dimmed){e.preventDefault();return;}e.stopPropagation();const parts=cellKey.split('_');const fromRoomId=parts.slice(0,parts.length-2).join('_');setDragBoth({fromKey:cellKey,fromRoomId,entry});}}
-      onDragEnd={()=>setDragBoth(null)}
+      onDragStart={e=>{if(dimmed){e.preventDefault();return;}e.stopPropagation();const parts=cellKey.split('_');const fromRoomId=parts.slice(0,parts.length-2).join('_');setDrag({fromKey:cellKey,fromRoomId,entry});}}
+      onDragEnd={()=>setDrag(null)}
       style={{
         background:dimmed?"#F9FAFB":c.lt,
         border:"2px solid "+(dimmed?"#E5E7EB":c.bd),
@@ -1746,7 +1746,7 @@ function Scheduler({S,U,st,gc}){
                                 S={S}
                                 U={U}
                                 gc={gc}
-                                setDrag={setDrag}
+                                setDrag={setDragBoth}
                                 setCoM={setCoM}
                               />
                             ))}
