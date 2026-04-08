@@ -1417,8 +1417,8 @@ function SchedulerEntryCard({entry,cellKey,lk,cellCount,selT,mode,S,U,gc,setDrag
   return (
     <div
       draggable={!lk&&!dimmed}
-      onDragStart={e=>{if(dimmed){e.preventDefault();return;}e.stopPropagation();setDrag({fromKey:cellKey,entry});}}
-      onDragEnd={()=>setDrag(null)}
+      onDragStart={e=>{if(dimmed){e.preventDefault();return;}e.stopPropagation();setDragBoth({fromKey:cellKey,entry});}}
+      onDragEnd={()=>setDragBoth(null)}
       style={{
         background:dimmed?"#F9FAFB":c.lt,
         border:"2px solid "+(dimmed?"#E5E7EB":c.bd),
@@ -1472,6 +1472,8 @@ function Scheduler({S,U,st,gc}){
   const [selT,setSelT]=useState("");
   const [selRoom,setSelRoom]=useState("");
   const [drag,setDrag]=useState(null);
+  const dragRef=useRef(null);  // ref สำหรับอ่านใน handleDrop กัน stale/race condition
+  const setDragBoth=(v)=>{setDrag(v);dragRef.current=v;};
   const [coM,setCoM]=useState(null);   // {key, entryId} — modal บนการ์ดที่วางแล้ว
   const [coS,setCoS]=useState("");
   const [coDept,setCoDept]=useState("");
@@ -1612,6 +1614,7 @@ function Scheduler({S,U,st,gc}){
 
   /* ── drop handler ── */
   const handleDrop=(rid,day,p)=>{
+    const drag=dragRef.current;  // อ่านจาก ref กัน stale state
     const key=sk(rid,day,p);
     if(S.locks[key]){st("ล็อคแล้ว","error");return;}
     if((S.schedule[key]||[]).length>=3){st("ครบ 3 วิชาแล้ว","error");return;}
@@ -1622,7 +1625,7 @@ function Scheduler({S,U,st,gc}){
       // ข้อ 3: ห้ามลากข้ามห้อง — เปรียบเทียบ roomId โดยตรงจาก entry กับ target room
       const fromRoomId=drag.entry?.roomId||drag.fromKey.split("_").slice(0,-2).join("_");
       // วิธีที่ reliable ที่สุด: ตรวจว่า fromKey ขึ้นต้นด้วย rid+"_" หรือไม่
-      if(!drag.fromKey.startsWith(rid+"_")){st("ห้ามลากข้ามห้องเรียน!","error");setDrag(null);return;}
+      if(!drag.fromKey.startsWith(rid+"_")){st("ห้ามลากข้ามห้องเรียน!","error");setDragBoth(null);return;}
       const entry=drag.entry;
       const sub=S.subjects.find(s=>s.id===entry.subjectId);
       const room=S.rooms.find(r=>r.id===rid);
@@ -1642,7 +1645,7 @@ function Scheduler({S,U,st,gc}){
         u[key]=[...(u[key]||[]),entry];
         return u;
       });
-      setDrag(null);return;
+      setDragBoth(null);return;
     }
 
     // กรณีลากจาก sidebar (teacher-mode เท่านั้น)
@@ -1665,7 +1668,7 @@ function Scheduler({S,U,st,gc}){
       ...prev,
       [key]:[...(prev[key]||[]),{id:gid(),teacherId:drag.teacherId,subjectId:drag.subjectId,assignmentId:drag.assignmentId,coTeacherId:coTid}]
     }));
-    setDrag(null);
+    setDragBoth(null);
   };
 
   /* ── co-teacher dept+teacher selector ── */
@@ -1834,8 +1837,8 @@ function Scheduler({S,U,st,gc}){
                     <div
                       className="drag-card"
                       draggable={rem>0}
-                      onDragStart={()=>setDrag({teacherId:selT,subjectId:a.subjectId,assignmentId:a.id})}
-                      onDragEnd={()=>setDrag(null)}
+                      onDragStart={()=>setDragBoth({teacherId:selT,subjectId:a.subjectId,assignmentId:a.id})}
+                      onDragEnd={()=>setDragBoth(null)}
                       style={{cursor:rem>0?"grab":"default"}}
                     >
                       <div style={{fontSize:13,fontWeight:700,color:c.tx}}>{sub?.code} — {sub?.name}</div>
