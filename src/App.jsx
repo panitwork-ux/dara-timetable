@@ -1416,8 +1416,8 @@ function SchedulerEntryCard({entry,cellKey,lk,cellCount,selT,mode,S,U,gc,setDrag
 
   return (
     <div
-      draggable={!lk}
-      onDragStart={e=>{e.stopPropagation();setDrag({fromKey:cellKey,entry});}}
+      draggable={!lk&&!dimmed}
+      onDragStart={e=>{if(dimmed){e.preventDefault();return;}e.stopPropagation();setDrag({fromKey:cellKey,entry});}}
       onDragEnd={()=>setDrag(null)}
       style={{
         background:dimmed?"#F9FAFB":c.lt,
@@ -1427,7 +1427,7 @@ function SchedulerEntryCard({entry,cellKey,lk,cellCount,selT,mode,S,U,gc,setDrag
         marginBottom:2,
         fontSize:11,
         position:"relative",
-        cursor:lk?"default":"grab",
+        cursor:lk||dimmed?"default":"grab",
         opacity:dimmed?0.45:1,
         transition:"opacity 0.15s",
         userSelect:"none",
@@ -1619,9 +1619,10 @@ function Scheduler({S,U,st,gc}){
     // กรณี re-drag การ์ดที่วางอยู่แล้ว → ย้ายช่อง (ทำได้ทั้ง 2 mode)
     if(drag?.fromKey){
       if(drag.fromKey===key)return;
-      // ข้อ 3: ห้ามลากข้ามห้อง — fromKey รูปแบบ roomId_day_period
-      const fromRoomId=drag.fromKey.split("_")[0];
-      if(fromRoomId!==rid){st("ห้ามลากข้ามห้องเรียน!","error");setDrag(null);return;}
+      // ข้อ 3: ห้ามลากข้ามห้อง — เปรียบเทียบ roomId โดยตรงจาก entry กับ target room
+      const fromRoomId=drag.entry?.roomId||drag.fromKey.split("_").slice(0,-2).join("_");
+      // วิธีที่ reliable ที่สุด: ตรวจว่า fromKey ขึ้นต้นด้วย rid+"_" หรือไม่
+      if(!drag.fromKey.startsWith(rid+"_")){st("ห้ามลากข้ามห้องเรียน!","error");setDrag(null);return;}
       const entry=drag.entry;
       const sub=S.subjects.find(s=>s.id===entry.subjectId);
       const room=S.rooms.find(r=>r.id===rid);
