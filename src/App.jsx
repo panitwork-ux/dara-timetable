@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import * as XLSX from 'xlsx';
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
-import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from "firebase/firestore";
+import { getFirestore, doc, getDoc, setDoc, collection, getDocs, onSnapshot } from "firebase/firestore";
 
 // ===== FIREBASE CONFIG — ใส่ค่าจาก Firebase Console =====
 const FIREBASE_CONFIG = {
@@ -81,7 +81,7 @@ function LoginScreen({onLogin}){
 }
 
 // ===== ADMIN PANEL =====
-function AdminPanel({user,onBack}){
+function AdminPanel({user,onBack,refreshPerms}){
   const [pin,setPin]=useState("");
   const [unlocked,setUnlocked]=useState(false);
   const [pinErr,setPinErr]=useState("");
@@ -153,6 +153,7 @@ function AdminPanel({user,onBack}){
     setAddPerms({p1:false,p2:false,m1:false,m2:false});
     showToast("บันทึกสิทธิ์สำเร็จ: "+email);
     setAddLoading(false);
+    if(refreshPerms)refreshPerms();
   };
 
   const savePerms=async()=>{
@@ -163,6 +164,7 @@ function AdminPanel({user,onBack}){
     setSaving(false);
     setEditUid(null);setEditPerms({});
     showToast("บันทึกสิทธิ์สำเร็จ");
+    if(refreshPerms)refreshPerms();
   };
 
   const deleteUser=async(uid)=>{
@@ -496,59 +498,68 @@ export default function App() {
   const [gasReady,setGasReady]=useState(false);
 
   // ===== AUTH STATE =====
-  const [authUser,setAuthUser]=useState(undefined); // undefined=loading, null=ออก, object=เข้า
-  const [userPerms,setUserPerms]=useState(null);    // {divisions:{p1:true,m2:true,...}}
+  const [authUser,setAuthUser]=useState(undefined);
+  const [userPerms,setUserPerms]=useState(null);
   const [showAdmin,setShowAdmin]=useState(false);
+
+  // refresh permissions จาก Firestore (เรียกได้ทุกเวลา)
+  const refreshPerms=async(u)=>{
+    const user=u||authUser;
+    if(!user)return;
+    const perms=await fsGetPermissions(user.uid);
+    if(perms)setUserPerms(perms);
+  };
 
   // ฟัง Firebase auth state
   useEffect(()=>{
     const {auth}=getFB();
-    if(!auth){setAuthUser(null);return;} // ไม่ได้ตั้งค่า Firebase → bypass auth
+    if(!auth){setAuthUser(null);return;}
+    let unsubPerms=null;
     const unsub=onAuthStateChanged(auth,async u=>{
+      // ยกเลิก listener เก่า
+      if(unsubPerms){unsubPerms();unsubPerms=null;}
       setAuthUser(u||null);
       if(u){
         const {db}=getFB();
-        // helper สร้าง pre-key จากอีเมล (ต้องตรงกับที่ admin ใช้)
         const makePreKey=(email)=>"pre_"+email.trim().toLowerCase().replace(/[@.]/g,"_");
 
-        // โหลด permissions จาก Firestore ด้วย uid จริงก่อน
+        // โหลด permissions ครั้งแรก
         let perms=await fsGetPermissions(u.uid);
 
         if(!perms&&db){
-          // ลอง lookup จาก pre-added email key
           const emailKey=makePreKey(u.email);
           const preSnap=await getDoc(doc(db,"permissions",emailKey));
           if(preSnap.exists()&&!preSnap.data().merged){
             const preData=preSnap.data();
             const divs=preData.divisions||{p1:false,p2:false,m1:false,m2:false};
-            // ย้ายสิทธิ์จาก pre key → uid จริง
             await setDoc(doc(db,"permissions",u.uid),{
-              displayName:u.displayName||"",
-              email:u.email,
-              divisions:divs,
-              preAdded:false,
+              displayName:u.displayName||"",email:u.email,divisions:divs,preAdded:false,
             });
-            // mark pre doc ว่า merged แล้ว (ไม่ลบเพื่อให้ admin เห็น)
             await setDoc(doc(db,"permissions",emailKey),{merged:true},{merge:true});
             perms={divisions:divs};
           }
         }
 
         if(!perms){
-          // Login ครั้งแรก ไม่มีสิทธิ์ล่วงหน้า → สร้าง doc ว่าง
           const emptyDivs={p1:false,p2:false,m1:false,m2:false};
           await fsSetPermissions(u.uid,{displayName:u.displayName||"",email:u.email,divisions:emptyDivs});
           setUserPerms({divisions:emptyDivs});
         } else {
-          // อัปเดตชื่อ/email ล่าสุด (ไม่ทับ divisions)
           await fsSetPermissions(u.uid,{displayName:u.displayName||"",email:u.email});
           setUserPerms(perms);
+        }
+
+        // Real-time listener — permissions อัปเดตทันทีเมื่อ admin แก้ไข
+        if(db){
+          unsubPerms=onSnapshot(doc(db,"permissions",u.uid),(snap)=>{
+            if(snap.exists())setUserPerms(snap.data());
+          });
         }
       } else {
         setUserPerms(null);
       }
     });
-    return()=>unsub();
+    return()=>{unsub();if(unsubPerms)unsubPerms();};
   },[]);
 
   const handleLogout=async()=>{
@@ -691,7 +702,7 @@ export default function App() {
 
   // Admin panel
   if(showAdmin){
-    return <AdminPanel user={authUser} onBack={()=>setShowAdmin(false)}/>;
+    return <AdminPanel user={authUser} onBack={()=>{setShowAdmin(false);refreshPerms();}} refreshPerms={()=>refreshPerms()}/>;
   }
 
   // Logged in but no permission for this division
@@ -1210,6 +1221,7 @@ function Subjects({S,U,st,gc}){
           <span style={{background:"#F3F4F6",padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:600}}>{sub.periodsPerWeek} คาบ/สป.</span>
           {sr&&<span style={{background:"#EDE9FE",color:"#5B21B6",padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:600}}>📍{sr.name}</span>}
           {sub.consecutiveAllowed>0&&<span style={{background:"#FEF3C7",color:"#92400E",padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:600}}>⚡{sub.consecutiveAllowed}คาบติด</span>}
+          {sub.consecutiveAllowed===-1&&<span style={{background:"#EFF6FF",color:"#1E40AF",padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:600}}>🔀NP</span>}
         </div>
       </div>
     </div>;
@@ -1279,13 +1291,17 @@ function Subjects({S,U,st,gc}){
             {S.specialRooms.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
         </div>
-        <div><label style={LS}>คาบติดต่อกันพิเศษ</label>
+        <div><label style={LS}>คาบติดต่อกัน / คาบพิเศษ</label>
           <select style={IS} value={form.consecutiveAllowed} onChange={e=>setForm(p=>({...p,consecutiveAllowed:parseInt(e.target.value)||0}))}>
             <option value={0}>ปกติ — ห้ามซ้ำ 2 คาบ/วัน</option>
             <option value={2}>อนุญาต 2 คาบติด</option>
             <option value={3}>อนุญาต 3 คาบติด</option>
             <option value={4}>อนุญาต 4 คาบติด</option>
+            <option value={-1}>NP — ลงคาบเดียวกันคนละห้องได้ (นับครู 1 คาบ)</option>
           </select>
+          {form.consecutiveAllowed===-1&&<div style={{marginTop:6,padding:"8px 12px",background:"#EFF6FF",border:"1px solid #BFDBFE",borderRadius:8,fontSize:12,color:"#1E40AF"}}>
+            📌 วิชานี้สามารถวางในคาบเดียวกันได้หลายห้อง (เช่น ม.5/1, ม.5/5, ม.5/6 คาบเดียวกัน) และระบบจะนับเป็น <strong>1 คาบ</strong> สำหรับครูผู้สอน
+          </div>}
         </div>
         <button onClick={save} style={BS()}>{editId?"บันทึก":"เพิ่มวิชา"}</button>
       </div>
@@ -1469,11 +1485,18 @@ function Scheduler({S,U,st,gc}){
   const tRooms   = [...new Set(asgns.flatMap(a=>a.roomIds))];
   const fTeachers= selDept ? S.teachers.filter(t=>t.departmentId===selDept) : S.teachers;
 
-  const sortedRooms = useMemo(()=>[...S.rooms].sort((a,b)=>{
-    const la=S.levels.find(l=>l.id===a.levelId)?.name||"";
-    const lb=S.levels.find(l=>l.id===b.levelId)?.name||"";
-    return la!==lb ? la.localeCompare(lb,"th") : a.name.localeCompare(b.name,"th");
-  }),[S.rooms,S.levels]);
+  // helper: ดึงตัวเลขจากชื่อ เช่น "ม.5" → 5, "ป.3" → 3, "ม.6/2" → 6.2
+  const levelSortKey=(name="")=>{
+    const m=name.match(/(\d+)(?:[/.](\d+))?/);
+    if(!m)return 9999;
+    return parseFloat(m[1]+"."+( m[2]||"0"));
+  };
+  const roomSortKey=(r)=>{
+    const lvName=S.levels.find(l=>l.id===r.levelId)?.name||"";
+    const roomNum=r.name.match(/(\d+)/)?.[1]||"0";
+    return levelSortKey(lvName)*10000+parseInt(roomNum);
+  };
+  const sortedRooms = useMemo(()=>[...S.rooms].sort((a,b)=>roomSortKey(a)-roomSortKey(b)),[S.rooms,S.levels]);
 
   /* ── helpers ── */
   const blocked=useCallback(tid=>{
@@ -1492,11 +1515,19 @@ function Scheduler({S,U,st,gc}){
   const isBlk=(tid,day,p)=>blocked(tid).some(b=>b.day===day&&b.period===p);
   const sk=(rid,day,p)=>rid+"_"+day+"_"+p;
 
-  const teacherBusy=(tid,day,period,excludeKey)=>{
+  const teacherBusy=(tid,day,period,excludeKey,newSubjectId=null)=>{
     for(const [k,en] of Object.entries(S.schedule)){
       if(k===excludeKey)continue;
       if(!k.endsWith("_"+day+"_"+period))continue;
-      if(en?.some(e=>e.teacherId===tid||e.coTeacherId===tid))return true;
+      if(en?.some(e=>{
+        if(e.teacherId!==tid&&e.coTeacherId!==tid)return false;
+        // NP mode: ถ้าทั้งวิชาที่มีอยู่ และวิชาที่จะลง เป็น NP เดียวกัน → ไม่ถือว่า busy
+        if(newSubjectId&&e.subjectId===newSubjectId){
+          const sub=S.subjects.find(s=>s.id===e.subjectId);
+          if((sub?.consecutiveAllowed||0)===-1)return false;
+        }
+        return true;
+      }))return true;
     }
     return false;
   };
@@ -1514,6 +1545,17 @@ function Scheduler({S,U,st,gc}){
 
   const sameSubjectSameDay=(subjectId,roomId,day,excludeKey)=>{
     const allowed=S.subjects.find(s=>s.id===subjectId)?.consecutiveAllowed||0;
+    // NP mode (-1): อนุญาตคาบเดียวกันคนละห้อง แต่ห้ามลงห้องเดิมซ้ำวันเดิม
+    if(allowed===-1){
+      let countSameRoom=0;
+      for(const [k,en] of Object.entries(S.schedule)){
+        if(k===excludeKey)continue;
+        const pts=k.split("_");
+        if(pts[0]!==roomId||pts[1]!==day)continue;
+        en?.forEach(e=>{if(e.subjectId===subjectId)countSameRoom++;});
+      }
+      return countSameRoom>=1;
+    }
     if(allowed>0)return false;
     let count=0;
     for(const [k,en] of Object.entries(S.schedule)){
@@ -1547,8 +1589,24 @@ function Scheduler({S,U,st,gc}){
   };
 
   const teacherScheduledTotal=(tid)=>{
+    // NP mode: วิชาเดียวกัน วันเดียวกัน คาบเดียวกัน → นับแค่ 1 คาบ (ไม่ว่าจะลงกี่ห้อง)
+    const seen=new Set();
     let c=0;
-    Object.values(S.schedule).forEach(en=>en?.forEach(e=>{if(e.teacherId===tid||e.coTeacherId===tid)c++;}));
+    Object.entries(S.schedule).forEach(([k,en])=>{
+      const pts=k.split("_"); // [roomId, day, period]
+      en?.forEach(e=>{
+        if(e.teacherId===tid||e.coTeacherId===tid){
+          const sub=S.subjects.find(s=>s.id===e.subjectId);
+          if((sub?.consecutiveAllowed||0)===-1){
+            // NP: deduplicate ด้วย subjectId_day_period
+            const npKey=e.subjectId+"_"+pts[1]+"_"+pts[2];
+            if(!seen.has(npKey)){seen.add(npKey);c++;}
+          } else {
+            c++;
+          }
+        }
+      });
+    });
     return c;
   };
 
@@ -1561,6 +1619,9 @@ function Scheduler({S,U,st,gc}){
     // กรณี re-drag การ์ดที่วางอยู่แล้ว → ย้ายช่อง (ทำได้ทั้ง 2 mode)
     if(drag?.fromKey){
       if(drag.fromKey===key)return;
+      // ข้อ 3: ห้ามลากข้ามห้อง — fromKey รูปแบบ roomId_day_period
+      const fromRoomId=drag.fromKey.split("_")[0];
+      if(fromRoomId!==rid){st("ห้ามลากข้ามห้องเรียน!","error");setDrag(null);return;}
       const entry=drag.entry;
       const sub=S.subjects.find(s=>s.id===entry.subjectId);
       const room=S.rooms.find(r=>r.id===rid);
@@ -1588,7 +1649,7 @@ function Scheduler({S,U,st,gc}){
     const sub=S.subjects.find(s=>s.id===drag.subjectId);
     const room=S.rooms.find(r=>r.id===rid);
     if(isBlk(drag.teacherId,day,p)){st("ครูถูกล็อคคาบนี้","error");return;}
-    if(teacherBusy(drag.teacherId,day,p,null)){st("ครูคนนี้สอนคาบนี้อยู่แล้ว (ห้องอื่น)","error");return;}
+    if(teacherBusy(drag.teacherId,day,p,null,drag.subjectId)){st("ครูคนนี้สอนคาบนี้อยู่แล้ว (ห้องอื่น)","error");return;}
     if(specialRoomBusy(drag.subjectId,day,p,null)){
       const sr=S.specialRooms.find(r=>r.id===sub?.specialRoomId);
       st("ห้องพิเศษ '"+(sr?.name||"")+"' ถูกใช้อยู่แล้วในคาบนี้","error");return;
@@ -1636,14 +1697,14 @@ function Scheduler({S,U,st,gc}){
               <span style={{background:"#DC2626",color:"#fff",padding:"4px 14px",borderRadius:8,fontSize:12,fontWeight:700}}>{rm?.name}</span>
             </div>
             <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 4px rgba(0,0,0,0.08)",overflow:"hidden"}}>
-              <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed",minWidth:820}}>
+              <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed",minWidth:700}}>
                 <thead>
                   <tr style={{borderBottom:"2px solid #DC2626"}}>
-                    <th style={{padding:"10px 12px",background:"#FEF2F2",fontWeight:700,color:"#991B1B",width:72,textAlign:"left",fontSize:13}}>วัน</th>
+                    <th style={{padding:"10px 8px",background:"#FEF2F2",fontWeight:700,color:"#991B1B",width:60,textAlign:"left",fontSize:13}}>วัน</th>
                     {PERIODS.map(p=>(
-                      <th key={p.id} style={{padding:"7px 4px",background:"#FEF2F2",textAlign:"center",borderLeft:"1px solid #FECACA"}}>
-                        <div style={{fontSize:12,color:"#991B1B",fontWeight:700}}>คาบ {p.id}</div>
-                        <div style={{fontSize:10,color:"#9CA3AF",fontWeight:400}}>{p.time}</div>
+                      <th key={p.id} style={{padding:"6px 2px",background:"#FEF2F2",textAlign:"center",borderLeft:"1px solid #FECACA"}}>
+                        <div style={{fontSize:11,color:"#991B1B",fontWeight:700}}>คาบ {p.id}</div>
+                        <div style={{fontSize:9,color:"#9CA3AF",fontWeight:400}}>{p.time}</div>
                       </th>
                     ))}
                   </tr>
@@ -1651,7 +1712,7 @@ function Scheduler({S,U,st,gc}){
                 <tbody>
                   {DAYS.map((day,di)=>(
                     <tr key={day} style={{background:di%2===0?"#fff":"#FAFAFA"}}>
-                      <td style={{padding:"8px 10px",fontWeight:700,fontSize:13,color:"#374151",borderRight:"2px solid #FECACA",borderBottom:"1px solid #F3F4F6"}}>{day}</td>
+                      <td style={{padding:"6px 6px",fontWeight:700,fontSize:12,color:"#374151",borderRight:"2px solid #FECACA",borderBottom:"1px solid #F3F4F6"}}>{day}</td>
                       {PERIODS.map(p=>{
                         const key=sk(rid,day,p.id);
                         const en=S.schedule[key]||[];
