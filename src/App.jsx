@@ -886,7 +886,7 @@ function Levels({S,U,st}){
     <Modal open={rm} onClose={()=>setRm(false)} title="เพิ่มห้องเรียน">
       <div style={{display:"flex",flexDirection:"column",gap:16}}>
         <div><label style={LS}>ระดับชั้น</label><select style={IS} value={rf.levelId} onChange={e=>setRf(p=>({...p,levelId:e.target.value}))}><option value="">--</option>{S.levels.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
-        <div><label style={LS}>แผนการเรียน (ถ้ามี)</label><select style={IS} value={rf.planId} onChange={e=>setRf(p=>({...p,planId:e.target.value}))}><option value="">--</option>{S.plans.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+        <div><label style={LS}>แผนการเรียน (ถ้ามี)</label><select style={IS} value={rf.planId} onChange={e=>setRf(p=>({...p,planId:e.target.value}))}><option value="">--</option>{S.plans.filter(p=>!p.levelIds?.length||p.levelIds.includes(rf.levelId)).map(p=>{const subs=p.subPlans?.length?" — "+p.subPlans.join(", "):"";return<option key={p.id} value={p.id}>{p.name}{subs}</option>})}</select></div>
         <div><label style={LS}>ชื่อห้อง</label><input style={IS} value={rf.name} onChange={e=>setRf(p=>({...p,name:e.target.value}))} placeholder="ม.4/1"/></div>
         <button onClick={()=>{if(!rf.name||!rf.levelId)return;U.setRooms(p=>[...p,{id:gid(),...rf}]);setRf({levelId:"",planId:"",name:""});setRm(false);st("เพิ่มสำเร็จ")}} style={BS()}>บันทึก</button>
       </div>
@@ -1027,13 +1027,24 @@ function Teachers({S,U,st,gc}){
 
   const downloadTemplate=()=>{exportExcel(["คำนำหน้า","ชื่อ","นามสกุล","กลุ่มสาระ","หน้าที่พิเศษ","คาบที่ได้รับ"],[["นาย","สมชาย","ใจดี","วิทยาศาสตร์","ฝ่ายวิชาการ",18],["นางสาว","สมหญิง","รักเรียน","คณิตศาสตร์","ครูทั่วไป",20]],"Template_ครู.xlsx","Template");st("ดาวน์โหลด Template")};
 
-  // ข้อ 5: นับคาบรวมทั้ง assign ปกติ + คาบที่เป็นครูร่วมในตาราง
+  // นับคาบจากตารางจริง (รองรับ coTeacherIds array) เหมือน teacherScheduledTotal ใน Scheduler
   const usedPeriods=(tid)=>{
-    let u=0;
-    S.assigns.filter(a=>a.teacherId===tid).forEach(a=>{u+=a.totalPeriods||0});
-    // นับคาบครูร่วม (coTeacherId) จากตารางที่จัดไปแล้ว
-    Object.values(S.schedule).forEach(en=>{en?.forEach(e=>{if(e.coTeacherId===tid)u++})});
-    return u;
+    const seen=new Set();
+    let c=0;
+    Object.entries(S.schedule).forEach(([k,en])=>{
+      const pts=k.split("_");
+      en?.forEach(e=>{
+        const coIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
+        if(e.teacherId!==tid&&!coIds.includes(tid))return;
+        const sub=S.subjects.find(s=>s.id===e.subjectId);
+        const ca=sub?.consecutiveAllowed||0;
+        if(ca===-1||ca===-2){
+          const npKey=e.subjectId+"_"+pts[1]+"_"+pts[2];
+          if(!seen.has(npKey)){seen.add(npKey);c++;}
+        } else {c++;}
+      });
+    });
+    return c;
   };
 
   const filtered=S.teachers.filter(t=>`${t.prefix}${t.firstName} ${t.lastName}`.includes(search)||S.depts.find(d=>d.id===t.departmentId)?.name?.includes(search));
@@ -1869,6 +1880,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                       style={{cursor:rem>0?"grab":"default"}}
                     >
                       <div style={{fontSize:13,fontWeight:700,color:c.tx}}>{sub?.code} — {sub?.name}</div>
+                      {(()=>{const sr=S.specialRooms.find(r=>r.id===sub?.specialRoomId);return sr?<div style={{fontSize:10,color:"#7C3AED",marginTop:2}}>📍 {sr.name}</div>:null;})()}
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
                         <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                           {a.roomIds.map(rid=>(
@@ -2119,7 +2131,22 @@ function buildLevelTableHTML(S, ay, sh, filterLevelId) {
 /* ===== REPORTS (fix#10: working page) ===== */
 function Reports({S,st,gc,ay,sh}){
   const roomSt=S.rooms.map(rm=>{let f=0;DAYS.forEach(d=>PERIODS.forEach(p=>{const k=`${rm.id}_${d}_${p.id}`;if(S.schedule[k]?.length)f++}));const total=DAYS.length*PERIODS.length;return{room:rm,filled:f,total,pct:Math.round(f/total*100)}});
-  const teacherSt=S.teachers.map(t=>{const tot=t.totalPeriods||0;let u=0;Object.values(S.schedule).forEach(en=>{en?.forEach(e=>{const rCoIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);if(e.teacherId===t.id||rCoIds.includes(t.id))u++})});return{teacher:t,tot,used:u,rem:tot-u}});
+  const teacherSt=S.teachers.map(t=>{
+    const tot=t.totalPeriods||0;
+    const seen=new Set(); let u=0;
+    Object.entries(S.schedule).forEach(([k,en])=>{
+      const pts=k.split("_");
+      en?.forEach(e=>{
+        const rCoIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
+        if(e.teacherId!==t.id&&!rCoIds.includes(t.id))return;
+        const sub=S.subjects.find(s=>s.id===e.subjectId);
+        const ca=sub?.consecutiveAllowed||0;
+        if(ca===-1||ca===-2){const npKey=e.subjectId+"_"+pts[1]+"_"+pts[2];if(!seen.has(npKey)){seen.add(npKey);u++;}}
+        else u++;
+      });
+    });
+    return{teacher:t,tot,used:u,rem:tot-u};
+  });
 
   const exportRoomXL=(rm)=>{const h=["วัน",...PERIODS.map(p=>`คาบ${p.id}(${p.time})`)];const d=DAYS.map(day=>[day,...PERIODS.map(p=>{const en=S.schedule[`${rm.id}_${day}_${p.id}`]||[];return en.map(e=>{const sub=S.subjects.find(s=>s.id===e.subjectId);const t=S.teachers.find(x=>x.id===e.teacherId);return`${sub?.code||""} ${sub?.name||""} (${t?.firstName||""})`}).join(" / ")})]);exportExcel(h,d,`ตารางเรียน_${rm.name}.xlsx`,rm.name);st(`Export ${rm.name}`)};
 
