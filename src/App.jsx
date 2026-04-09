@@ -1410,8 +1410,10 @@ function SchedulerEntryCard({entry,cellKey,lk,cellCount,selT,mode,S,U,gc,setDrag
   const dept=S.depts.find(d=>d.id===sub?.departmentId);
   const c=dept?gc(dept.id):{bg:"#6B7280",lt:"#F3F4F6",tx:"#374151",bd:"#D1D5DB"};
   const et=S.teachers.find(t=>t.id===entry.teacherId);
-  const ct=entry.coTeacherId?S.teachers.find(t=>t.id===entry.coTeacherId):null;
-  const isOwn=entry.teacherId===selT||entry.coTeacherId===selT;
+  // รองรับทั้ง coTeacherId (เดิม) และ coTeacherIds (array, mode -2)
+  const coIds=entry.coTeacherIds?.length?entry.coTeacherIds:(entry.coTeacherId?[entry.coTeacherId]:[]);
+  const coTeachers=coIds.map(id=>S.teachers.find(t=>t.id===id)).filter(Boolean);
+  const isOwn=entry.teacherId===selT||coIds.includes(selT);
   const dimmed=mode==="teacher"&&!!selT&&!isOwn;
   const compact=cellCount>1;
 
@@ -1446,7 +1448,7 @@ function SchedulerEntryCard({entry,cellKey,lk,cellCount,selT,mode,S,U,gc,setDrag
             <div style={{fontWeight:700,color:dimmed?"#9CA3AF":c.tx,fontSize:11}}>{sub?.code}</div>
             <div style={{fontWeight:600,color:dimmed?"#9CA3AF":c.tx,fontSize:10}}>{sub?.name}</div>
             <div style={{color:dimmed?"#9CA3AF":c.tx,opacity:0.7,fontSize:10}}>
-              {et?.firstName}{ct?" + "+ct.firstName:""}
+              {et?.firstName}{coTeachers.length>0?" + "+coTeachers.map(t=>t.firstName).join(", "):""}
             </div>
           </>
       }
@@ -1485,7 +1487,7 @@ function Scheduler({S,U,st,gc}){
   const [cardCoM,setCardCoM]=useState(null); // assignId — modal บน sidebar card
   const [cardCoS,setCardCoS]=useState("");
   const [cardCoDept,setCardCoDept]=useState("");
-  const [cardCoMap,setCardCoMap]=useState({}); // {assignId: teacherId}
+  const [cardCoMap,setCardCoMap]=useState({}); // {assignId: [teacherId, ...]} สูงสุด 4 ครูร่วม
 
   const teacher  = S.teachers.find(t=>t.id===selT);
   const asgns    = S.assigns.filter(a=>a.teacherId===selT);
@@ -1527,7 +1529,8 @@ function Scheduler({S,U,st,gc}){
       if(k===excludeKey)continue;
       if(!k.endsWith("_"+day+"_"+period))continue;
       if(en?.some(e=>{
-        if(e.teacherId!==tid&&e.coTeacherId!==tid)return false;
+        const eCoIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
+        if(e.teacherId!==tid&&!eCoIds.includes(tid))return false;
         // NP/-2 mode: ถ้าวิชาเดียวกัน → อนุญาตลงคนละห้องคาบเดียวกัน
         if(newSubjectId&&e.subjectId===newSubjectId){
           const sub=S.subjects.find(s=>s.id===e.subjectId);
@@ -1614,7 +1617,8 @@ function Scheduler({S,U,st,gc}){
     Object.entries(S.schedule).forEach(([k,en])=>{
       const pts=k.split("_"); // [roomId, day, period]
       en?.forEach(e=>{
-        if(e.teacherId===tid||e.coTeacherId===tid){
+        const eCIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
+        if(e.teacherId===tid||eCIds.includes(tid)){
           const sub=S.subjects.find(s=>s.id===e.subjectId);
           const ca=sub?.consecutiveAllowed||0;
           if(ca===-1||ca===-2){
@@ -1683,10 +1687,10 @@ function Scheduler({S,U,st,gc}){
     const placed=countSubjectInRoom(drag.assignmentId,rid);
     const limit=getPerRoomLimit(drag.assignmentId);
     if(placed>=limit){st("ห้องนี้ลงครบ "+limit+" คาบแล้ว","error");return;}
-    const coTid=cardCoMap[drag.assignmentId]||null;
+    const coTids=cardCoMap[drag.assignmentId]||[];
     U.setSchedule(prev=>({
       ...prev,
-      [key]:[...(prev[key]||[]),{id:gid(),teacherId:drag.teacherId,subjectId:drag.subjectId,assignmentId:drag.assignmentId,coTeacherId:coTid}]
+      [key]:[...(prev[key]||[]),{id:gid(),teacherId:drag.teacherId,subjectId:drag.subjectId,assignmentId:drag.assignmentId,coTeacherIds:coTids,coTeacherId:coTids[0]||null}]
     }));
     setDragBoth(null);
   };
@@ -1853,8 +1857,8 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                 const c=dept?gc(dept.id):{bg:"#6B7280",lt:"#F3F4F6",tx:"#374151",bd:"#D1D5DB"};
                 const u=aUsed(a.id);
                 const rem=a.totalPeriods-u;
-                const coCid=cardCoMap[a.id];
-                const coTeacher=coCid?S.teachers.find(t=>t.id===coCid):null;
+                const coIds2=Array.isArray(cardCoMap[a.id])?cardCoMap[a.id]:(cardCoMap[a.id]?[cardCoMap[a.id]]:[]);
+                const coTeachers2=coIds2.map(id=>S.teachers.find(t=>t.id===id)).filter(Boolean);
                 return (
                   <div key={a.id} style={{background:c.lt,border:"2px solid "+c.bd,borderRadius:12,padding:12,opacity:rem<=0?0.4:1,marginBottom:10}}>
                     <div
@@ -1876,13 +1880,13 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                     </div>
                     {/* ข้อ 4: เพิ่มครูร่วมบน sidebar */}
                     <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid rgba(0,0,0,0.07)"}}>
-                      {coTeacher
-                        ?<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                            <span style={{fontSize:11,color:c.tx}}>ร่วม: {coTeacher.prefix}{coTeacher.firstName}</span>
-                            <button onClick={()=>setCardCoMap(p=>({...p,[a.id]:null}))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,fontSize:11}}>✕</button>
+                      {coTeachers2.map((ct2,ci)=>(
+                          <div key={ct2.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
+                            <span style={{fontSize:11,color:c.tx}}>ร่วม {ci+1}: {ct2.prefix}{ct2.firstName}</span>
+                            <button onClick={()=>setCardCoMap(p=>({...p,[a.id]:coIds2.filter(id=>id!==ct2.id)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,fontSize:11}}>✕</button>
                           </div>
-                        :<button onClick={()=>setCardCoM(a.id)} style={{fontSize:11,color:c.tx,background:"rgba(0,0,0,0.06)",border:"none",borderRadius:6,padding:"3px 8px",cursor:"pointer",width:"100%",textAlign:"left"}}>+ เพิ่มครูสอนร่วม</button>
-                      }
+                        ))}
+                        {coTeachers2.length<4&&<button onClick={()=>setCardCoM(a.id)} style={{fontSize:11,color:c.tx,background:"rgba(0,0,0,0.06)",border:"none",borderRadius:6,padding:"3px 8px",cursor:"pointer",width:"100%",textAlign:"left"}}>+ เพิ่มครูสอนร่วม ({coTeachers2.length}/4)</button>}
                     </div>
                   </div>
                 );
@@ -1920,7 +1924,14 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
               if(!coS||!coM)return;
               const pts=coM.key.split("_");const cDay=pts[1];const cPer=parseInt(pts[2]);
               if(teacherBusy(coS,cDay,cPer,null)){st("ครูท่านนี้สอนคาบนี้อยู่แล้ว","error");return;}
-              U.setSchedule(prev=>({...prev,[coM.key]:(prev[coM.key]||[]).map(e=>e.id===coM.entryId?{...e,coTeacherId:coS}:e)}));
+              U.setSchedule(prev=>({...prev,[coM.key]:(prev[coM.key]||[]).map(e=>{
+                if(e.id!==coM.entryId)return e;
+                const existing=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
+                if(existing.includes(coS))return e;
+                if(existing.length>=4){st("ครูร่วมได้สูงสุด 4 คน","error");return e;}
+                const newIds=[...existing,coS];
+                return{...e,coTeacherIds:newIds,coTeacherId:newIds[0]||null};
+              })}));
               setCoM(null);setCoS("");setCoDept("");st("เพิ่มครูร่วมสำเร็จ");
             }}
             style={BS()}>ยืนยัน</button>
@@ -1935,7 +1946,12 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
           <button
             onClick={()=>{
               if(!cardCoS)return;
-              setCardCoMap(p=>({...p,[cardCoM]:cardCoS}));
+              setCardCoMap(p=>{
+                const existing=Array.isArray(p[cardCoM])?p[cardCoM]:[];
+                if(existing.includes(cardCoS))return p;
+                if(existing.length>=4){st("ครูร่วมได้สูงสุด 4 คน","error");return p;}
+                return{...p,[cardCoM]:[...existing,cardCoS]};
+              });
               setCardCoM(null);setCardCoS("");setCardCoDept("");st("กำหนดครูร่วมสำเร็จ");
             }}
             style={BS()}>ยืนยัน</button>
@@ -1967,7 +1983,8 @@ function buildMasterTableHTML(S, ay, sh, filterLevelId) {
     DAYS.forEach(d=>{ cells[d]={}; PERIODS.forEach(p=>{ cells[d][p.id]=[]; }); });
     Object.entries(S.schedule).forEach(([k,en])=>{
       en?.forEach(e=>{
-        if(e.teacherId!==tid && e.coTeacherId!==tid) return;
+        const mCoIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
+        if(e.teacherId!==tid && !mCoIds.includes(tid)) return;
         const pts=k.split("_"); const rmId=pts.slice(0,pts.length-2).join("_");
         const day=pts[pts.length-2]; const per=parseInt(pts[pts.length-1]);
         const short=getRoomShort(rmId);
@@ -2102,11 +2119,11 @@ function buildLevelTableHTML(S, ay, sh, filterLevelId) {
 /* ===== REPORTS (fix#10: working page) ===== */
 function Reports({S,st,gc,ay,sh}){
   const roomSt=S.rooms.map(rm=>{let f=0;DAYS.forEach(d=>PERIODS.forEach(p=>{const k=`${rm.id}_${d}_${p.id}`;if(S.schedule[k]?.length)f++}));const total=DAYS.length*PERIODS.length;return{room:rm,filled:f,total,pct:Math.round(f/total*100)}});
-  const teacherSt=S.teachers.map(t=>{const tot=t.totalPeriods||0;let u=0;Object.values(S.schedule).forEach(en=>{en?.forEach(e=>{if(e.teacherId===t.id||e.coTeacherId===t.id)u++})});return{teacher:t,tot,used:u,rem:tot-u}});
+  const teacherSt=S.teachers.map(t=>{const tot=t.totalPeriods||0;let u=0;Object.values(S.schedule).forEach(en=>{en?.forEach(e=>{const rCoIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);if(e.teacherId===t.id||rCoIds.includes(t.id))u++})});return{teacher:t,tot,used:u,rem:tot-u}});
 
   const exportRoomXL=(rm)=>{const h=["วัน",...PERIODS.map(p=>`คาบ${p.id}(${p.time})`)];const d=DAYS.map(day=>[day,...PERIODS.map(p=>{const en=S.schedule[`${rm.id}_${day}_${p.id}`]||[];return en.map(e=>{const sub=S.subjects.find(s=>s.id===e.subjectId);const t=S.teachers.find(x=>x.id===e.teacherId);return`${sub?.code||""} ${sub?.name||""} (${t?.firstName||""})`}).join(" / ")})]);exportExcel(h,d,`ตารางเรียน_${rm.name}.xlsx`,rm.name);st(`Export ${rm.name}`)};
 
-  const exportTeacherXL=(t)=>{const h=["วัน",...PERIODS.map(p=>`คาบ${p.id}(${p.time})`)];const d=DAYS.map(day=>[day,...PERIODS.map(p=>{let parts=[];Object.entries(S.schedule).forEach(([k,en])=>{if(!k.endsWith(`_${day}_${p.id}`))return;en?.forEach(e=>{if(e.teacherId===t.id||e.coTeacherId===t.id){const sub=S.subjects.find(s=>s.id===e.subjectId);const rid=k.split("_")[0];const rm=S.rooms.find(r=>r.id===rid);parts.push(`${sub?.code||""} ${sub?.name||""} (${rm?.name||""})`)}})});return parts.join(" / ")})]);exportExcel(h,d,`ตารางสอน_${t.prefix}${t.firstName}.xlsx`,"ตารางสอน");st(`Export ${t.firstName}`)};
+  const exportTeacherXL=(t)=>{const h=["วัน",...PERIODS.map(p=>`คาบ${p.id}(${p.time})`)];const d=DAYS.map(day=>[day,...PERIODS.map(p=>{let parts=[];Object.entries(S.schedule).forEach(([k,en])=>{if(!k.endsWith(`_${day}_${p.id}`))return;en?.forEach(e=>{const xCoIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);if(e.teacherId===t.id||xCoIds.includes(t.id)){const sub=S.subjects.find(s=>s.id===e.subjectId);const rid=k.split("_")[0];const rm=S.rooms.find(r=>r.id===rid);parts.push(`${sub?.code||""} ${sub?.name||""} (${rm?.name||""})`)}})});return parts.join(" / ")})]);exportExcel(h,d,`ตารางสอน_${t.prefix}${t.firstName}.xlsx`,"ตารางสอน");st(`Export ${t.firstName}`)};
 
   const exportAllRooms=()=>{exportExcelMulti(S.rooms.map(rm=>({name:rm.name,headers:["วัน",...PERIODS.map(p=>`คาบ${p.id}(${p.time})`)],rows:DAYS.map(day=>[day,...PERIODS.map(p=>{const en=S.schedule[`${rm.id}_${day}_${p.id}`]||[];return en.map(e=>{const sub=S.subjects.find(s=>s.id===e.subjectId);const t=S.teachers.find(x=>x.id===e.teacherId);return`${sub?.code||""} ${sub?.name||""} (${t?.firstName||""})`}).join(" / ")})])})),"ตารางเรียนทุกห้อง.xlsx");st("Export ทุกห้อง")};
 
@@ -2130,7 +2147,8 @@ function Reports({S,st,gc,ay,sh}){
           const keySuffix="_"+day+"_"+p.id;
           if(!k.endsWith(keySuffix))return;
           en?.forEach(e=>{
-            if(e.teacherId===t.id||e.coTeacherId===t.id){
+            const pCoIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
+            if(e.teacherId===t.id||pCoIds.includes(t.id)){
               const sub=S.subjects.find(s=>s.id===e.subjectId);
               const rid=k.split("_")[0];
               const rm=S.rooms.find(r=>r.id===rid);
@@ -2194,7 +2212,8 @@ function Reports({S,st,gc,ay,sh}){
         Object.entries(S.schedule).forEach(([k,en])=>{
           if(!k.endsWith(keySuffix))return;
           en?.forEach(e=>{
-            if(e.teacherId===t.id||e.coTeacherId===t.id){
+            const pCoIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
+            if(e.teacherId===t.id||pCoIds.includes(t.id)){
               const sub=S.subjects.find(s=>s.id===e.subjectId);
               const rid=k.split("_")[0];
               const rm=S.rooms.find(r=>r.id===rid);
