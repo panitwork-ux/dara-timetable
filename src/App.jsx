@@ -1887,12 +1887,17 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                     {coAsgnsIds.has(a.id)&&<div style={{fontSize:9,color:"#7C3AED",fontWeight:700,marginBottom:4}}>👥 วิชาครูร่วม (ของ {S.teachers.find(t=>t.id===a.teacherId)?.firstName||""})</div>}
                     <div
                       className="drag-card"
-                      draggable={false}
+                      draggable={rem>0&&!coAsgnsIds.has(a.id)}
                       onDragStart={()=>setDragBoth({teacherId:selT,subjectId:a.subjectId,assignmentId:a.id})}
                       onDragEnd={()=>setDragBoth(null)}
-                      style={{cursor:rem>0?"grab":"default"}}
+                      style={{cursor:rem>0&&!coAsgnsIds.has(a.id)?"grab":"default"}}
                     >
-                      <div style={{fontSize:13,fontWeight:700,color:c.tx}}>{sub?.code} — {sub?.name}</div>
+                      <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                        <span style={{fontSize:13,fontWeight:700,color:c.tx}}>{sub?.code} — {sub?.name}</span>
+                        {sub?.consecutiveAllowed===-1&&<span style={{fontSize:9,background:"#EFF6FF",color:"#1E40AF",padding:"1px 5px",borderRadius:8,fontWeight:700}}>🔀NP</span>}
+                        {sub?.consecutiveAllowed===-2&&<span style={{fontSize:9,background:"#FDF4FF",color:"#6B21A8",padding:"1px 5px",borderRadius:8,fontWeight:700}}>🏛️เศรษฐ-วิศวะ</span>}
+                        {sub?.consecutiveAllowed>0&&<span style={{fontSize:9,background:"#FEF3C7",color:"#92400E",padding:"1px 5px",borderRadius:8,fontWeight:700}}>⚡{sub.consecutiveAllowed}ติด</span>}
+                      </div>
                       {(()=>{const sr=S.specialRooms.find(r=>r.id===sub?.specialRoomId);return sr?<div style={{fontSize:10,color:"#7C3AED",marginTop:2}}>📍 {sr.name}</div>:null;})()}
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
                         <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
