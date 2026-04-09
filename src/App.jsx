@@ -1334,6 +1334,16 @@ function Assigns({S,U,st,gc}){
   const deptTeachers=selDept?S.teachers.filter(t=>t.departmentId===selDept):[];
   const teacher=S.teachers.find(t=>t.id===sel);
   const asgns=S.assigns.filter(a=>a.teacherId===sel);
+  // วิชาครูร่วม: assignment ที่ครูนี้เป็น co-teacher (ผ่าน schedule entries)
+  const coAsgnsIdsA = new Set(
+    Object.entries(S.schedule).flatMap(([,en])=>
+      (en||[]).filter(e=>{
+        const coIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
+        return coIds.includes(sel)&&e.teacherId!==sel;
+      }).map(e=>e.assignmentId)
+    ).filter(Boolean)
+  );
+  const coAsgnsA=S.assigns.filter(a=>coAsgnsIdsA.has(a.id)&&!asgns.find(x=>x.id===a.id));
   const totalUsed=asgns.reduce((s,a)=>s+a.totalPeriods,0);
   const teacherQuota=teacher?.totalPeriods||0;
   const remaining=teacherQuota-totalUsed;
@@ -1361,8 +1371,16 @@ function Assigns({S,U,st,gc}){
         </div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:16}}>
-        {asgns.map(a=>{const sub=S.subjects.find(s=>s.id===a.subjectId);const dept=S.depts.find(d=>d.id===sub?.departmentId);const c=dept?gc(dept.id):{bg:"#6B7280",lt:"#F3F4F6",tx:"#374151"};return<div key={a.id} style={{background:"#fff",borderRadius:14,borderLeft:`4px solid ${c.bg}`,padding:16,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
-          <div style={{display:"flex",justifyContent:"space-between"}}><div><h4 style={{fontSize:15,fontWeight:700}}>{sub?.code} — {sub?.name}</h4><div style={{fontSize:12,color:"#6B7280",marginTop:4}}>{a.totalPeriods} คาบ/สัปดาห์</div></div>
+        {asgns.map(a=>{const sub=S.subjects.find(s=>s.id===a.subjectId);const dept=S.depts.find(d=>d.id===sub?.departmentId);const c=dept?gc(dept.id):{bg:"#6B7280",lt:"#F3F4F6",tx:"#374151"};const ca=sub?.consecutiveAllowed||0;return<div key={a.id} style={{background:"#fff",borderRadius:14,borderLeft:`4px solid ${c.bg}`,padding:16,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+          <div style={{display:"flex",justifyContent:"space-between"}}><div>
+            <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+              <h4 style={{fontSize:15,fontWeight:700}}>{sub?.code} — {sub?.name}</h4>
+              {ca===-1&&<span style={{fontSize:9,background:"#EFF6FF",color:"#1E40AF",padding:"1px 6px",borderRadius:8,fontWeight:700}}>🔀NP</span>}
+              {ca===-2&&<span style={{fontSize:9,background:"#FDF4FF",color:"#6B21A8",padding:"1px 6px",borderRadius:8,fontWeight:700}}>🏛️เศรษฐ-วิศวะ</span>}
+              {ca>0&&<span style={{fontSize:9,background:"#FEF3C7",color:"#92400E",padding:"1px 6px",borderRadius:8,fontWeight:700}}>⚡{ca}ติด</span>}
+            </div>
+            <div style={{fontSize:12,color:"#6B7280",marginTop:4}}>{a.totalPeriods} คาบ/สัปดาห์</div>
+          </div>
             <div style={{display:"flex",gap:6}}>
               <button onClick={()=>{const n=prompt("แก้ไขจำนวนคาบ:",a.totalPeriods);if(n!==null){U.setAssigns(p=>p.map(x=>x.id===a.id?{...x,totalPeriods:parseInt(n)||1}:x));st("แก้ไขสำเร็จ")}}} style={{background:"none",border:"none",cursor:"pointer",color:"#2563EB"}}><Icon name="edit" size={14}/></button>
               <button onClick={()=>{U.setAssigns(p=>p.filter(x=>x.id!==a.id));st("ลบแล้ว","warning")}} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444"}}><Icon name="trash" size={14}/></button>
@@ -1370,6 +1388,20 @@ function Assigns({S,U,st,gc}){
           </div>
           <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>{a.roomIds.map(rid=><span key={rid} style={{background:"#DBEAFE",color:"#1E40AF",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>{S.rooms.find(r=>r.id===rid)?.name}</span>)}</div>
         </div>})}
+        {coAsgnsA.length>0&&<>
+          <div style={{gridColumn:"1/-1",fontSize:12,fontWeight:700,color:"#7C3AED",marginTop:4,marginBottom:-8}}>👥 วิชาที่เป็นครูร่วม</div>
+          {coAsgnsA.map(a=>{const sub=S.subjects.find(s=>s.id===a.subjectId);const dept=S.depts.find(d=>d.id===sub?.departmentId);const c=dept?gc(dept.id):{bg:"#7C3AED",lt:"#F5F3FF",tx:"#5B21B6"};const ca=sub?.consecutiveAllowed||0;const mainT=S.teachers.find(t=>t.id===a.teacherId);return<div key={a.id} style={{background:"#F5F3FF",borderRadius:14,borderLeft:"4px solid #7C3AED",padding:16,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+            <div style={{fontSize:10,color:"#7C3AED",fontWeight:700,marginBottom:6}}>👥 ครูร่วม (ของ {mainT?.prefix}{mainT?.firstName} {mainT?.lastName})</div>
+            <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+              <h4 style={{fontSize:15,fontWeight:700,color:"#5B21B6"}}>{sub?.code} — {sub?.name}</h4>
+              {ca===-1&&<span style={{fontSize:9,background:"#EFF6FF",color:"#1E40AF",padding:"1px 6px",borderRadius:8,fontWeight:700}}>🔀NP</span>}
+              {ca===-2&&<span style={{fontSize:9,background:"#FDF4FF",color:"#6B21A8",padding:"1px 6px",borderRadius:8,fontWeight:700}}>🏛️เศรษฐ-วิศวะ</span>}
+              {ca>0&&<span style={{fontSize:9,background:"#FEF3C7",color:"#92400E",padding:"1px 6px",borderRadius:8,fontWeight:700}}>⚡{ca}ติด</span>}
+            </div>
+            <div style={{fontSize:12,color:"#6B7280",marginTop:4}}>{a.totalPeriods} คาบ/สัปดาห์</div>
+            <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>{a.roomIds.map(rid=><span key={rid} style={{background:"#EDE9FE",color:"#5B21B6",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>{S.rooms.find(r=>r.id===rid)?.name}</span>)}</div>
+          </div>})}
+        </>}
       </div>
     </div>}
     <Modal open={modal} onClose={()=>setModal(false)} title="มอบหมายวิชา">
