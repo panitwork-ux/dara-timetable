@@ -1344,7 +1344,23 @@ function Assigns({S,U,st,gc}){
     ).filter(Boolean)
   );
   const coAsgnsA=S.assigns.filter(a=>coAsgnsIdsA.has(a.id)&&!asgns.find(x=>x.id===a.id));
-  const totalUsed=asgns.reduce((s,a)=>s+a.totalPeriods,0);
+  // นับคาบจริงจาก schedule (รองรับ NP/-2 deduplicate และ coTeacherIds)
+  const scheduledUsed=(tid)=>{
+    const seen=new Set(); let c=0;
+    Object.entries(S.schedule).forEach(([k,en])=>{
+      const pts=k.split("_");
+      en?.forEach(e=>{
+        const coIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
+        if(e.teacherId!==tid&&!coIds.includes(tid))return;
+        const sub=S.subjects.find(s=>s.id===e.subjectId);
+        const ca=sub?.consecutiveAllowed||0;
+        if(ca===-1||ca===-2){const k2=e.subjectId+"_"+pts[1]+"_"+pts[2];if(!seen.has(k2)){seen.add(k2);c++;}}
+        else c++;
+      });
+    });
+    return c;
+  };
+  const totalUsed=scheduledUsed(sel);
   const teacherQuota=teacher?.totalPeriods||0;
   const remaining=teacherQuota-totalUsed;
 
