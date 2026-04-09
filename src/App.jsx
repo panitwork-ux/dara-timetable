@@ -1222,6 +1222,7 @@ function Subjects({S,U,st,gc}){
           {sr&&<span style={{background:"#EDE9FE",color:"#5B21B6",padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:600}}>📍{sr.name}</span>}
           {sub.consecutiveAllowed>0&&<span style={{background:"#FEF3C7",color:"#92400E",padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:600}}>⚡{sub.consecutiveAllowed}คาบติด</span>}
           {sub.consecutiveAllowed===-1&&<span style={{background:"#EFF6FF",color:"#1E40AF",padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:600}}>🔀NP</span>}
+          {sub.consecutiveAllowed===-2&&<span style={{background:"#FDF4FF",color:"#6B21A8",padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:600}}>🏛️เศรษฐ-วิศวะ</span>}
         </div>
       </div>
     </div>;
@@ -1298,9 +1299,13 @@ function Subjects({S,U,st,gc}){
             <option value={3}>อนุญาต 3 คาบติด</option>
             <option value={4}>อนุญาต 4 คาบติด</option>
             <option value={-1}>NP — ลงคาบเดียวกันคนละห้องได้ (นับครู 1 คาบ)</option>
+            <option value={-2}>ห้องเศรษฐศาสตร์วิศวกรรม — 2 ห้องพร้อมกัน 2 คาบติด ครูหลายคน</option>
           </select>
           {form.consecutiveAllowed===-1&&<div style={{marginTop:6,padding:"8px 12px",background:"#EFF6FF",border:"1px solid #BFDBFE",borderRadius:8,fontSize:12,color:"#1E40AF"}}>
             📌 วิชานี้สามารถวางในคาบเดียวกันได้หลายห้อง (เช่น ม.5/1, ม.5/5, ม.5/6 คาบเดียวกัน) และระบบจะนับเป็น <strong>1 คาบ</strong> สำหรับครูผู้สอน
+          </div>}
+          {form.consecutiveAllowed===-2&&<div style={{marginTop:6,padding:"8px 12px",background:"#FDF4FF",border:"1px solid #E9D5FF",borderRadius:8,fontSize:12,color:"#6B21A8"}}>
+            📌 <strong>ห้องเศรษฐศาสตร์วิศวกรรม:</strong> 2 ห้องเรียนพร้อมกัน วางคาบเดียวกันคนละห้องได้ · ต้องวาง 2 คาบติดกัน · ครูทุกคนในการ์ดนับคาบตามนี้ · นับแต่ละคาบ 1 ครั้ง (ไม่ซ้ำข้ามห้อง)
           </div>}
         </div>
         <button onClick={save} style={BS()}>{editId?"บันทึก":"เพิ่มวิชา"}</button>
@@ -1523,10 +1528,11 @@ function Scheduler({S,U,st,gc}){
       if(!k.endsWith("_"+day+"_"+period))continue;
       if(en?.some(e=>{
         if(e.teacherId!==tid&&e.coTeacherId!==tid)return false;
-        // NP mode: ถ้าทั้งวิชาที่มีอยู่ และวิชาที่จะลง เป็น NP เดียวกัน → ไม่ถือว่า busy
+        // NP/-2 mode: ถ้าวิชาเดียวกัน → อนุญาตลงคนละห้องคาบเดียวกัน
         if(newSubjectId&&e.subjectId===newSubjectId){
           const sub=S.subjects.find(s=>s.id===e.subjectId);
-          if((sub?.consecutiveAllowed||0)===-1)return false;
+          const ca=sub?.consecutiveAllowed||0;
+          if(ca===-1||ca===-2)return false;
         }
         return true;
       }))return true;
@@ -1547,8 +1553,8 @@ function Scheduler({S,U,st,gc}){
 
   const sameSubjectSameDay=(subjectId,roomId,day,excludeKey)=>{
     const allowed=S.subjects.find(s=>s.id===subjectId)?.consecutiveAllowed||0;
-    // NP mode (-1): อนุญาตคาบเดียวกันคนละห้อง แต่ห้ามลงห้องเดิมซ้ำวันเดิม
-    if(allowed===-1){
+    // NP (-1) / เศรษฐ-วิศวะ (-2): อนุญาตคาบเดียวกันคนละห้อง แต่ห้ามลงห้องเดิมซ้ำวันเดิม
+    if(allowed===-1||allowed===-2){
       let countSameRoom=0;
       for(const [k,en] of Object.entries(S.schedule)){
         if(k===excludeKey)continue;
@@ -1599,8 +1605,9 @@ function Scheduler({S,U,st,gc}){
       en?.forEach(e=>{
         if(e.teacherId===tid||e.coTeacherId===tid){
           const sub=S.subjects.find(s=>s.id===e.subjectId);
-          if((sub?.consecutiveAllowed||0)===-1){
-            // NP: deduplicate ด้วย subjectId_day_period
+          const ca=sub?.consecutiveAllowed||0;
+          if(ca===-1||ca===-2){
+            // NP/-2: deduplicate ด้วย subjectId_day_period (ไม่นับซ้ำข้ามห้อง)
             const npKey=e.subjectId+"_"+pts[1]+"_"+pts[2];
             if(!seen.has(npKey)){seen.add(npKey);c++;}
           } else {
