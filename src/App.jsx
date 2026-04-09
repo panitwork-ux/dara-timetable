@@ -1501,7 +1501,19 @@ function Scheduler({S,U,st,gc}){
   const [cardCoMap,setCardCoMap]=useState({}); // {assignId: [teacherId, ...]} สูงสุด 4 ครูร่วม
 
   const teacher  = S.teachers.find(t=>t.id===selT);
+  // asgns: รวม assignment ที่ครูเป็นหลัก + assignment ที่ครูถูก assign เป็น coTeacher ใน cardCoMap
   const asgns    = S.assigns.filter(a=>a.teacherId===selT);
+  // coAsgns: assignment ที่มี selT เป็น co-teacher (ผ่าน cardCoMap หรือ schedule entry)
+  const coAsgnsIds = new Set(
+    Object.entries(S.schedule).flatMap(([,en])=>
+      (en||[]).filter(e=>{
+        const coIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
+        return coIds.includes(selT) && e.teacherId!==selT;
+      }).map(e=>e.assignmentId)
+    ).filter(Boolean)
+  );
+  const coAsgns  = S.assigns.filter(a=>coAsgnsIds.has(a.id));
+  const allAsgns = [...asgns, ...coAsgns.filter(a=>!asgns.find(x=>x.id===a.id))];
   const fTeachers= selDept ? S.teachers.filter(t=>t.departmentId===selDept) : S.teachers;
 
   // sort helper: inline ใน useMemo เพื่อกัน stale closure
@@ -1514,8 +1526,8 @@ function Scheduler({S,U,st,gc}){
     };
     return [...S.rooms].sort((a,b)=>key(a)-key(b));
   },[S.rooms,S.levels]);
-  // tRooms: ห้องของครูที่เลือก เรียงตาม sortedRooms (ม.4→ม.5→ม.6, เลขห้องน้อย→มาก)
-  const tRoomsSet = new Set(asgns.flatMap(a=>a.roomIds));
+  // tRooms: ห้องของครูที่เลือก (รวมห้องที่เป็น co-teacher) เรียงตาม sortedRooms
+  const tRoomsSet = new Set(allAsgns.flatMap(a=>a.roomIds));
   const tRooms = sortedRooms.filter(r=>tRoomsSet.has(r.id)).map(r=>r.id);
 
   /* ── helpers ── */
@@ -1862,7 +1874,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
             {/* Sidebar */}
             <div style={{width:270,flexShrink:0,position:"sticky",top:0,alignSelf:"flex-start",maxHeight:"calc(100vh - 200px)",overflowY:"auto"}}>
               <div style={{fontSize:13,fontWeight:700,color:"#374151",marginBottom:10}}>วิชา — ลากวาง</div>
-              {asgns.map(a=>{
+              {allAsgns.map(a=>{
                 const sub=S.subjects.find(s=>s.id===a.subjectId);
                 const dept=S.depts.find(d=>d.id===sub?.departmentId);
                 const c=dept?gc(dept.id):{bg:"#6B7280",lt:"#F3F4F6",tx:"#374151",bd:"#D1D5DB"};
@@ -1872,9 +1884,10 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                 const coTeachers2=coIds2.map(id=>S.teachers.find(t=>t.id===id)).filter(Boolean);
                 return (
                   <div key={a.id} style={{background:c.lt,border:"2px solid "+c.bd,borderRadius:12,padding:12,opacity:rem<=0?0.4:1,marginBottom:10}}>
+                    {coAsgnsIds.has(a.id)&&<div style={{fontSize:9,color:"#7C3AED",fontWeight:700,marginBottom:4}}>👥 วิชาครูร่วม (ของ {S.teachers.find(t=>t.id===a.teacherId)?.firstName||""})</div>}
                     <div
                       className="drag-card"
-                      draggable={rem>0}
+                      draggable={false}
                       onDragStart={()=>setDragBoth({teacherId:selT,subjectId:a.subjectId,assignmentId:a.id})}
                       onDragEnd={()=>setDragBoth(null)}
                       style={{cursor:rem>0?"grab":"default"}}
