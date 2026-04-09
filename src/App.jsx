@@ -1553,16 +1553,27 @@ function Scheduler({S,U,st,gc}){
 
   const sameSubjectSameDay=(subjectId,roomId,day,excludeKey)=>{
     const allowed=S.subjects.find(s=>s.id===subjectId)?.consecutiveAllowed||0;
-    // NP (-1) / เศรษฐ-วิศวะ (-2): อนุญาตคาบเดียวกันคนละห้อง แต่ห้ามลงห้องเดิมซ้ำวันเดิม
-    if(allowed===-1||allowed===-2){
-      let countSameRoom=0;
+    // NP (-1): อนุญาตคนละห้อง แต่ห้ามซ้ำห้องเดิมในวันเดิว (max 1/ห้อง/วัน)
+    if(allowed===-1){
+      let c=0;
       for(const [k,en] of Object.entries(S.schedule)){
         if(k===excludeKey)continue;
         const pts=k.split("_");
         if(pts[0]!==roomId||pts[1]!==day)continue;
-        en?.forEach(e=>{if(e.subjectId===subjectId)countSameRoom++;});
+        en?.forEach(e=>{if(e.subjectId===subjectId)c++;});
       }
-      return countSameRoom>=1;
+      return c>=1;
+    }
+    // เศรษฐ-วิศวะ (-2): อนุญาต 2 คาบต่อห้องต่อวัน (2 คาบติด) แต่ห้ามเกิน 2
+    if(allowed===-2){
+      let c=0;
+      for(const [k,en] of Object.entries(S.schedule)){
+        if(k===excludeKey)continue;
+        const pts=k.split("_");
+        if(pts[0]!==roomId||pts[1]!==day)continue;
+        en?.forEach(e=>{if(e.subjectId===subjectId)c++;});
+      }
+      return c>=2;
     }
     if(allowed>0)return false;
     let count=0;
