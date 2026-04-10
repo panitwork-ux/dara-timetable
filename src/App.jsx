@@ -1778,8 +1778,11 @@ function Scheduler({S,U,st,gc}){
     if(room&&sub&&room.levelId!==sub.levelId){st("ระดับชั้นไม่ตรงกัน!","error");return;}
     if(sameSubjectSameDay(drag.subjectId,rid,day,null)){st("วิชานี้มีในวัน"+day+"แล้ว (ห้ามซ้ำ/วัน)","error");return;}
     // สำหรับ -2 mode: หา assignment ที่ตรงกับห้องปลายทาง (อาจต่างจาก drag.assignmentId)
+    // -2 mode: หา assignment ที่ตรงกับ rid และ teacherId เดียวกัน ถ้าไม่มีค่อยหา assignment อื่นของ subjectId
     const effectiveAsgn=subCa===-2
-      ? (S.assigns.find(a=>a.subjectId===drag.subjectId&&a.roomIds?.includes(rid)) || asgn)
+      ? (S.assigns.find(a=>a.teacherId===drag.teacherId&&a.subjectId===drag.subjectId&&a.roomIds?.includes(rid))
+         || S.assigns.find(a=>a.subjectId===drag.subjectId&&a.roomIds?.includes(rid))
+         || asgn)
       : asgn;
     const effectiveAid=effectiveAsgn?.id||drag.assignmentId;
     const placed=countSubjectInRoom(effectiveAid,rid);
