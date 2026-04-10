@@ -1349,12 +1349,13 @@ function Assigns({S,U,st,gc}){
     const seen=new Set(); let c=0;
     Object.entries(S.schedule).forEach(([k,en])=>{
       const pts=k.split("_");
+      const day=pts[pts.length-2]; const per=pts[pts.length-1];
       en?.forEach(e=>{
         const coIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
         if(e.teacherId!==tid&&!coIds.includes(tid))return;
         const sub=S.subjects.find(s=>s.id===e.subjectId);
         const ca=sub?.consecutiveAllowed||0;
-        if(ca===-1||ca===-2){const k2=e.subjectId+"_"+pts[1]+"_"+pts[2];if(!seen.has(k2)){seen.add(k2);c++;}}
+        if(ca===-1||ca===-2){const k2=e.subjectId+"_"+day+"_"+per;if(!seen.has(k2)){seen.add(k2);c++;}}
         else c++;
       });
     });
@@ -1711,7 +1712,7 @@ function Scheduler({S,U,st,gc}){
           const ca=sub?.consecutiveAllowed||0;
           if(ca===-1||ca===-2){
             // NP/-2: deduplicate ด้วย subjectId_day_period (ไม่นับซ้ำข้ามห้อง)
-            const npKey=e.subjectId+"_"+pts[1]+"_"+pts[2];
+            const npKey=e.subjectId+"_"+pts[pts.length-2]+"_"+pts[pts.length-1];
             if(!seen.has(npKey)){seen.add(npKey);c++;}
           } else {
             c++;
@@ -2238,7 +2239,7 @@ function Reports({S,st,gc,ay,sh}){
         if(e.teacherId!==t.id&&!rCoIds.includes(t.id))return;
         const sub=S.subjects.find(s=>s.id===e.subjectId);
         const ca=sub?.consecutiveAllowed||0;
-        if(ca===-1||ca===-2){const npKey=e.subjectId+"_"+pts[1]+"_"+pts[2];if(!seen.has(npKey)){seen.add(npKey);u++;}}
+        if(ca===-1||ca===-2){const npKey=e.subjectId+"_"+pts[pts.length-2]+"_"+pts[pts.length-1];if(!seen.has(npKey)){seen.add(npKey);u++;}}
         else u++;
       });
     });
