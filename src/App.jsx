@@ -1746,7 +1746,11 @@ function Scheduler({S,U,st,gc}){
     const room=S.rooms.find(r=>r.id===rid);
     // ห้ามวางในห้องที่ไม่ได้อยู่ใน assignment
     const asgn=S.assigns.find(a=>a.id===drag.assignmentId);
-    if(!asgn?.roomIds?.includes(rid)){st("ห้องนี้ไม่ได้รับมอบหมายวิชานี้!","error");setDragBoth(null);return;}
+    // mode -2: อนุญาตถ้า rid อยู่ใน assignment ใดก็ได้ที่มี subjectId เดียวกัน (2 ห้องพร้อมกัน)
+    const subCa=S.subjects.find(s=>s.id===drag.subjectId)?.consecutiveAllowed||0;
+    const roomAllowed = asgn?.roomIds?.includes(rid) ||
+      (subCa===-2 && S.assigns.some(a=>a.subjectId===drag.subjectId&&a.roomIds?.includes(rid)));
+    if(!roomAllowed){st("ห้องนี้ไม่ได้รับมอบหมายวิชานี้!","error");setDragBoth(null);return;}
     if(isBlk(drag.teacherId,day,p)){st("ครูถูกล็อคคาบนี้","error");return;}
     if(teacherBusy(drag.teacherId,day,p,null,drag.subjectId)){st("ครูคนนี้สอนคาบนี้อยู่แล้ว (ห้องอื่น)","error");return;}
     if(specialRoomBusy(drag.subjectId,day,p,null)){
@@ -1755,13 +1759,18 @@ function Scheduler({S,U,st,gc}){
     }
     if(room&&sub&&room.levelId!==sub.levelId){st("ระดับชั้นไม่ตรงกัน!","error");return;}
     if(sameSubjectSameDay(drag.subjectId,rid,day,null)){st("วิชานี้มีในวัน"+day+"แล้ว (ห้ามซ้ำ/วัน)","error");return;}
-    const placed=countSubjectInRoom(drag.assignmentId,rid);
-    const limit=getPerRoomLimit(drag.assignmentId);
+    // สำหรับ -2 mode: หา assignment ที่ตรงกับห้องปลายทาง (อาจต่างจาก drag.assignmentId)
+    const effectiveAsgn=subCa===-2
+      ? (S.assigns.find(a=>a.subjectId===drag.subjectId&&a.roomIds?.includes(rid)) || asgn)
+      : asgn;
+    const effectiveAid=effectiveAsgn?.id||drag.assignmentId;
+    const placed=countSubjectInRoom(effectiveAid,rid);
+    const limit=getPerRoomLimit(effectiveAid);
     if(placed>=limit){st("ห้องนี้ลงครบ "+limit+" คาบแล้ว","error");return;}
-    const coTids=cardCoMap[drag.assignmentId]||[];
+    const coTids=cardCoMap[drag.assignmentId]||cardCoMap[effectiveAid]||[];
     U.setSchedule(prev=>({
       ...prev,
-      [key]:[...(prev[key]||[]),{id:gid(),teacherId:drag.teacherId,subjectId:drag.subjectId,assignmentId:drag.assignmentId,coTeacherIds:coTids,coTeacherId:coTids[0]||null}]
+      [key]:[...(prev[key]||[]),{id:gid(),teacherId:drag.teacherId,subjectId:drag.subjectId,assignmentId:effectiveAid,coTeacherIds:coTids,coTeacherId:coTids[0]||null}]
     }));
     setDragBoth(null);
   };
@@ -1822,7 +1831,7 @@ function Scheduler({S,U,st,gc}){
                             className="dz"
                             onDragOver={e=>{const d=dragRef.current;if(!d){e.currentTarget.classList.remove("over");return;}// ลากจากการ์ด: ตรวจ fromRoomId; ลากจาก sidebar: ตรวจ assignment roomIds
 if(d.fromRoomId&&d.fromRoomId!==rid){e.currentTarget.classList.remove("over");return;}
-if(d.assignmentId){const a=S.assigns.find(x=>x.id===d.assignmentId);if(!a?.roomIds?.includes(rid)){e.currentTarget.classList.remove("over");return;}}
+if(d.assignmentId){const a=S.assigns.find(x=>x.id===d.assignmentId);const sCa=S.subjects.find(s=>s.id===d.subjectId)?.consecutiveAllowed||0;const ok=a?.roomIds?.includes(rid)||(sCa===-2&&S.assigns.some(x=>x.subjectId===d.subjectId&&x.roomIds?.includes(rid)));if(!ok){e.currentTarget.classList.remove("over");return;}}
 e.preventDefault();e.currentTarget.classList.add("over");}}
                             onDragLeave={e=>e.currentTarget.classList.remove("over")}
                             onDrop={e=>{e.preventDefault();e.currentTarget.classList.remove("over");handleDrop(rid,day,p.id);}}
