@@ -1681,18 +1681,17 @@ function Scheduler({S,U,st,gc}){
     const sub=a?S.subjects.find(s=>s.id===a.subjectId):null;
     const ca=sub?.consecutiveAllowed||0;
     if(ca===-2){
-      // -2 mode: นับ unique subjectId_day_period (ไม่นับซ้ำข้ามห้อง) รวมทุก assignment ของวิชานี้
+      // -2 mode: นับ unique roomId ที่มี entry ของ subjectId นี้ (ห้องที่ลงไปแล้ว)
       const allAids=new Set(S.assigns.filter(x=>x.subjectId===a.subjectId).map(x=>x.id));
-      const seen=new Set();let c=0;
+      const rooms=new Set();
       Object.entries(S.schedule).forEach(([k,en])=>{
         const pts=k.split("_");
+        const rmId=pts.slice(0,pts.length-2).join("_");
         en?.forEach(e=>{
-          if(!allAids.has(e.assignmentId))return;
-          const npKey=e.subjectId+"_"+pts[1]+"_"+pts[2];
-          if(!seen.has(npKey)){seen.add(npKey);c++;}
+          if(allAids.has(e.assignmentId)) rooms.add(rmId);
         });
       });
-      return c;
+      return rooms.size; // จำนวนห้องที่ลงไปแล้ว
     }
     let c=0;
     Object.values(S.schedule).forEach(en=>en?.forEach(e=>{if(e.assignmentId===aid)c++;}));
@@ -1960,7 +1959,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                 // -2 mode: totalPeriods รวมทุก assignment ของวิชานี้ (periodsPerWeek × 2 ห้อง แต่ deduplicate)
                 const subCa2=sub?.consecutiveAllowed||0;
                 const totalForCard=subCa2===-2
-                  ? (sub?.periodsPerWeek||a.totalPeriods) // 2 คาบ (per ครู ไม่นับซ้ำห้อง)
+                  ? S.assigns.filter(x=>x.subjectId===a.subjectId).reduce((s,x)=>s+x.roomIds.length,0) // รวมห้องทั้งหมดของวิชานี้
                   : a.totalPeriods;
                 const rem=totalForCard-u;
                 const coIds2=Array.isArray(cardCoMap[a.id])?cardCoMap[a.id]:(cardCoMap[a.id]?[cardCoMap[a.id]]:[]);
