@@ -1676,6 +1676,23 @@ function Scheduler({S,U,st,gc}){
   };
 
   const aUsed=(aid)=>{
+    const a=S.assigns.find(x=>x.id===aid);
+    const sub=a?S.subjects.find(s=>s.id===a.subjectId):null;
+    const ca=sub?.consecutiveAllowed||0;
+    if(ca===-2){
+      // -2 mode: นับ unique subjectId_day_period (ไม่นับซ้ำข้ามห้อง) รวมทุก assignment ของวิชานี้
+      const allAids=new Set(S.assigns.filter(x=>x.subjectId===a.subjectId).map(x=>x.id));
+      const seen=new Set();let c=0;
+      Object.entries(S.schedule).forEach(([k,en])=>{
+        const pts=k.split("_");
+        en?.forEach(e=>{
+          if(!allAids.has(e.assignmentId))return;
+          const npKey=e.subjectId+"_"+pts[1]+"_"+pts[2];
+          if(!seen.has(npKey)){seen.add(npKey);c++;}
+        });
+      });
+      return c;
+    }
     let c=0;
     Object.values(S.schedule).forEach(en=>en?.forEach(e=>{if(e.assignmentId===aid)c++;}));
     return c;
@@ -1936,7 +1953,12 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                 const dept=S.depts.find(d=>d.id===sub?.departmentId);
                 const c=dept?gc(dept.id):{bg:"#6B7280",lt:"#F3F4F6",tx:"#374151",bd:"#D1D5DB"};
                 const u=aUsed(a.id);
-                const rem=a.totalPeriods-u;
+                // -2 mode: totalPeriods รวมทุก assignment ของวิชานี้ (periodsPerWeek × 2 ห้อง แต่ deduplicate)
+                const subCa2=sub?.consecutiveAllowed||0;
+                const totalForCard=subCa2===-2
+                  ? (sub?.periodsPerWeek||a.totalPeriods) // 2 คาบ (per ครู ไม่นับซ้ำห้อง)
+                  : a.totalPeriods;
+                const rem=totalForCard-u;
                 const coIds2=Array.isArray(cardCoMap[a.id])?cardCoMap[a.id]:(cardCoMap[a.id]?[cardCoMap[a.id]]:[]);
                 const coTeachers2=coIds2.map(id=>S.teachers.find(t=>t.id===id)).filter(Boolean);
                 return (
@@ -1962,7 +1984,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                             <span key={rid} style={{background:"rgba(0,0,0,0.1)",padding:"2px 8px",borderRadius:10,fontSize:11,fontWeight:600}}>{S.rooms.find(r=>r.id===rid)?.name}</span>
                           ))}
                         </div>
-                        <span style={{background:rem>0?c.bg:"#9CA3AF",color:"#fff",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>{rem}/{a.totalPeriods}</span>
+                        <span style={{background:rem>0?c.bg:"#9CA3AF",color:"#fff",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>{rem}/{totalForCard}</span>
                       </div>
                     </div>
                     {/* ข้อ 4: เพิ่มครูร่วมบน sidebar */}
