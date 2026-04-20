@@ -598,12 +598,25 @@ export default function App() {
   const [schoolHeader,setSchoolHeader]=useState(()=>loadLS("schoolHeader",{name:"โรงเรียนดาราวิทยาลัย",logo:""}));
 
   useEffect(()=>saveLS("academicYear",academicYear),[academicYear]);
-  useEffect(()=>saveLS("schoolHeader",schoolHeader),[schoolHeader]);
+  useEffect(()=>{
+    saveLS("schoolHeader",schoolHeader);
+    // sync ไป GAS เฉพาะ logo ที่เป็น URL (ไม่ sync base64 เพราะใหญ่เกิน)
+    if(schoolHeader.logo&&!schoolHeader.logo.startsWith("data:")&&GAS_URL&&!GAS_URL.includes("YOUR_DEPLOYMENT_ID")){
+      clearTimeout(saveTimer.current);
+      saveTimer.current=setTimeout(()=>{
+        setSyncing(true);
+        gasPost(divId,{...stateRef.current,schoolHeader,academicYear}).catch(()=>{}).finally(()=>setSyncing(false));
+      },1500);
+    }
+  },[schoolHeader]);
   // บันทึก division ที่เลือกไว้
   useEffect(()=>{ localStorage.setItem("dara_division",divId); },[divId]);
 
   const stateRef=useRef({});
   useEffect(()=>{stateRef.current={levels,plans,depts,teachers,subjects,rooms,specialRooms,assigns,meetings,schedule,locks}},[levels,plans,depts,teachers,subjects,rooms,specialRooms,assigns,meetings,schedule,locks]);
+  // sync schoolHeader และ academicYear ผ่าน GAS ด้วย เพื่อให้ทุกเครื่องเห็นโลโก้และปีการศึกษาเดียวกัน
+  const shRef=useRef({});
+  useEffect(()=>{shRef.current={schoolHeader,academicYear};},[schoolHeader,academicYear]);
 
   // เมื่อ switch division → โหลดข้อมูลชุดใหม่
   const switchDivision=(newDivId)=>{
@@ -654,6 +667,9 @@ export default function App() {
         if(d.meetings?.length)     setMeetings(d.meetings);
         if(d.schedule&&Object.keys(d.schedule).length) setSchedule(d.schedule);
         if(d.locks&&Object.keys(d.locks).length)       setLocks(d.locks);
+        // โหลด schoolHeader จาก GAS (เพื่อให้โลโก้ URL ตรงกันทุกเครื่อง)
+        if(d.schoolHeader?.name)setSchoolHeader(sh=>({...sh,...d.schoolHeader}));
+        if(d.academicYear?.year)setAcademicYear(ay=>({...ay,...d.academicYear}));
         setGasReady(true);
       } else { setGasReady(true); }
     }).catch(()=>{ setGasReady(true); }).finally(()=>setSyncing(false));
@@ -2580,16 +2596,26 @@ function Settings({S,U,st,ay,setAY,sh,setSH,div}){
             <label style={LS}>โลโก้โรงเรียน (จะแสดงในตาราง PDF)</label>
             <div style={{display:"flex",alignItems:"center",gap:14,marginTop:8}}>
               {sh.logo
-                ?<img src={sh.logo} alt="logo" style={{width:56,height:56,borderRadius:"50%",objectFit:"cover",border:"2px solid #E5E7EB"}}/>
+                ?<img src={sh.logo} alt="logo" style={{width:56,height:56,borderRadius:"50%",objectFit:"cover",border:"2px solid #E5E7EB"}} onError={e=>{e.target.style.display='none'}}/>
                 :<div style={{width:56,height:56,borderRadius:"50%",background:"#F3F4F6",border:"2px dashed #D1D5DB",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#9CA3AF"}}>LOGO</div>
               }
-              <div style={{display:"flex",gap:8,flexDirection:"column"}}>
-                <button onClick={()=>logoRef.current?.click()} style={BS("#2563EB")}><Icon name="upload" size={14}/>อัพโหลดโลโก้</button>
-                {sh.logo&&<button onClick={()=>{setSH(p=>({...p,logo:""}));st("ลบโลโก้แล้ว","warning")}} style={BO("#DC2626")}><Icon name="trash" size={14}/>ลบโลโก้</button>}
+              <div style={{flex:1,display:"flex",flexDirection:"column",gap:8}}>
+                <input
+                  style={{...IS,fontSize:12}}
+                  value={sh.logo||""}
+                  onChange={e=>setSH(p=>({...p,logo:e.target.value}))}
+                  placeholder="วาง URL รูปภาพ เช่น https://drive.google.com/uc?id=..."
+                />
+                <div style={{display:"flex",gap:6}}>
+                  <button onClick={()=>logoRef.current?.click()} style={{...BO("#2563EB"),fontSize:12,padding:"6px 12px"}}><Icon name="upload" size={13}/>Upload ไฟล์ (เครื่องนี้เท่านั้น)</button>
+                  {sh.logo&&<button onClick={()=>{setSH(p=>({...p,logo:""}));st("ลบโลโก้แล้ว","warning")}} style={{...BO("#DC2626"),fontSize:12,padding:"6px 12px"}}><Icon name="trash" size={13}/>ลบ</button>}
+                </div>
               </div>
               <input ref={logoRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleLogo}/>
             </div>
-            <div style={{fontSize:12,color:"#6B7280",marginTop:8}}>รองรับ PNG, JPG, SVG ขนาดแนะนำ 200×200px ขึ้นไป</div>
+            <div style={{padding:"8px 12px",background:"#EFF6FF",borderRadius:8,marginTop:8,fontSize:12,color:"#1E40AF"}}>
+              💡 <strong>แนะนำ:</strong> อัพโลโก้ขึ้น Google Drive → คลิกขวา → "Get link" → เปลี่ยน <code>drive.google.com/file/d/ID/view</code> เป็น <code>drive.google.com/uc?id=ID</code> แล้ววาง URL ด้านบน — ทุกเครื่องจะเห็นโลโก้เดียวกัน
+            </div>
           </div>
         </div>
       </div>
