@@ -1368,9 +1368,42 @@ function Assigns({S,U,st,gc}){
     });
     return c;
   };
-  const totalUsed=scheduledUsed(sel);
+  const totalScheduled=scheduledUsed(sel);   // คาบที่ลงตารางแล้วจริง (รวมครูร่วม, deduplicate NP/-2)
+  // totalAssigned = คาบที่ครูต้องสอน (นับตาม periodsPerWeek จริง ไม่ × จำนวนห้อง)
+  const totalAssigned=(()=>{
+    const seen=new Set(); let c=0;
+    // นับจาก assignment ตัวเอง (deduplicate วิชา NP/-2 ด้วย subjectId_roomId)
+    asgns.forEach(a=>{
+      const sub=S.subjects.find(s=>s.id===a.subjectId);
+      const ca=sub?.consecutiveAllowed||0;
+      if(ca===-1||ca===-2){
+        // NP/-2: นับแค่ periodsPerWeek ต่อวิชา (ไม่คูณห้อง)
+        const k2="own_"+a.subjectId;
+        if(!seen.has(k2)){seen.add(k2);c+=sub?.periodsPerWeek||a.totalPeriods;}
+      } else {
+        c+=a.totalPeriods;
+      }
+    });
+    // นับคาบครูร่วม (deduplicate NP/-2 เหมือนกัน)
+    const seenCo=new Set();
+    Object.entries(S.schedule).forEach(([k,en])=>{
+      const pts=k.split("_");
+      en?.forEach(e=>{
+        const coIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
+        if(!coIds.includes(sel)||e.teacherId===sel)return;
+        if(!coAsgnsIdsA.has(e.assignmentId))return;
+        const sub=S.subjects.find(s=>s.id===e.subjectId);
+        const ca=sub?.consecutiveAllowed||0;
+        if(ca===-1||ca===-2){const k2=e.subjectId+"_"+pts[pts.length-2]+"_"+pts[pts.length-1];if(!seenCo.has(k2)){seenCo.add(k2);c++;}}
+        else c++;
+      });
+    });
+    return c;
+  })();
+  const totalUsed=totalScheduled;
   const teacherQuota=teacher?.totalPeriods||0;
-  const remaining=teacherQuota-totalUsed;
+  const remaining=teacherQuota-totalAssigned;
+  const notScheduled=totalAssigned-totalScheduled; // มอบหมายแล้วแต่ยังไม่ลงตาราง
 
   // ข้อ 2: filter วิชาเฉพาะกลุ่มสาระของครูที่เลือก
   const teacherDeptSubs=teacher?S.subjects.filter(s=>s.departmentId===teacher.departmentId):S.subjects;
@@ -1388,28 +1421,54 @@ function Assigns({S,U,st,gc}){
     {teacher&&<div>
       <div style={{background:"#fff",borderRadius:14,padding:20,boxShadow:"0 2px 8px rgba(153,27,27,0.06)",marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
         <div><h3 style={{fontSize:18,fontWeight:700}}>{teacher.prefix}{teacher.firstName} {teacher.lastName}</h3><div style={{fontSize:13,color:"#6B7280",marginTop:4}}>{S.depts.find(d=>d.id===teacher.departmentId)?.name}</div></div>
-        <div style={{display:"flex",gap:12}}>
-          <div style={{background:"#DBEAFE",color:"#1E40AF",padding:"8px 20px",borderRadius:10,fontWeight:700}}>คาบได้รับ: {teacherQuota}</div>
-          <div style={{background:"#FEF3C7",color:"#92400E",padding:"8px 20px",borderRadius:10,fontWeight:700}}>มอบหมาย: {totalUsed}</div>
-          <div style={{background:remaining>=0?"#D1FAE5":"#FEE2E2",color:remaining>=0?"#065F46":"#991B1B",padding:"8px 20px",borderRadius:10,fontWeight:700}}>เหลือ: {remaining}</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <div style={{background:"#DBEAFE",color:"#1E40AF",padding:"8px 16px",borderRadius:10,fontWeight:700,fontSize:13}}>📋 ได้รับ: {teacherQuota}</div>
+          <div style={{background:"#FEF3C7",color:"#92400E",padding:"8px 16px",borderRadius:10,fontWeight:700,fontSize:13}}>📝 มอบหมาย: {totalAssigned}</div>
+          <div style={{background:"#D1FAE5",color:"#065F46",padding:"8px 16px",borderRadius:10,fontWeight:700,fontSize:13}}>✅ ลงตารางแล้ว: {totalScheduled}</div>
+          <div style={{background:notScheduled>0?"#FEE2E2":"#F3F4F6",color:notScheduled>0?"#991B1B":"#6B7280",padding:"8px 16px",borderRadius:10,fontWeight:700,fontSize:13}}>
+            {notScheduled>0?"⚠️ ยังไม่ลง: "+notScheduled:"✓ ลงครบแล้ว"}
+          </div>
+          <div style={{background:remaining>=0?"#EFF6FF":"#FEE2E2",color:remaining>=0?"#1D4ED8":"#991B1B",padding:"8px 16px",borderRadius:10,fontWeight:700,fontSize:13}}>เหลือ: {remaining}</div>
         </div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:16}}>
         {asgns.map(a=>{const sub=S.subjects.find(s=>s.id===a.subjectId);const dept=S.depts.find(d=>d.id===sub?.departmentId);const c=dept?gc(dept.id):{bg:"#6B7280",lt:"#F3F4F6",tx:"#374151"};const ca=sub?.consecutiveAllowed||0;return<div key={a.id} style={{background:"#fff",borderRadius:14,borderLeft:`4px solid ${c.bg}`,padding:16,boxShadow:"0 2px 8px rgba(153,27,27,0.06)"}}>
-          <div style={{display:"flex",justifyContent:"space-between"}}><div>
+          {(()=>{
+            const aScheduled=(()=>{
+              const seen=new Set();let cnt=0;
+              Object.entries(S.schedule).forEach(([k,en])=>{
+                const pts=k.split("_");
+                en?.forEach(e=>{
+                  if(e.assignmentId!==a.id)return;
+                  const sub2=S.subjects.find(s=>s.id===e.subjectId);
+                  const ca2=sub2?.consecutiveAllowed||0;
+                  if(ca2===-1||ca2===-2){const npk=e.subjectId+"_"+pts[pts.length-2]+"_"+pts[pts.length-1];if(!seen.has(npk)){seen.add(npk);cnt++;}}
+                  else cnt++;
+                });
+              });
+              return cnt;
+            })();
+            // NP/-2: มอบหมายที่แสดงควรเป็น periodsPerWeek ไม่ใช่ totalPeriods (ที่อาจ × ห้อง)
+            const aAssigned=(ca===-1||ca===-2)?(sub?.periodsPerWeek||a.totalPeriods):a.totalPeriods;
+            const aPending=aAssigned-aScheduled;
+            return <div style={{display:"flex",justifyContent:"space-between"}}><div>
             <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
               <h4 style={{fontSize:15,fontWeight:700}}>{sub?.code} — {sub?.name}</h4>
               {ca===-1&&<span style={{fontSize:9,background:"#EFF6FF",color:"#1E40AF",padding:"1px 6px",borderRadius:8,fontWeight:700}}>🔀NP</span>}
               {ca===-2&&<span style={{fontSize:9,background:"#FDF4FF",color:"#6B21A8",padding:"1px 6px",borderRadius:8,fontWeight:700}}>🏛️เศรษฐ-วิศวะ</span>}
               {ca>0&&<span style={{fontSize:9,background:"#FEF3C7",color:"#92400E",padding:"1px 6px",borderRadius:8,fontWeight:700}}>⚡{ca}ติด</span>}
             </div>
-            <div style={{fontSize:12,color:"#6B7280",marginTop:4}}>{a.totalPeriods} คาบ/สัปดาห์</div>
+            <div style={{display:"flex",gap:6,marginTop:6,flexWrap:"wrap"}}>
+              <span style={{fontSize:11,color:"#6B7280"}}>มอบหมาย {aAssigned} คาบ</span>
+              <span style={{fontSize:11,background:"#D1FAE5",color:"#065F46",padding:"1px 8px",borderRadius:20,fontWeight:600}}>✅ ลงแล้ว {aScheduled}</span>
+              {aPending>0&&<span style={{fontSize:11,background:"#FEE2E2",color:"#991B1B",padding:"1px 8px",borderRadius:20,fontWeight:600}}>⚠️ ยังไม่ลง {aPending}</span>}
+            </div>
           </div>
             <div style={{display:"flex",gap:6}}>
               <button onClick={()=>{const n=prompt("แก้ไขจำนวนคาบ:",a.totalPeriods);if(n!==null){U.setAssigns(p=>p.map(x=>x.id===a.id?{...x,totalPeriods:parseInt(n)||1}:x));st("แก้ไขสำเร็จ")}}} style={{background:"none",border:"none",cursor:"pointer",color:"#2563EB"}}><Icon name="edit" size={14}/></button>
               <button onClick={()=>{U.setAssigns(p=>p.filter(x=>x.id!==a.id));st("ลบแล้ว","warning")}} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444"}}><Icon name="trash" size={14}/></button>
             </div>
-          </div>
+          </div>;})()}
           <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>{a.roomIds.map(rid=><span key={rid} style={{background:"#DBEAFE",color:"#1E40AF",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>{S.rooms.find(r=>r.id===rid)?.name}</span>)}</div>
         </div>})}
         {coAsgnsA.length>0&&<>
@@ -2165,55 +2224,61 @@ function buildMasterTableHTML(S, ay, sh, filterLevelId) {
 
 /* ===== PDF: ตารางเรียนรวมระดับชั้น ห้องเป็นแถว × วัน/คาบ ===== */
 function buildLevelTableHTML(S, ay, sh, filterLevelId) {
-  // ตารางเรียนระดับชั้น: ห้องเป็นแถว × วัน/คาบเป็นคอลัมน์ (ขาวดำ)
   const subtitle = "ภาคเรียนที่ "+(ay?.semester||"1")+"/"+(ay?.year||"2568")+" "+(sh?.name||"โรงเรียนดาราวิทยาลัย");
-  const logoHtml = sh?.logo ? '<img src="'+sh.logo+'" style="width:34px;height:34px;border-radius:50%;object-fit:cover;flex-shrink:0"/>' : '';
+  const logoHtml = sh?.logo ? '<img src="'+sh.logo+'" style="width:30px;height:30px;border-radius:50%;object-fit:cover;flex-shrink:0"/>' : '';
   const lvName = filterLevelId ? (S.levels.find(l=>l.id===filterLevelId)?.name||'') : 'ทุกระดับ';
   const title = "ตารางเรียน "+lvName+" ปีการศึกษา "+(ay?.year||"2568");
 
-  // เรียงห้องตามชั้น+เลขห้อง
   const sortKey=(r)=>{ const lv=S.levels.find(l=>l.id===r.levelId)?.name||""; const lvN=parseInt((lv.match(/(\d+)/)||[0,99])[1]); const rmN=parseInt((r.name.match(/(\d+)$/)||[0,0])[1]); return lvN*10000+rmN; };
   let rooms = [...S.rooms].sort((a,b)=>sortKey(a)-sortKey(b));
   if(filterLevelId) rooms=rooms.filter(r=>r.levelId===filterLevelId);
   if(!rooms.length) return '<html><body>ไม่มีห้องเรียนในระดับนี้</body></html>';
 
   const P=PERIODS.length; const totalCols=DAYS.length*P;
-  let headRow1='<th rowspan="2" style="width:52px;border:1px solid #000;background:#e8e8e8;font-size:8px;font-weight:700;padding:2px;text-align:center">ห้อง</th>';
+  // คำนวณความกว้าง cell: A4 landscape ~257mm - margin 10mm - col ห้อง ~14mm = 243mm / 35 col ≈ 6.9mm
+  const cellW = (243/totalCols).toFixed(1);
+
+  let headRow1='<th rowspan="2" style="width:14mm;border:1px solid #000;background:#333;color:#fff;font-size:7px;font-weight:700;padding:2px;text-align:center">ห้อง</th>';
   DAYS.forEach((day,di)=>{
-    const br=di<DAYS.length-1?'border-right:2.5px solid #000;':'';
-    headRow1+='<th colspan="'+P+'" style="border:1px solid #000;'+br+'background:#333;color:#fff;font-size:8px;font-weight:700;padding:2px 1px;text-align:center">'+day+'</th>';
+    const br=di<DAYS.length-1?'border-right:2px solid #000;':'';
+    headRow1+='<th colspan="'+P+'" style="border:1px solid #000;'+br+'background:#333;color:#fff;font-size:7px;font-weight:700;padding:2px 1px;text-align:center">'+day+'</th>';
   });
   let headRow2='';
   DAYS.forEach((_,di)=>{ PERIODS.forEach((p,pi)=>{
-    const br=(pi===P-1&&di<DAYS.length-1)?'border-right:2.5px solid #000;':'';
-    headRow2+='<th style="border:1px solid #999;'+br+'background:#e8e8e8;font-size:7px;font-weight:700;padding:1px;text-align:center;width:'+(550/totalCols).toFixed(1)+'px">'+p.id+'</th>';
+    const br=(pi===P-1&&di<DAYS.length-1)?'border-right:2px solid #000;':'';
+    headRow2+='<th style="border:1px solid #bbb;'+br+'background:#e0e0e0;font-size:6px;font-weight:700;padding:1px;text-align:center;width:'+cellW+'mm">'+p.id+'</th>';
   }); });
 
   let bodyHTML='';
-  // จัดกลุ่มตามระดับชั้น
   const levelIds=[...new Set(rooms.map(r=>r.levelId))];
   levelIds.forEach(lvId=>{
     const lvRooms=rooms.filter(r=>r.levelId===lvId);
     const lvNameStr=S.levels.find(l=>l.id===lvId)?.name||'';
-    bodyHTML+='<tr><td colspan="'+(totalCols+1)+'" style="background:#555;color:#fff;font-size:8px;font-weight:700;padding:2px 5px;border:1px solid #000">'+lvNameStr+'</td></tr>';
+    bodyHTML+='<tr><td colspan="'+(totalCols+1)+'" style="background:#555;color:#fff;font-size:7px;font-weight:700;padding:2px 5px;border:1px solid #000">'+lvNameStr+'</td></tr>';
     lvRooms.forEach((rm,ri)=>{
-      const rowBg=ri%2===0?'#fff':'#f5f5f5';
+      const rowBg=ri%2===0?'#fff':'#fafafa';
       let row='<tr>';
-      row+='<td style="background:'+rowBg+';font-size:8px;padding:2px;border:1px solid #000;font-weight:700;text-align:center;vertical-align:middle">'+rm.name+'</td>';
+      // ชื่อห้องย่อ เช่น "ม.5/1" → "5/1"
+      const rmShort=rm.name.replace(/[ม\.ป\.]/g,'').replace(/\s/g,'');
+      row+='<td style="background:#e8e8e8;font-size:8px;padding:2px;border:1px solid #999;font-weight:700;text-align:center;vertical-align:middle;color:#000">'+rm.name+'</td>';
       DAYS.forEach((_,di)=>{ PERIODS.forEach((p,pi)=>{
         const key=rm.id+"_"+DAYS[di]+"_"+p.id;
         const en=S.schedule[key]||[];
-        const br=(pi===P-1&&di<DAYS.length-1)?'border-right:2.5px solid #000;':'';
+        const br=(pi===P-1&&di<DAYS.length-1)?'border-right:2px solid #000;':'';
         let cellTxt=''; let extra='background:'+rowBg+';';
         if(en.length>0){
           cellTxt=en.map(e=>{
             const sub=S.subjects.find(s=>s.id===e.subjectId);
             const t=S.teachers.find(x=>x.id===e.teacherId);
-            return (sub?.code||sub?.name||'')+(t?'<br/>'+(t.prefix||'')+(t.firstName||''):'');
-          }).join(' / ');
-          extra='background:'+rowBg+';font-weight:700;';
+            const coIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
+            const coTs=coIds.map(id=>S.teachers.find(x=>x.id===id)).filter(Boolean);
+            const subName=sub?.name||'';
+            const teacherNames=[t,...coTs].filter(Boolean).map(x=>x.firstName||'').join('+');
+            return '<span style="font-weight:700">'+subName+'</span><br/>'+teacherNames;
+          }).join('<hr style="border:none;border-top:1px dashed #bbb;margin:0"/>');
+          extra='background:'+rowBg+';';
         }
-        row+='<td style="border:1px solid #ccc;'+br+extra+'font-size:7px;padding:1px 2px;text-align:center;vertical-align:middle;line-height:1.2">'+cellTxt+'</td>';
+        row+='<td style="border:1px solid #ddd;'+br+extra+'font-size:6px;padding:1px;text-align:center;vertical-align:middle;line-height:1.3;overflow:hidden">'+cellTxt+'</td>';
       }); });
       row+='</tr>'; bodyHTML+=row;
     });
@@ -2221,14 +2286,15 @@ function buildLevelTableHTML(S, ay, sh, filterLevelId) {
 
   return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
     +"@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap');"
-    +'@page{size:A4 landscape;margin:6mm 5mm}'
+    +'@page{size:A4 landscape;margin:5mm 5mm}'
     +'*{margin:0;padding:0;box-sizing:border-box}'
-    +"body{font-family:'Sarabun','Noto Sans Thai',sans-serif;color:#000;background:#fff}"
-    +'.hdr{display:flex;align-items:center;gap:8px;margin-bottom:4px}'
+    +"body{font-family:'Sarabun','Noto Sans Thai',sans-serif;color:#000;background:#fff;font-size:6px}"
+    +'.hdr{display:flex;align-items:center;gap:6px;margin-bottom:3px}'
     +'table{width:100%;border-collapse:collapse;table-layout:fixed}'
+    +'td,th{overflow:hidden;word-break:break-all}'
     +'@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'
     +'</style></head><body>'
-    +'<div class="hdr">'+logoHtml+'<div><div style="font-size:12px;font-weight:700">'+title+'</div><div style="font-size:9px;color:#444;margin-top:1px">'+subtitle+'</div></div></div>'
+    +'<div class="hdr">'+logoHtml+'<div><div style="font-size:11px;font-weight:700">'+title+'</div><div style="font-size:8px;color:#444;margin-top:1px">'+subtitle+'</div></div></div>'
     +'<table><thead><tr>'+headRow1+'</tr><tr>'+headRow2+'</tr></thead><tbody>'+bodyHTML+'</tbody></table>'
     +'</body></html>';
 }
