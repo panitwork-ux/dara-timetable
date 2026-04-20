@@ -477,9 +477,9 @@ const Modal = ({ open, onClose, title, children, wide }) => {
 };
 
 // ===== Design tokens (Dara red scheme) =====
-const CRED="#991B1B";      // แดงดารา หลัก
+const CRED="#B91C1C";      // แดงดารา หลัก
 const CRED2="#DC2626";     // แดงสว่าง
-const CRED3="#B91C1C";     // แดงกลาง
+const CRED3="#991B1B";     // แดงเข้ม
 const CBGE="#F8F4F4";      // พื้นหลังอุ่น (ขาวนวลแดง)
 const CBGW="#FFFFFF";      // white card
 const CGRAY="#6B7280";
@@ -725,9 +725,9 @@ export default function App() {
   const divHasAccess=!firebaseConfigured||userPerms?.divisions?.[divId]===true;
 
   return <div style={{display:"flex",height:"100vh",fontFamily:"'Sarabun','Noto Sans Thai',sans-serif",background:"#F3F4F6",overflow:"hidden"}}>
-    <style>{`@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#D4C5BA;border-radius:4px}::-webkit-scrollbar-track{background:transparent}@keyframes slideIn{from{transform:translateX(100px);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}.ni:hover{background:rgba(255,255,255,0.12)!important;border-radius:10px}.ni.a{background:rgba(255,255,255,0.18)!important;border-radius:10px}input:focus,select:focus{border-color:#991B1B!important;box-shadow:0 0 0 3px rgba(153,27,27,0.12)!important}input,select{transition:border-color 0.15s,box-shadow 0.15s}.drag-card{cursor:grab;user-select:none}.drag-card:active{cursor:grabbing}.dz{transition:background 0.15s,outline 0.15s}.dz.over{background:#FEE2E2!important;outline:2px dashed #DC2626}button:hover{opacity:0.88;transition:opacity 0.15s}select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:36px!important}.div-sel{appearance:none!important;background:rgba(0,0,0,0.25)!important;background-image:none!important;border:1px solid rgba(255,255,255,0.25)!important;border-radius:10px!important;color:#fff!important;font-size:13px!important;font-weight:700!important;font-family:inherit!important;padding:9px 32px 9px 12px!important;width:100%!important;cursor:pointer!important;outline:none!important;transition:border-color 0.15s}.div-sel:focus{box-shadow:0 0 0 2px rgba(255,255,255,0.3)!important;border-color:rgba(255,255,255,0.6)!important}.div-sel option{background:#7F1D1D;color:#fff}`}</style>
+    <style>{`@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#D4C5BA;border-radius:4px}::-webkit-scrollbar-track{background:transparent}@keyframes slideIn{from{transform:translateX(100px);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}.ni:hover{background:rgba(255,255,255,0.12)!important;border-radius:10px}.ni.a{background:rgba(255,255,255,0.18)!important;border-radius:10px}input:focus,select:focus{border-color:#991B1B!important;box-shadow:0 0 0 3px rgba(153,27,27,0.12)!important}input,select{transition:border-color 0.15s,box-shadow 0.15s}.drag-card{cursor:grab;user-select:none}.drag-card:active{cursor:grabbing}.dz{transition:background 0.15s,outline 0.15s}.dz.over{background:#FEE2E2!important;outline:2px dashed #DC2626}button:hover{opacity:0.88;transition:opacity 0.15s}select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:36px!important}.div-sel{appearance:none!important;background:rgba(0,0,0,0.25)!important;background-image:none!important;border:1px solid rgba(255,255,255,0.25)!important;border-radius:10px!important;color:#fff!important;font-size:13px!important;font-weight:700!important;font-family:inherit!important;padding:9px 32px 9px 12px!important;width:100%!important;cursor:pointer!important;outline:none!important;transition:border-color 0.15s}.div-sel:focus{box-shadow:0 0 0 2px rgba(255,255,255,0.3)!important;border-color:rgba(255,255,255,0.6)!important}.div-sel option{background:#991B1B;color:#fff}`}</style>
 
-    <div style={{width:side?264:0,background:"linear-gradient(180deg,#991B1B 0%,#7F1D1D 100%)",transition:"width 0.3s",overflow:"hidden",flexShrink:0,display:"flex",flexDirection:"column",boxShadow:"2px 0 12px rgba(139,21,56,0.15)"}}>
+    <div style={{width:side?264:0,background:"linear-gradient(180deg,#B91C1C 0%,#991B1B 100%)",transition:"width 0.3s",overflow:"hidden",flexShrink:0,display:"flex",flexDirection:"column",boxShadow:"2px 0 12px rgba(139,21,56,0.15)"}}>
       <div style={{padding:"24px 20px",borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
           {schoolHeader.logo
@@ -2013,8 +2013,8 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
       {mode==="teacher"&&(teacher
         ?<div style={{display:"flex",gap:14}}>
             {/* Sidebar */}
-            <div style={{width:270,flexShrink:0,position:"sticky",top:0,alignSelf:"flex-start",maxHeight:"calc(100vh - 200px)",overflowY:"auto"}}>
-              <div style={{fontSize:13,fontWeight:700,color:"#374151",marginBottom:10}}>วิชา — ลากวาง</div>
+            <div style={{width:200,flexShrink:0,position:"sticky",top:0,alignSelf:"flex-start",maxHeight:"calc(100vh - 200px)",overflowY:"auto"}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:8}}>วิชา — ลากวาง</div>
               {allAsgns.map(a=>{
                 const sub=S.subjects.find(s=>s.id===a.subjectId);
                 const dept=S.depts.find(d=>d.id===sub?.departmentId);
@@ -2029,8 +2029,8 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                 const coIds2=Array.isArray(cardCoMap[a.id])?cardCoMap[a.id]:(cardCoMap[a.id]?[cardCoMap[a.id]]:[]);
                 const coTeachers2=coIds2.map(id=>S.teachers.find(t=>t.id===id)).filter(Boolean);
                 return (
-                  <div key={a.id} style={{background:c.lt,border:"1.5px solid "+c.bd,borderRadius:14,padding:12,opacity:rem<=0?0.35:1,marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.05)",transition:"opacity 0.2s"}}>
-                    {coAsgnsIds.has(a.id)&&<div style={{fontSize:9,color:"#7C3AED",fontWeight:700,marginBottom:4}}>👥 วิชาครูร่วม (ของ {S.teachers.find(t=>t.id===a.teacherId)?.firstName||""})</div>}
+                  <div key={a.id} style={{background:c.lt,border:"1.5px solid "+c.bd,borderRadius:10,padding:"8px 10px",opacity:rem<=0?0.35:1,marginBottom:8,boxShadow:"0 1px 3px rgba(0,0,0,0.05)",transition:"opacity 0.2s"}}>
+                    {coAsgnsIds.has(a.id)&&<div style={{fontSize:8,color:"#7C3AED",fontWeight:700,marginBottom:2}}>👥 ครูร่วม ({S.teachers.find(t=>t.id===a.teacherId)?.firstName||""})</div>}
                     <div
                       className="drag-card"
                       draggable={rem>0&&!coAsgnsIds.has(a.id)}
@@ -2039,30 +2039,30 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                       style={{cursor:rem>0&&!coAsgnsIds.has(a.id)?"grab":"default"}}
                     >
                       <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
-                        <span style={{fontSize:13,fontWeight:700,color:c.tx}}>{sub?.code} — {sub?.name}</span>
-                        {sub?.consecutiveAllowed===-1&&<span style={{fontSize:9,background:"#EFF6FF",color:"#1E40AF",padding:"1px 5px",borderRadius:8,fontWeight:700}}>🔀NP</span>}
-                        {sub?.consecutiveAllowed===-2&&<span style={{fontSize:9,background:"#FDF4FF",color:"#6B21A8",padding:"1px 5px",borderRadius:8,fontWeight:700}}>🏛️เศรษฐ-วิศวะ</span>}
-                        {sub?.consecutiveAllowed>0&&<span style={{fontSize:9,background:"#FEF3C7",color:"#92400E",padding:"1px 5px",borderRadius:8,fontWeight:700}}>⚡{sub.consecutiveAllowed}ติด</span>}
+                        <span style={{fontSize:11,fontWeight:700,color:c.tx,lineHeight:1.3}}>{sub?.code}<br/>{sub?.name}</span>
+                        {sub?.consecutiveAllowed===-1&&<span style={{fontSize:8,background:"#EFF6FF",color:"#1E40AF",padding:"1px 4px",borderRadius:6,fontWeight:700}}>NP</span>}
+                        {sub?.consecutiveAllowed===-2&&<span style={{fontSize:8,background:"#FDF4FF",color:"#6B21A8",padding:"1px 4px",borderRadius:6,fontWeight:700}}>เศรษฐ-วิศวะ</span>}
+                        {sub?.consecutiveAllowed>0&&<span style={{fontSize:8,background:"#FEF3C7",color:"#92400E",padding:"1px 4px",borderRadius:6,fontWeight:700}}>⚡{sub.consecutiveAllowed}ติด</span>}
                       </div>
-                      {(()=>{const sr=S.specialRooms.find(r=>r.id===sub?.specialRoomId);return sr?<div style={{fontSize:10,color:"#7C3AED",marginTop:2}}>📍 {sr.name}</div>:null;})()}
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
-                        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                      {(()=>{const sr=S.specialRooms.find(r=>r.id===sub?.specialRoomId);return sr?<div style={{fontSize:8,color:"#7C3AED",marginTop:1}}>📍 {sr.name}</div>:null;})()}
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:5}}>
+                        <div style={{display:"flex",gap:2,flexWrap:"wrap"}}>
                           {a.roomIds.map(rid=>(
-                            <span key={rid} style={{background:"rgba(0,0,0,0.1)",padding:"2px 8px",borderRadius:10,fontSize:11,fontWeight:600}}>{S.rooms.find(r=>r.id===rid)?.name}</span>
+                            <span key={rid} style={{background:"rgba(0,0,0,0.1)",padding:"1px 6px",borderRadius:8,fontSize:9,fontWeight:600}}>{S.rooms.find(r=>r.id===rid)?.name}</span>
                           ))}
                         </div>
-                        <span style={{background:rem>0?c.bg:"#9CA3AF",color:"#fff",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>{rem}/{totalForCard}</span>
+                        <span style={{background:rem>0?c.bg:"#9CA3AF",color:"#fff",padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:700}}>{rem}/{totalForCard}</span>
                       </div>
                     </div>
                     {/* ข้อ 4: เพิ่มครูร่วมบน sidebar */}
-                    <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid rgba(0,0,0,0.07)"}}>
+                    <div style={{marginTop:5,paddingTop:5,borderTop:"1px solid rgba(0,0,0,0.07)"}}>
                       {coTeachers2.map((ct2,ci)=>(
                           <div key={ct2.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
-                            <span style={{fontSize:11,color:c.tx}}>ร่วม {ci+1}: {ct2.prefix}{ct2.firstName}</span>
+                            <span style={{fontSize:9,color:c.tx}}>ร่วม: {ct2.firstName}</span>
                             <button onClick={()=>setCardCoMap(p=>({...p,[a.id]:coIds2.filter(id=>id!==ct2.id)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,fontSize:11}}>✕</button>
                           </div>
                         ))}
-                        {coTeachers2.length<4&&<button onClick={()=>setCardCoM(a.id)} style={{fontSize:11,color:c.tx,background:"rgba(0,0,0,0.06)",border:"none",borderRadius:6,padding:"3px 8px",cursor:"pointer",width:"100%",textAlign:"left"}}>+ เพิ่มครูสอนร่วม ({coTeachers2.length}/4)</button>}
+                        {coTeachers2.length<4&&<button onClick={()=>setCardCoM(a.id)} style={{fontSize:9,color:c.tx,background:"rgba(0,0,0,0.06)",border:"none",borderRadius:6,padding:"2px 6px",cursor:"pointer",width:"100%",textAlign:"left"}}>+ ครูร่วม ({coTeachers2.length}/4)</button>}
                     </div>
                   </div>
                 );
