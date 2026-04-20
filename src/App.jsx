@@ -39,6 +39,47 @@ const fsSetPermissions=async(uid,data)=>{
   await setDoc(doc(db,"permissions",uid),data,{merge:true});
 };
 
+// ===== FIRESTORE TIMETABLE HELPERS (Realtime) =====
+const DATA_FIELDS = ["levels","plans","depts","teachers","subjects","rooms","specialRooms","assigns","meetings","schedule","locks"];
+
+// Save ข้อมูลทั้งหมดไป Firestore (merge เพื่อไม่ทับ _init)
+const fsSaveTimetable = async (divId, data) => {
+  const {db} = getFB(); if(!db) return;
+  // Firestore document มีขนาดจำกัด 1MB — แยก schedule ออกเป็น subcollection ถ้าใหญ่
+  const payload = {};
+  DATA_FIELDS.forEach(f => { if(data[f] !== undefined) payload[f] = data[f]; });
+  if(data.schoolHeader) payload.schoolHeader = data.schoolHeader;
+  if(data.academicYear) payload.academicYear = data.academicYear;
+  await setDoc(doc(db,"timetable",divId), payload, {merge:true});
+};
+
+// Subscribe realtime — returns unsubscribe function
+const fsSubscribeTimetable = (divId, onData) => {
+  const {db} = getFB(); if(!db) return ()=>{};
+  return onSnapshot(doc(db,"timetable",divId), (snap) => {
+    if(snap.exists()) onData(snap.data());
+  }, (err) => console.warn("Firestore subscribe error:", err));
+};
+
+// ===== FIRESTORE TIMETABLE HELPERS (Realtime) =====
+const DATA_FIELDS = ["levels","plans","depts","teachers","subjects","rooms","specialRooms","assigns","meetings","schedule","locks"];
+
+const fsSaveTimetable = async (divId, data) => {
+  const {db} = getFB(); if(!db) return;
+  const payload = {};
+  DATA_FIELDS.forEach(f => { if(data[f] !== undefined) payload[f] = data[f]; });
+  if(data.schoolHeader) payload.schoolHeader = data.schoolHeader;
+  if(data.academicYear) payload.academicYear = data.academicYear;
+  await setDoc(doc(db,"timetable",divId), payload, {merge:true});
+};
+
+const fsSubscribeTimetable = (divId, onData) => {
+  const {db} = getFB(); if(!db) return ()=>{};
+  return onSnapshot(doc(db,"timetable",divId), (snap) => {
+    if(snap.exists()) onData(snap.data());
+  }, (err) => console.warn("Firestore subscribe error:", err));
+};
+
 // ===== LOGIN SCREEN =====
 function LoginScreen({onLogin}){
   const [loading,setLoading]=useState(false);
@@ -600,14 +641,7 @@ export default function App() {
   useEffect(()=>saveLS("academicYear",academicYear),[academicYear]);
   useEffect(()=>{
     saveLS("schoolHeader",schoolHeader);
-    // sync ไป GAS เฉพาะ logo ที่เป็น URL (ไม่ sync base64 เพราะใหญ่เกิน)
-    if(schoolHeader.logo&&!schoolHeader.logo.startsWith("data:")&&GAS_URL&&!GAS_URL.includes("YOUR_DEPLOYMENT_ID")){
-      clearTimeout(saveTimer.current);
-      saveTimer.current=setTimeout(()=>{
-        setSyncing(true);
-        gasPost(divId,{...stateRef.current,schoolHeader,academicYear}).catch(()=>{}).finally(()=>setSyncing(false));
-      },1500);
-    }
+    if(fsReadyRef.current) syncToFirestore();
   },[schoolHeader]);
   // บันทึก division ที่เลือกไว้
   useEffect(()=>{ localStorage.setItem("dara_division",divId); },[divId]);
@@ -635,27 +669,36 @@ export default function App() {
     setSchedule(loadLS(newDivId+"_schedule",{}));
     setLocks(loadLS(newDivId+"_locks",{}));
     setGasReady(false);
+    fsReadyRef.current=false;
     setPage("dashboard");
     st("เปลี่ยนเป็น "+d.name);
   };
 
+  // ===== FIRESTORE REALTIME SYNC =====
   const saveTimer=useRef(null);
-  const syncToGas=useCallback(()=>{
-    if(!GAS_URL||GAS_URL.includes("YOUR_DEPLOYMENT_ID"))return;
+  const fsReadyRef=useRef(false); // กัน loop: onSnapshot trigger → setState → save → onSnapshot
+
+  // debounced save ไป Firestore (500ms หลังจากมีการเปลี่ยนแปลง)
+  const syncToFirestore=useCallback(()=>{
+    const {db}=getFB(); if(!db) return;
     clearTimeout(saveTimer.current);
-    saveTimer.current=setTimeout(()=>{
+    saveTimer.current=setTimeout(async()=>{
       setSyncing(true);
-      gasPost(divId, stateRef.current).catch(()=>{}).finally(()=>setSyncing(false));
-    },1500);
+      try{
+        await fsSaveTimetable(divId,{...stateRef.current,schoolHeader:shRef.current?.schoolHeader,academicYear:shRef.current?.academicYear});
+      }catch(e){console.warn("Firestore save error:",e);}
+      setSyncing(false);
+    },500);
   },[divId]);
 
-  // โหลดจาก GAS ตอนเริ่ม — ทับ localStorage เฉพาะเมื่อ GAS มีข้อมูลจริง
+  // Subscribe realtime onSnapshot เมื่อ login และเมื่อ switch division
   useEffect(()=>{
-    if(!GAS_URL||GAS_URL.includes("YOUR_DEPLOYMENT_ID"))return;
+    const {db}=getFB(); if(!db||!authUser) return;
+    fsReadyRef.current=false;
     setSyncing(true);
-    gasGet(divId).then(d=>{
-      if(d){
-        // ทับเฉพาะ field ที่มีข้อมูลจริง (array ไม่ว่าง หรือ object ไม่ว่าง)
+    const unsub=fsSubscribeTimetable(divId,(d)=>{
+      if(!fsReadyRef.current){
+        // โหลดครั้งแรก: ทับข้อมูลจาก Firestore
         if(d.levels?.length)       setLevels(d.levels);
         if(d.plans?.length)        setPlans(d.plans);
         if(d.depts?.length)        setDepts(d.depts);
@@ -667,26 +710,43 @@ export default function App() {
         if(d.meetings?.length)     setMeetings(d.meetings);
         if(d.schedule&&Object.keys(d.schedule).length) setSchedule(d.schedule);
         if(d.locks&&Object.keys(d.locks).length)       setLocks(d.locks);
-        // โหลด schoolHeader จาก GAS (เพื่อให้โลโก้ URL ตรงกันทุกเครื่อง)
-        if(d.schoolHeader?.name)setSchoolHeader(sh=>({...sh,...d.schoolHeader}));
-        if(d.academicYear?.year)setAcademicYear(ay=>({...ay,...d.academicYear}));
-        setGasReady(true);
-      } else { setGasReady(true); }
-    }).catch(()=>{ setGasReady(true); }).finally(()=>setSyncing(false));
-  },[divId]);
+        if(d.schoolHeader?.name)   setSchoolHeader(sh=>({...sh,...d.schoolHeader}));
+        if(d.academicYear?.year)   setAcademicYear(ay=>({...ay,...d.academicYear}));
+        fsReadyRef.current=true;
+        setSyncing(false);
+        setGasReady(true); // backward compat
+      } else {
+        // Realtime update จากเครื่องอื่น — อัพเดท state ทันที
+        if(d.levels)       setLevels(d.levels);
+        if(d.plans)        setPlans(d.plans);
+        if(d.depts)        setDepts(d.depts);
+        if(d.teachers)     setTeachers(d.teachers);
+        if(d.subjects)     setSubjects(d.subjects);
+        if(d.rooms)        setRooms(d.rooms);
+        if(d.specialRooms) setSpecialRooms(d.specialRooms);
+        if(d.assigns)      setAssigns(d.assigns);
+        if(d.meetings)     setMeetings(d.meetings);
+        if(d.schedule)     setSchedule(d.schedule);
+        if(d.locks)        setLocks(d.locks);
+        if(d.schoolHeader?.name) setSchoolHeader(sh=>({...sh,...d.schoolHeader}));
+        if(d.academicYear?.year) setAcademicYear(ay=>({...ay,...d.academicYear}));
+      }
+    });
+    return ()=>{ unsub(); fsReadyRef.current=false; };
+  },[divId, authUser]);
 
-  // Auto-save ไป localStorage + GAS เมื่อข้อมูลเปลี่ยน (per-division key)
-  useEffect(()=>{ saveLS(divId+"_levels",levels);   if(gasReady) syncToGas(); },[levels,gasReady]);
-  useEffect(()=>{ saveLS(divId+"_plans",plans);     if(gasReady) syncToGas(); },[plans,gasReady]);
-  useEffect(()=>{ saveLS(divId+"_depts",depts);     if(gasReady) syncToGas(); },[depts,gasReady]);
-  useEffect(()=>{ saveLS(divId+"_teachers",teachers); if(gasReady) syncToGas(); },[teachers,gasReady]);
-  useEffect(()=>{ saveLS(divId+"_subjects",subjects); if(gasReady) syncToGas(); },[subjects,gasReady]);
-  useEffect(()=>{ saveLS(divId+"_rooms",rooms);     if(gasReady) syncToGas(); },[rooms,gasReady]);
-  useEffect(()=>{ saveLS(divId+"_specialRooms",specialRooms); if(gasReady) syncToGas(); },[specialRooms,gasReady]);
-  useEffect(()=>{ saveLS(divId+"_assigns",assigns); if(gasReady) syncToGas(); },[assigns,gasReady]);
-  useEffect(()=>{ saveLS(divId+"_meetings",meetings); if(gasReady) syncToGas(); },[meetings,gasReady]);
-  useEffect(()=>{ saveLS(divId+"_schedule",schedule); if(gasReady) syncToGas(); },[schedule,gasReady]);
-  useEffect(()=>{ saveLS(divId+"_locks",locks);     if(gasReady) syncToGas(); },[locks,gasReady]);
+  // Auto-save ไป localStorage (cache offline) + Firestore เมื่อข้อมูลเปลี่ยน
+  useEffect(()=>{ saveLS(divId+"_levels",levels);       if(fsReadyRef.current) syncToFirestore(); },[levels]);
+  useEffect(()=>{ saveLS(divId+"_plans",plans);         if(fsReadyRef.current) syncToFirestore(); },[plans]);
+  useEffect(()=>{ saveLS(divId+"_depts",depts);         if(fsReadyRef.current) syncToFirestore(); },[depts]);
+  useEffect(()=>{ saveLS(divId+"_teachers",teachers);   if(fsReadyRef.current) syncToFirestore(); },[teachers]);
+  useEffect(()=>{ saveLS(divId+"_subjects",subjects);   if(fsReadyRef.current) syncToFirestore(); },[subjects]);
+  useEffect(()=>{ saveLS(divId+"_rooms",rooms);         if(fsReadyRef.current) syncToFirestore(); },[rooms]);
+  useEffect(()=>{ saveLS(divId+"_specialRooms",specialRooms); if(fsReadyRef.current) syncToFirestore(); },[specialRooms]);
+  useEffect(()=>{ saveLS(divId+"_assigns",assigns);     if(fsReadyRef.current) syncToFirestore(); },[assigns]);
+  useEffect(()=>{ saveLS(divId+"_meetings",meetings);   if(fsReadyRef.current) syncToFirestore(); },[meetings]);
+  useEffect(()=>{ saveLS(divId+"_schedule",schedule);   if(fsReadyRef.current) syncToFirestore(); },[schedule]);
+  useEffect(()=>{ saveLS(divId+"_locks",locks);         if(fsReadyRef.current) syncToFirestore(); },[locks]);
 
   const st=(m,t="success")=>setToast({message:m,type:t});
   const gc=did=>{const i=depts.findIndex(d=>d.id===did);return DC[i%DC.length]||DC[0]};
@@ -789,13 +849,9 @@ export default function App() {
         <h2 style={{fontSize:17,fontWeight:700,color:"#1A1A1A",letterSpacing:"-0.01em"}}>{nav.find(n=>n.id===page)?.label}</h2>
         <span style={{fontSize:11,background:"#FEE2E2",color:CRED,padding:"3px 12px",borderRadius:20,fontWeight:700,border:"1px solid #FECACA"}}>{div.short}</span>
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:10}}>
-          {GAS_URL&&!GAS_URL.includes("YOUR_DEPLOYMENT_ID")
-            ?syncing
-              ?<span style={{fontSize:12,color:"#D97706",display:"flex",alignItems:"center",gap:4}}>⏳ กำลัง sync...</span>
-              :gasReady
-                ?<span style={{fontSize:12,color:"#059669",display:"flex",alignItems:"center",gap:4}}>☁️ sync แล้ว</span>
-                :null
-            :<span style={{fontSize:12,color:"#9CA3AF",display:"flex",alignItems:"center",gap:4}}>💾 local only</span>
+          {syncing
+            ?<span style={{fontSize:12,color:"#D97706",display:"flex",alignItems:"center",gap:4}}>⏳ กำลัง sync...</span>
+            :<span style={{fontSize:12,color:"#059669",display:"flex",alignItems:"center",gap:4}}>☁️ sync แล้ว · อัตโนมัติ</span>
           }
           {firebaseConfigured&&authUser?.photoURL&&(
             <img src={authUser.photoURL} alt="avatar" style={{width:32,height:32,borderRadius:"50%",objectFit:"cover",border:"2px solid #E5E7EB"}}/>
@@ -2544,11 +2600,8 @@ function Settings({S,U,st,ay,setAY,sh,setSH,div}){
       .filter(k=>k.startsWith("dara_"+div?.id)||k==="dara_division")
       .forEach(k=>localStorage.removeItem(k));
     // force sync ข้อมูลใหม่ไป GAS ทันที
-    if(GAS_URL&&!GAS_URL.includes("YOUR_DEPLOYMENT_ID")){
-      setSyncing(true);
-      try{ await gasPost(div?.id||"m2", newState); }catch(e){}
-      setSyncing(false);
-    }
+    const {db}=getFB();
+    if(db){ setSyncing(true); try{ await fsSaveTimetable(div?.id||"m2",newState); }catch(e){} setSyncing(false); }
   };
 
   const resetAll=async()=>{
@@ -2567,11 +2620,8 @@ function Settings({S,U,st,ay,setAY,sh,setSH,div}){
     U.setSchedule({});U.setLocks({});
     // ล้าง schedule ใน localStorage และ sync
     ["schedule","locks"].forEach(k=>localStorage.removeItem("dara_"+div?.id+"_"+k));
-    if(GAS_URL&&!GAS_URL.includes("YOUR_DEPLOYMENT_ID")){
-      setSyncing(true);
-      try{ await gasPost(div?.id||"m2",{...stateRef.current,schedule:{},locks:{}}); }catch(e){}
-      setSyncing(false);
-    }
+    const {db:db2}=getFB();
+    if(db2){ setSyncing(true); try{ await fsSaveTimetable(div?.id||"m2",{...stateRef.current,schedule:{},locks:{}}); }catch(e){} setSyncing(false); }
     st("ล้างตารางสอนแล้ว และ sync แล้ว","warning");
   };
   const handleLogo=(e)=>{const f=e.target.files?.[0];if(!f)return;const reader=new FileReader();reader.onload=ev=>{setSH(p=>({...p,logo:ev.target.result}));st("อัพโหลดโลโก้สำเร็จ")};reader.readAsDataURL(f);e.target.value=""};
