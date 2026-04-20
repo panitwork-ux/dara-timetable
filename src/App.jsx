@@ -2521,17 +2521,42 @@ function Reports({S,st,gc,ay,sh}){
 /* ===== SETTINGS (Fix#4: academic year, school header, reset) ===== */
 function Settings({S,U,st,ay,setAY,sh,setSH,div}){
   const logoRef=useRef(null);
-  const resetAll=()=>{
+  // helper: ล้าง localStorage dara_ keys และ force sync ไป GAS
+  const clearLocalAndSync=async(newState)=>{
+    // ล้าง localStorage ทุก key ของ division นี้
+    Object.keys(localStorage)
+      .filter(k=>k.startsWith("dara_"+div?.id)||k==="dara_division")
+      .forEach(k=>localStorage.removeItem(k));
+    // force sync ข้อมูลใหม่ไป GAS ทันที
+    if(GAS_URL&&!GAS_URL.includes("YOUR_DEPLOYMENT_ID")){
+      setSyncing(true);
+      try{ await gasPost(div?.id||"m2", newState); }catch(e){}
+      setSyncing(false);
+    }
+  };
+
+  const resetAll=async()=>{
     if(!confirm("⚠️ คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลทั้งหมด?\nข้อมูลที่จัดตารางไว้จะหายทั้งหมด!"))return;
     if(!confirm("ยืนยันอีกครั้ง — ลบข้อมูลทั้งหมดและเริ่มต้นใหม่?"))return;
-    U.setLevels((div?.defaultLevels||["ระดับ 1","ระดับ 2","ระดับ 3"]).map(n=>({id:gid(),name:n})));
+    const newLevels=(div?.defaultLevels||["ระดับ 1","ระดับ 2","ระดับ 3"]).map(n=>({id:gid(),name:n}));
+    const emptyState={levels:newLevels,plans:[],depts:[],teachers:[],subjects:[],rooms:[],specialRooms:[],assigns:[],meetings:[],schedule:{},locks:{}};
+    U.setLevels(newLevels);
     U.setPlans([]);U.setDepts([]);U.setTeachers([]);U.setSubjects([]);
-    U.setRooms([]);U.setAssigns([]);U.setMeetings([]);U.setSchedule({});U.setLocks({});
-    st("รีเซ็ทข้อมูลทั้งหมดแล้ว","warning");
+    U.setRooms([]);U.setSpecialRooms([]);U.setAssigns([]);U.setMeetings([]);U.setSchedule({});U.setLocks({});
+    await clearLocalAndSync(emptyState);
+    st("รีเซ็ทข้อมูลทั้งหมดแล้ว และ sync แล้ว","warning");
   };
-  const resetScheduleOnly=()=>{
+  const resetScheduleOnly=async()=>{
     if(!confirm("ลบเฉพาะข้อมูลตารางสอน (ข้อมูลครู/วิชา/ห้องยังอยู่)?"))return;
-    U.setSchedule({});U.setLocks({});st("ล้างตารางสอนแล้ว","warning");
+    U.setSchedule({});U.setLocks({});
+    // ล้าง schedule ใน localStorage และ sync
+    ["schedule","locks"].forEach(k=>localStorage.removeItem("dara_"+div?.id+"_"+k));
+    if(GAS_URL&&!GAS_URL.includes("YOUR_DEPLOYMENT_ID")){
+      setSyncing(true);
+      try{ await gasPost(div?.id||"m2",{...stateRef.current,schedule:{},locks:{}}); }catch(e){}
+      setSyncing(false);
+    }
+    st("ล้างตารางสอนแล้ว และ sync แล้ว","warning");
   };
   const handleLogo=(e)=>{const f=e.target.files?.[0];if(!f)return;const reader=new FileReader();reader.onload=ev=>{setSH(p=>({...p,logo:ev.target.result}));st("อัพโหลดโลโก้สำเร็จ")};reader.readAsDataURL(f);e.target.value=""};
 
@@ -2574,6 +2599,11 @@ function Settings({S,U,st,ay,setAY,sh,setSH,div}){
         <h3 style={{fontSize:16,fontWeight:700,marginBottom:20,color:"#DC2626"}}>รีเซ็ทข้อมูล</h3>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           <button onClick={resetScheduleOnly} style={BO("#D97706")}><Icon name="trash" size={16}/>ล้างเฉพาะตารางสอน</button>
+          <button onClick={()=>{
+            Object.keys(localStorage).filter(k=>k.startsWith("dara_")).forEach(k=>localStorage.removeItem(k));
+            st("ล้าง localStorage แล้ว — กำลัง reload...","warning");
+            setTimeout(()=>window.location.reload(),1000);
+          }} style={BO("#6B7280")}><Icon name="x" size={16}/>ล้าง Cache (แก้ข้อมูลไม่ตรง)</button>
           <div style={{fontSize:12,color:"#6B7280"}}>ลบข้อมูลตารางสอนที่จัดไว้ แต่ข้อมูลครู วิชา ห้อง ยังอยู่</div>
           <div style={{borderTop:"1px solid #E5E7EB",paddingTop:12,marginTop:4}}/>
           <button onClick={resetAll} style={BS("#DC2626")}><Icon name="trash" size={16}/>รีเซ็ทข้อมูลทั้งหมด</button>
