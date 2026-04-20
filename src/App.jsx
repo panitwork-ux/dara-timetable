@@ -60,26 +60,6 @@ const fsSubscribeTimetable = (divId, onData) => {
     if(snap.exists()) onData(snap.data());
   }, (err) => console.warn("Firestore subscribe error:", err));
 };
-
-// ===== FIRESTORE TIMETABLE HELPERS (Realtime) =====
-const DATA_FIELDS = ["levels","plans","depts","teachers","subjects","rooms","specialRooms","assigns","meetings","schedule","locks"];
-
-const fsSaveTimetable = async (divId, data) => {
-  const {db} = getFB(); if(!db) return;
-  const payload = {};
-  DATA_FIELDS.forEach(f => { if(data[f] !== undefined) payload[f] = data[f]; });
-  if(data.schoolHeader) payload.schoolHeader = data.schoolHeader;
-  if(data.academicYear) payload.academicYear = data.academicYear;
-  await setDoc(doc(db,"timetable",divId), payload, {merge:true});
-};
-
-const fsSubscribeTimetable = (divId, onData) => {
-  const {db} = getFB(); if(!db) return ()=>{};
-  return onSnapshot(doc(db,"timetable",divId), (snap) => {
-    if(snap.exists()) onData(snap.data());
-  }, (err) => console.warn("Firestore subscribe error:", err));
-};
-
 // ===== LOGIN SCREEN =====
 function LoginScreen({onLogin}){
   const [loading,setLoading]=useState(false);
