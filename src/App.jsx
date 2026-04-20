@@ -2626,8 +2626,12 @@ function Settings({S,U,st,ay,setAY,sh,setSH,div}){
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           <button onClick={resetScheduleOnly} style={BO("#D97706")}><Icon name="trash" size={16}/>ล้างเฉพาะตารางสอน</button>
           <button onClick={()=>{
-            Object.keys(localStorage).filter(k=>k.startsWith("dara_")).forEach(k=>localStorage.removeItem(k));
-            st("ล้าง localStorage แล้ว — กำลัง reload...","warning");
+            // เว้น academicYear และ schoolHeader ไว้ ลบแค่ข้อมูลหลัก
+            const keepKeys=["dara_academicYear","dara_schoolHeader","dara_division"];
+            Object.keys(localStorage)
+              .filter(k=>k.startsWith("dara_")&&!keepKeys.includes(k))
+              .forEach(k=>localStorage.removeItem(k));
+            st("ล้าง Cache แล้ว — กำลัง reload...","warning");
             setTimeout(()=>window.location.reload(),1000);
           }} style={BO("#6B7280")}><Icon name="x" size={16}/>ล้าง Cache (แก้ข้อมูลไม่ตรง)</button>
           <div style={{fontSize:12,color:"#6B7280"}}>ลบข้อมูลตารางสอนที่จัดไว้ แต่ข้อมูลครู วิชา ห้อง ยังอยู่</div>
