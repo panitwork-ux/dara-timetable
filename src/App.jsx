@@ -365,16 +365,18 @@ const PERIODS = [
   { id: 7, time: "14.50-15.40" },
 ];
 const DC = [
-  { bg:"#DC2626",lt:"#FEE2E2",tx:"#991B1B",bd:"#FECACA" },
-  { bg:"#2563EB",lt:"#DBEAFE",tx:"#1E40AF",bd:"#BFDBFE" },
-  { bg:"#059669",lt:"#D1FAE5",tx:"#065F46",bd:"#A7F3D0" },
-  { bg:"#D97706",lt:"#FEF3C7",tx:"#92400E",bd:"#FDE68A" },
-  { bg:"#7C3AED",lt:"#EDE9FE",tx:"#5B21B6",bd:"#DDD6FE" },
-  { bg:"#DB2777",lt:"#FCE7F3",tx:"#9D174D",bd:"#FBCFE8" },
-  { bg:"#0891B2",lt:"#CFFAFE",tx:"#155E75",bd:"#A5F3FC" },
-  { bg:"#65A30D",lt:"#ECFCCB",tx:"#3F6212",bd:"#D9F99D" },
-  { bg:"#EA580C",lt:"#FFEDD5",tx:"#9A3412",bd:"#FED7AA" },
-  { bg:"#4F46E5",lt:"#E0E7FF",tx:"#3730A3",bd:"#C7D2FE" },
+  { bg:"#DC2626",lt:"#FEE2E2",tx:"#991B1B",bd:"#FECACA" }, // แดง
+  { bg:"#2563EB",lt:"#DBEAFE",tx:"#1E40AF",bd:"#BFDBFE" }, // น้ำเงิน
+  { bg:"#059669",lt:"#D1FAE5",tx:"#065F46",bd:"#A7F3D0" }, // เขียว
+  { bg:"#D97706",lt:"#FEF3C7",tx:"#92400E",bd:"#FDE68A" }, // เหลืองส้ม
+  { bg:"#7C3AED",lt:"#EDE9FE",tx:"#5B21B6",bd:"#DDD6FE" }, // ม่วง
+  { bg:"#DB2777",lt:"#FCE7F3",tx:"#9D174D",bd:"#FBCFE8" }, // ชมพู
+  { bg:"#0E7490",lt:"#CFFAFE",tx:"#164E63",bd:"#A5F3FC" }, // ฟ้าเข้ม
+  { bg:"#4D7C0F",lt:"#ECFCCB",tx:"#1A2E05",bd:"#BEF264" }, // เขียวเข้ม
+  { bg:"#C2410C",lt:"#FFEDD5",tx:"#7C2D12",bd:"#FDBA74" }, // ส้มเข้ม
+  { bg:"#0F766E",lt:"#CCFBF1",tx:"#134E4A",bd:"#5EEAD4" }, // เขียวน้ำทะเล
+  { bg:"#6D28D9",lt:"#F5F3FF",tx:"#4C1D95",bd:"#C4B5FD" }, // ม่วงเข้ม
+  { bg:"#B45309",lt:"#FEF3C7",tx:"#78350F",bd:"#FCD34D" }, // น้ำตาลทอง
 ];
 const SROLES = [
   { id:"academic",name:"ฝ่ายวิชาการ",blocked:[{day:"พฤหัสบดี",periods:[5,6,7]}] },
