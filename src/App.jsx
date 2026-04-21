@@ -368,6 +368,71 @@ const PERIODS = [
 // ชื่อวิชาย่อ: ใช้ shortName ถ้ามี ไม่งั้นใช้ name เต็ม
 const subDisplayName = (sub) => sub?.shortName||sub?.name||"";
 
+
+// ===== SearchSelect — Searchable Dropdown =====
+function SearchSelect({value, onChange, options, placeholder="-- เลือก --", style={}, disabled=false}){
+  const [open,setOpen]=useState(false);
+  const [q,setQ]=useState("");
+  const ref=useRef(null);
+  const inputRef=useRef(null);
+  const selected=options.find(o=>o.value===value);
+
+  useEffect(()=>{
+    const handler=(e)=>{ if(ref.current&&!ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown",handler);
+    return()=>document.removeEventListener("mousedown",handler);
+  },[]);
+
+  useEffect(()=>{ if(open) setTimeout(()=>inputRef.current?.focus(),50); },[open]);
+
+  const filtered=q.trim()
+    ?options.filter(o=>o.label.toLowerCase().includes(q.toLowerCase()))
+    :options;
+
+  return(
+    <div ref={ref} style={{position:"relative",width:"100%",...style}}>
+      <div
+        onClick={()=>{ if(!disabled){setOpen(v=>!v);setQ("");} }}
+        style={{...IS,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:disabled?"default":"pointer",background:disabled?"#F3F4F6":"#F9FAFB",userSelect:"none",paddingRight:36}}
+      >
+        <span style={{color:selected?"#111":"#9CA3AF",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+          {selected?selected.label:placeholder}
+        </span>
+        <span style={{position:"absolute",right:12,color:"#9CA3AF",fontSize:10,pointerEvents:"none"}}>{open?"▲":"▼"}</span>
+      </div>
+      {open&&(
+        <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#fff",border:"1.5px solid #E5E7EB",borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,0.12)",zIndex:9999,maxHeight:260,display:"flex",flexDirection:"column"}}>
+          <div style={{padding:"8px 8px 4px"}}>
+            <input
+              ref={inputRef}
+              value={q}
+              onChange={e=>setQ(e.target.value)}
+              placeholder="พิมพ์เพื่อค้นหา..."
+              style={{width:"100%",padding:"7px 10px",border:"1.5px solid #E5E7EB",borderRadius:8,fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}
+              onKeyDown={e=>{
+                if(e.key==="Enter"&&filtered.length>0){onChange(filtered[0].value);setOpen(false);setQ("");}
+                if(e.key==="Escape"){setOpen(false);setQ("");}
+              }}
+            />
+          </div>
+          <div style={{overflowY:"auto",maxHeight:200}}>
+            {filtered.length===0
+              ?<div style={{padding:"10px 12px",color:"#9CA3AF",fontSize:13}}>ไม่พบผลลัพธ์</div>
+              :filtered.map(o=>(
+                <div key={o.value} onClick={()=>{onChange(o.value);setOpen(false);setQ("");}}
+                  style={{padding:"9px 12px",cursor:"pointer",fontSize:13,background:o.value===value?"#FEF2F2":"transparent",color:o.value===value?CRED:"#111",fontWeight:o.value===value?700:400}}
+                  onMouseEnter={e=>e.currentTarget.style.background=o.value===value?"#FEF2F2":"#F9FAFB"}
+                  onMouseLeave={e=>e.currentTarget.style.background=o.value===value?"#FEF2F2":"transparent"}
+                >{o.label}</div>
+              ))
+            }
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const DC = [
   { bg:"#DC2626",lt:"#FEE2E2",tx:"#991B1B",bd:"#FECACA" }, // แดง
   { bg:"#2563EB",lt:"#DBEAFE",tx:"#1E40AF",bd:"#BFDBFE" }, // น้ำเงิน
@@ -1171,7 +1236,7 @@ function Teachers({S,U,st,gc}){
           <div><label style={LS}>ชื่อ</label><input style={IS} value={form.firstName} onChange={e=>setForm(p=>({...p,firstName:e.target.value}))}/></div>
           <div><label style={LS}>นามสกุล</label><input style={IS} value={form.lastName} onChange={e=>setForm(p=>({...p,lastName:e.target.value}))}/></div>
         </div>
-        <div><label style={LS}>กลุ่มสาระ</label><select style={IS} value={form.departmentId} onChange={e=>setForm(p=>({...p,departmentId:e.target.value}))}><option value="">--</option>{S.depts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
+        <div><label style={LS}>กลุ่มสาระ</label><SearchSelect value={form.departmentId} onChange={v=>setForm(p=>({...p,departmentId:v}))} options={[{value:"",label:"--"},...S.depts.map(d=>({value:d.id,label:d.name}))]} placeholder="-- เลือกกลุ่มสาระ --"/></div>
         <div><label style={LS}>คาบที่ได้รับ (ต่อสัปดาห์)</label><input type="number" min="0" style={IS} value={form.totalPeriods} onChange={e=>setForm(p=>({...p,totalPeriods:parseInt(e.target.value)||0}))}/></div>
         <div><label style={LS}>หน้าที่พิเศษ</label><div style={{display:"flex",gap:8}}>{SROLES.map(r=><button key={r.id} onClick={()=>toggleRole(r.id)} style={{padding:"8px 16px",borderRadius:10,border:`2px solid ${form.specialRoles.includes(r.id)?"#DC2626":"#D1D5DB"}`,background:form.specialRoles.includes(r.id)?"#FEE2E2":"#fff",fontSize:13,fontWeight:600,cursor:"pointer"}}>{form.specialRoles.includes(r.id)?"✓ ":""}{r.name}</button>)}</div></div>
         <button onClick={save} style={BS()}>{editId?"บันทึก":"เพิ่มครู"}</button>
@@ -1382,8 +1447,8 @@ function Subjects({S,U,st,gc}){
           <div><label style={LS}>หน่วยกิต</label><input type="number" min="0.5" step="0.5" style={IS} value={form.credits} onChange={e=>setForm(p=>({...p,credits:parseFloat(e.target.value)||0}))}/></div>
           <div><label style={LS}>คาบ/สัปดาห์</label><input type="number" min="1" style={IS} value={form.periodsPerWeek} onChange={e=>setForm(p=>({...p,periodsPerWeek:parseInt(e.target.value)||1}))}/></div>
         </div>
-        <div><label style={LS}>ระดับชั้น</label><select style={IS} value={form.levelId} onChange={e=>setForm(p=>({...p,levelId:e.target.value}))}><option value="">--</option>{S.levels.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
-        <div><label style={LS}>กลุ่มสาระ</label><select style={IS} value={form.departmentId} onChange={e=>setForm(p=>({...p,departmentId:e.target.value}))}><option value="">--</option>{S.depts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
+        <div><label style={LS}>ระดับชั้น</label><SearchSelect value={form.levelId} onChange={v=>setForm(p=>({...p,levelId:v}))} options={[{value:"",label:"--"},...S.levels.map(l=>({value:l.id,label:l.name}))]} placeholder="-- เลือกระดับชั้น --"/></div>
+        <div><label style={LS}>กลุ่มสาระ</label><SearchSelect value={form.departmentId} onChange={v=>setForm(p=>({...p,departmentId:v}))} options={[{value:"",label:"--"},...S.depts.map(d=>({value:d.id,label:d.name}))]} placeholder="-- เลือกกลุ่มสาระ --"/></div>
         <div><label style={LS}>ห้องพิเศษ (ถ้าต้องใช้) — ตรวจ conflict ข้ามทุกห้อง</label>
           <select style={IS} value={form.specialRoomId} onChange={e=>setForm(p=>({...p,specialRoomId:e.target.value}))}>
             <option value="">-- ไม่ใช้ห้องพิเศษ --</option>
@@ -1494,8 +1559,8 @@ function Assigns({S,U,st,gc}){
 
   return <div style={{animation:"fadeIn 0.3s"}}>
     <div style={{display:"flex",gap:12,marginBottom:24,alignItems:"center",flexWrap:"wrap"}}>
-      <select style={{...IS,maxWidth:280}} value={selDept} onChange={e=>{setSelDept(e.target.value);setSel("")}}><option value="">-- เลือกกลุ่มสาระก่อน --</option>{S.depts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select>
-      {selDept&&<select style={{...IS,maxWidth:350}} value={sel} onChange={e=>setSel(e.target.value)}><option value="">-- เลือกครู --</option>{deptTeachers.map(t=><option key={t.id} value={t.id}>{t.prefix}{t.firstName} {t.lastName}</option>)}</select>}
+      <SearchSelect value={selDept} onChange={v=>{setSelDept(v);setSel("")}} options={[{value:"",label:"-- เลือกกลุ่มสาระก่อน --"},...S.depts.map(d=>({value:d.id,label:d.name}))]} placeholder="-- เลือกกลุ่มสาระก่อน --" style={{maxWidth:280}}/>
+      {selDept&&<SearchSelect value={sel} onChange={v=>setSel(v)} options={[{value:"",label:"-- เลือกครู --"},...deptTeachers.map(t=>({value:t.id,label:`${t.prefix}${t.firstName} ${t.lastName}`}))]} placeholder="-- เลือกครู --" style={{maxWidth:350}}/>}
       {sel&&<button onClick={()=>{setForm({subjectId:"",roomIds:[],totalPeriods:0});setModal(true)}} style={BS()}><Icon name="plus" size={16}/>เพิ่มวิชา</button>}
     </div>
     {teacher&&<div>
@@ -1569,7 +1634,7 @@ function Assigns({S,U,st,gc}){
     </div>}
     <Modal open={modal} onClose={()=>setModal(false)} title="มอบหมายวิชา">
       <div style={{display:"flex",flexDirection:"column",gap:16}}>
-        <div><label style={LS}>วิชา (รหัส — ชื่อ) — เฉพาะกลุ่มสาระ{teacher?(" "+S.depts.find(d=>d.id===teacher.departmentId)?.name):""}</label><select style={IS} value={form.subjectId} onChange={e=>{setForm(p=>({...p,subjectId:e.target.value,roomIds:[]}))}}><option value="">--</option>{teacherDeptSubs.map(s=><option key={s.id} value={s.id}>{s.code} — {s.name} ({S.levels.find(l=>l.id===s.levelId)?.name})</option>)}</select></div>
+        <div><label style={LS}>วิชา (รหัส — ชื่อ) — เฉพาะกลุ่มสาระ{teacher?(" "+S.depts.find(d=>d.id===teacher.departmentId)?.name):""}</label><SearchSelect value={form.subjectId} onChange={v=>setForm(p=>({...p,subjectId:v,roomIds:[]}))} options={[{value:"",label:"--"},...teacherDeptSubs.map(s=>({value:s.id,label:`${s.code} — ${s.name} (${S.levels.find(l=>l.id===s.levelId)?.name||""})`}))]} placeholder="-- เลือกวิชา --"/></div>
         <div><label style={LS}>ห้อง (เฉพาะระดับของวิชา)</label><div style={{display:"flex",gap:8,flexWrap:"wrap",maxHeight:200,overflowY:"auto"}}>{filteredRooms.map(rm=><button key={rm.id} onClick={()=>setForm(p=>({...p,roomIds:p.roomIds.includes(rm.id)?p.roomIds.filter(r=>r!==rm.id):[...p.roomIds,rm.id]}))} style={{padding:"6px 14px",borderRadius:8,border:`2px solid ${form.roomIds.includes(rm.id)?"#DC2626":"#D1D5DB"}`,background:form.roomIds.includes(rm.id)?"#FEE2E2":"#fff",fontSize:13,fontWeight:600,cursor:"pointer"}}>{form.roomIds.includes(rm.id)?"✓ ":""}{rm.name}</button>)}</div></div>
         <div><label style={LS}>คาบรวม (0=อัตโนมัติ)</label><input type="number" min="0" style={IS} value={form.totalPeriods} onChange={e=>setForm(p=>({...p,totalPeriods:parseInt(e.target.value)||0}))}/></div>
         {remaining<=0&&<div style={{padding:12,background:"#FEE2E2",borderRadius:10,color:"#991B1B",fontSize:13,fontWeight:600}}>⚠️ คาบที่ได้รับหมดแล้ว!</div>}
@@ -1586,7 +1651,7 @@ function Meetings({S,U,st,gc}){
     <div style={{background:"#fff",borderRadius:14,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:24,maxWidth:600}}>
       <h3 style={{fontSize:16,fontWeight:700,marginBottom:16}}>เพิ่มคาบล็อค</h3>
       <div style={{display:"flex",flexDirection:"column",gap:16}}>
-        <div><label style={LS}>กลุ่มสาระ</label><select style={IS} value={form.departmentId} onChange={e=>setForm(p=>({...p,departmentId:e.target.value}))}><option value="">--</option>{S.depts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
+        <div><label style={LS}>กลุ่มสาระ</label><SearchSelect value={form.departmentId} onChange={v=>setForm(p=>({...p,departmentId:v}))} options={[{value:"",label:"--"},...S.depts.map(d=>({value:d.id,label:d.name}))]} placeholder="-- เลือกกลุ่มสาระ --"/></div>
         <div><label style={LS}>วัน</label><select style={IS} value={form.day} onChange={e=>setForm(p=>({...p,day:e.target.value}))}><option value="">--</option>{DAYS.map(d=><option key={d}>{d}</option>)}</select></div>
         <div><label style={LS}>คาบ</label><div style={{display:"flex",gap:8}}>{PERIODS.map(p=><button key={p.id} onClick={()=>setForm(prev=>({...prev,periods:prev.periods.includes(p.id)?prev.periods.filter(x=>x!==p.id):[...prev.periods,p.id]}))} style={{width:48,height:48,borderRadius:10,border:`2px solid ${form.periods.includes(p.id)?"#DC2626":"#D1D5DB"}`,background:form.periods.includes(p.id)?"#DC2626":"#fff",color:form.periods.includes(p.id)?"#fff":"#374151",fontSize:16,fontWeight:700,cursor:"pointer"}}>{p.id}</button>)}</div></div>
         <button onClick={()=>{if(!form.departmentId||!form.day||!form.periods.length){st("กรอกให้ครบ","error");return}U.setMeetings(p=>[...p,{id:gid(),...form}]);setForm({departmentId:"",day:"",periods:[]});st("เพิ่มสำเร็จ")}} style={BS()}>เพิ่มคาบล็อค</button>
@@ -1684,6 +1749,7 @@ function Scheduler({S,U,st,gc}){
   const [mode,setMode]=useState("teacher");
   const [selDept,setSelDept]=useState("");
   const [selT,setSelT]=useState("");
+  const [showWeekly,setShowWeekly]=useState(false);
   const [selRoom,setSelRoom]=useState("");
   const [drag,setDrag]=useState(null);
   const dragRef=useRef(null);  // ref สำหรับอ่านใน handleDrop กัน stale/race condition
@@ -1942,18 +2008,9 @@ function Scheduler({S,U,st,gc}){
   /* ── co-teacher dept+teacher selector ── */
   const CoTeacherSelect=({coSVal,setCoSFn,coDeptVal,setCoDeptFn,excludeId})=>(
     <div style={{display:"flex",flexDirection:"column",gap:8}}>
-      <select style={IS} value={coDeptVal} onChange={e=>{setCoDeptFn(e.target.value);setCoSFn("");}}>
-        <option value="">-- เลือกกลุ่มสาระก่อน --</option>
-        {S.depts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
-      </select>
+      <SearchSelect value={coDeptVal} onChange={v=>{setCoDeptFn(v);setCoSFn("");}} options={[{value:"",label:"-- เลือกกลุ่มสาระก่อน --"},...S.depts.map(d=>({value:d.id,label:d.name}))]} placeholder="-- เลือกกลุ่มสาระก่อน --"/>
       {coDeptVal&&(
-        <select style={IS} value={coSVal} onChange={e=>setCoSFn(e.target.value)}>
-          <option value="">-- เลือกครู --</option>
-          {S.teachers.filter(t=>t.departmentId===coDeptVal&&t.id!==excludeId).map(t=>{
-            const rem=(t.totalPeriods||0)-teacherScheduledTotal(t.id);
-            return <option key={t.id} value={t.id}>{t.prefix}{t.firstName} {t.lastName} — เหลือ {rem} คาบ</option>;
-          })}
-        </select>
+        <SearchSelect value={coSVal} onChange={v=>setCoSFn(v)} options={[{value:"",label:"-- เลือกครู --"},...S.teachers.filter(t=>t.departmentId===coDeptVal&&t.id!==excludeId).map(t=>{const rem=(t.totalPeriods||0)-teacherScheduledTotal(t.id);return{value:t.id,label:`${t.prefix}${t.firstName} ${t.lastName} — เหลือ ${rem} คาบ`}})]} placeholder="-- เลือกครู --"/>
       )}
     </div>
   );
@@ -2036,6 +2093,90 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
     </div>
   );
 
+  /* ── ตารางสรุปสัปดาห์ครู ── */
+  const renderTeacherWeeklySummary=()=>{
+    if(!selT||mode!=="teacher") return null;
+    const teacher=S.teachers.find(t=>t.id===selT);
+    const totalUsed=teacherScheduledTotal(selT);
+    const quota=teacher?.totalPeriods||0;
+    return (
+      <div style={{marginTop:24}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:showWeekly?10:0}}>
+          <button onClick={()=>setShowWeekly(v=>!v)} style={{display:"flex",alignItems:"center",gap:8,background:showWeekly?"#EFF6FF":"#fff",border:"1.5px solid #2563EB",borderRadius:10,padding:"7px 16px",cursor:"pointer",fontFamily:"inherit"}}>
+            <span style={{fontSize:13,fontWeight:700,color:"#1E40AF"}}>📋 ตารางสอนรวม — {teacher?.prefix}{teacher?.firstName} {teacher?.lastName}</span>
+            <span style={{fontSize:11,color:"#2563EB"}}>{showWeekly?"▲ ซ่อน":"▼ แสดง"}</span>
+          </button>
+          <span style={{fontSize:12,background:totalUsed>=quota?"#D1FAE5":"#FEF3C7",color:totalUsed>=quota?"#065F46":"#92400E",padding:"3px 12px",borderRadius:20,fontWeight:700}}>
+            จัดแล้ว {totalUsed}/{quota} คาบ {totalUsed>=quota?"✓":""}
+          </span>
+        </div>
+        {showWeekly&&<div style={{background:"#fff",borderRadius:14,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",overflow:"hidden",border:"1px solid rgba(0,0,0,0.05)"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed",minWidth:700}}>
+            <thead>
+              <tr>
+                <th style={{padding:"8px 10px",background:"#1E3A5F",color:"#fff",width:70,textAlign:"left",fontSize:12,fontWeight:700}}>วัน</th>
+                {PERIODS.map(p=>(
+                  <th key={p.id} style={{padding:"5px 2px",background:"#1E3A5F",textAlign:"center",borderLeft:"1px solid rgba(255,255,255,0.15)"}}>
+                    <div style={{fontSize:11,color:"#fff",fontWeight:700}}>คาบ {p.id}</div>
+                    <div style={{fontSize:9,color:"rgba(255,255,255,0.6)"}}>{p.time}</div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {DAYS.map((day,di)=>(
+                <tr key={day} style={{background:di%2===0?"#FFFFFF":"#F0F7FF",borderBottom:"1px solid #E0EEFF"}}>
+                  <td style={{padding:"8px 10px",fontWeight:700,fontSize:12,color:"#1E3A5F",borderRight:"2px solid #BFDBFE",background:"#EFF6FF"}}>{day}</td>
+                  {PERIODS.map(p=>{
+                    const blk=isBlk(selT,day,p.id);
+                    // หาทุกห้องที่ครูสอนในคาบนี้
+                    const roomsThisPeriod=[];
+                    Object.entries(S.schedule).forEach(([k,en])=>{
+                      if(!k.endsWith("_"+day+"_"+p.id)) return;
+                      en?.forEach(e=>{
+                        const coIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
+                        if(e.teacherId===selT||coIds.includes(selT)){
+                          const pts=k.split("_");
+                          const rmId=pts.slice(0,pts.length-2).join("_");
+                          const rm=S.rooms.find(r=>r.id===rmId);
+                          const sub=S.subjects.find(s=>s.id===e.subjectId);
+                          if(!roomsThisPeriod.find(x=>x.rmId===rmId))
+                            roomsThisPeriod.push({rmId,rmName:rm?.name||"?",subName:subDisplayName(sub)||"?"});
+                        }
+                      });
+                    });
+                    return (
+                      <td key={p.id} style={{textAlign:"center",padding:"4px 3px",borderLeft:"1px solid #F0F0F0",verticalAlign:"middle",minHeight:40}}>
+                        {blk
+                          ? <div style={{background:"#FEF9C3",color:"#92400E",fontSize:9,borderRadius:6,padding:"3px 4px",fontWeight:600}}>
+                              🔒{S.meetings.some(m=>m.day===day&&m.periods?.includes(p.id)&&m.departmentId===teacher?.departmentId)?"ประชุม":blocked(selT).find(b=>b.day===day&&b.period===p.id)?.reason||"ล็อค"}
+                            </div>
+                          : roomsThisPeriod.length>0
+                            ? roomsThisPeriod.map((r,i)=>(
+                                <div key={i} style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:6,padding:"3px 5px",marginBottom:i<roomsThisPeriod.length-1?2:0}}>
+                                  <div style={{fontSize:10,fontWeight:700,color:"#1E40AF"}}>{r.rmName}</div>
+                                  <div style={{fontSize:9,color:"#6B7280"}}>{r.subName}</div>
+                                </div>
+                              ))
+                            : <span style={{color:"#D1D5DB",fontSize:11}}>—</span>
+                        }
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>}
+        {showWeekly&&<div style={{marginTop:8,fontSize:11,color:"#9CA3AF",display:"flex",gap:16}}>
+          <span>🔴 = ห้องที่สอน</span>
+          <span>🔒 = คาบล็อค/ประชุม</span>
+          <span>— = ว่าง</span>
+        </div>}
+      </div>
+    );
+  };
+
   /* ── render ── */
   return (
     <div style={{animation:"fadeIn 0.3s"}}>
@@ -2048,10 +2189,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
         </div>
 
         {mode==="teacher"&&<>
-          <select style={{...IS,maxWidth:200}} value={selDept} onChange={e=>{setSelDept(e.target.value);setSelT("");}}>
-            <option value="">-- ทุกกลุ่มสาระ --</option>
-            {S.depts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
+          <SearchSelect value={selDept} onChange={v=>{setSelDept(v);setSelT("");}} options={[{value:"",label:"-- ทุกกลุ่มสาระ --"},...S.depts.map(d=>({value:d.id,label:d.name}))]} placeholder="-- ทุกกลุ่มสาระ --" style={{maxWidth:200}}/>
           <select style={{...IS,maxWidth:280}} value={selT} onChange={e=>setSelT(e.target.value)}>
             <option value="">-- เลือกครู --</option>
             {fTeachers.map(t=>{
@@ -2091,7 +2229,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
 
       {/* Teacher mode */}
       {mode==="teacher"&&(teacher
-        ?<div style={{display:"flex",gap:14}}>
+        ?<div style={{display:"flex",flexDirection:"column",gap:0}}><div style={{display:"flex",gap:14}}>
             {/* Sidebar */}
             <div style={{width:200,flexShrink:0,position:"sticky",top:0,alignSelf:"flex-start",maxHeight:"calc(100vh - 200px)",overflowY:"auto"}}>
               <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:8}}>วิชา — ลากวาง</div>
@@ -2150,8 +2288,10 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
             </div>
             {renderTable(tRooms)}
           </div>
+        </div>
         :<EmptyState icon="📋" title="เลือกครูเพื่อจัดตาราง"/>
       )}
+      {mode==="teacher"&&teacher&&renderTeacherWeeklySummary()}
 
       {/* Room mode */}
       {mode==="room"&&(selRoom
