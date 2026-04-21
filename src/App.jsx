@@ -1307,7 +1307,6 @@ function Subjects({S,U,st,gc}){
             <div style={{fontSize:10,color:"#9CA3AF",fontWeight:600}}>{sub.code}</div>
             <h4 style={{fontSize:14,fontWeight:700,marginTop:1,wordBreak:"break-word"}}>{sub.name}</h4>
             {sub.shortName&&<div style={{fontSize:11,color:"#6B7280",marginTop:1}}>ชื่อย่อ: <strong>{sub.shortName}</strong></div>}
-            {sub.shortName&&<div style={{fontSize:11,color:"#6B7280",marginTop:1}}>ชื่อย่อ: <strong>{sub.shortName}</strong></div>}
           </div>
           <div style={{display:"flex",gap:4,flexShrink:0,marginLeft:8}}>
             <button onClick={()=>openEdit(sub)} style={{background:"none",border:"none",cursor:"pointer",color:"#2563EB"}}><Icon name="edit" size={13}/></button>
