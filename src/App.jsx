@@ -57,8 +57,9 @@ const fsSaveTimetable = async (divId, data) => {
 const fsSubscribeTimetable = (divId, onData) => {
   const {db} = getFB(); if(!db) return ()=>{};
   return onSnapshot(doc(db,"timetable",divId), (snap) => {
-    if(snap.exists()) onData(snap.data());
-  }, (err) => console.warn("Firestore subscribe error:", err));
+    // ถ้า document ไม่มี → ส่ง {} เพื่อให้ระบบ init state ว่างได้ (ไม่ค้าง syncing)
+    onData(snap.exists() ? snap.data() : {});
+  }, (err) => { console.warn("Firestore subscribe error:", err); onData({}); });
 };
 // ===== LOGIN SCREEN =====
 function LoginScreen({onLogin}){
@@ -719,7 +720,15 @@ export default function App() {
         if(d.academicYear?.year) setAcademicYear(ay=>({...ay,...d.academicYear}));
       }
     });
-    return ()=>{ unsub(); fsReadyRef.current=false; };
+    // timeout fallback: ถ้า 8 วินาทียัง sync ไม่เสร็จ ให้ถือว่าเสร็จ (document อาจไม่มี)
+    const fallback=setTimeout(()=>{
+      if(!fsReadyRef.current){
+        fsReadyRef.current=true;
+        setSyncing(false);
+        setGasReady(true);
+      }
+    },8000);
+    return ()=>{ unsub(); clearTimeout(fallback); fsReadyRef.current=false; };
   },[divId, authUser]);
 
   // Auto-save ไป localStorage (cache offline) + Firestore เมื่อข้อมูลเปลี่ยน
