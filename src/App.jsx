@@ -365,6 +365,9 @@ const PERIODS = [
   { id: 5, time: "13.00-13.50" }, { id: 6, time: "14.00-14.50" },
   { id: 7, time: "14.50-15.40" },
 ];
+// ชื่อวิชาย่อ: ใช้ shortName ถ้ามี ไม่งั้นใช้ name เต็ม
+const subDisplayName = (sub) => sub?.shortName||sub?.name||"";
+
 const DC = [
   { bg:"#DC2626",lt:"#FEE2E2",tx:"#991B1B",bd:"#FECACA" }, // แดง
   { bg:"#2563EB",lt:"#DBEAFE",tx:"#1E40AF",bd:"#BFDBFE" }, // น้ำเงิน
@@ -1235,7 +1238,7 @@ function SpecialRooms({S,U,st}){
 function Subjects({S,U,st,gc}){
   const [modal,setModal]=useState(false);
   const [editId,setEditId]=useState(null);
-  const BLANK={code:"",name:"",credits:1,periodsPerWeek:1,departmentId:"",levelId:"",specialRoomId:"",consecutiveAllowed:0};
+  const BLANK={code:"",name:"",shortName:"",credits:1,periodsPerWeek:1,departmentId:"",levelId:"",specialRoomId:"",consecutiveAllowed:0};
   const [form,setForm]=useState(BLANK);
   const fileRef=useRef(null);
   const [filterLv,setFilterLv]=useState("");
@@ -1250,7 +1253,7 @@ function Subjects({S,U,st,gc}){
   };
   const openEdit=(s)=>{
     setEditId(s.id);
-    setForm({code:s.code||"",name:s.name||"",credits:s.credits||1,periodsPerWeek:s.periodsPerWeek||1,
+    setForm({code:s.code||"",name:s.name||"",shortName:s.shortName||"",credits:s.credits||1,periodsPerWeek:s.periodsPerWeek||1,
       departmentId:s.departmentId||"",levelId:s.levelId||"",
       specialRoomId:s.specialRoomId||"",consecutiveAllowed:s.consecutiveAllowed||0});
     setModal(true);
@@ -1262,12 +1265,12 @@ function Subjects({S,U,st,gc}){
     else{rows=await readExcelFile(f)}
     if(!rows||!rows.length){st("ไม่พบข้อมูล","error");return}
     const ns=rows.map(r=>{const dept=S.depts.find(d=>d.name===String(r["กลุ่มสาระ"]||"").trim());const lv=S.levels.find(l=>l.name===String(r["ระดับชั้น"]||"").trim());
-      return{id:gid(),code:String(r["รหัสวิชา"]||"").trim(),name:String(r["ชื่อวิชา"]||"").trim(),credits:parseFloat(r["หน่วยกิต"])||1,periodsPerWeek:parseInt(r["คาบ/สัปดาห์"])||1,departmentId:dept?.id||"",levelId:lv?.id||"",specialRoomId:"",consecutiveAllowed:0}
+      return{id:gid(),code:String(r["รหัสวิชา"]||"").trim(),name:String(r["ชื่อวิชา"]||"").trim(),shortName:String(r["ชื่อย่อ"]||"").trim(),credits:parseFloat(r["หน่วยกิต"])||1,periodsPerWeek:parseInt(r["คาบ/สัปดาห์"])||1,departmentId:dept?.id||"",levelId:lv?.id||"",specialRoomId:"",consecutiveAllowed:0}
     }).filter(s=>s.name);
     U.setSubjects(p=>[...p,...ns]);st(`นำเข้า ${ns.length} วิชา`);e.target.value=""};
 
-  const exportS=()=>{exportExcel(["รหัสวิชา","ชื่อวิชา","หน่วยกิต","คาบ/สัปดาห์","กลุ่มสาระ","ระดับชั้น"],S.subjects.map(s=>[s.code,s.name,s.credits,s.periodsPerWeek,S.depts.find(d=>d.id===s.departmentId)?.name||"",S.levels.find(l=>l.id===s.levelId)?.name||""]),"รายวิชา_ดาราวิทยาลัย.xlsx","วิชา");st("Export สำเร็จ")};
-  const downloadTemplate=()=>{exportExcel(["รหัสวิชา","ชื่อวิชา","หน่วยกิต","คาบ/สัปดาห์","กลุ่มสาระ","ระดับชั้น"],[["ว33201","ฟิสิกส์ 3",1.5,3,"วิทยาศาสตร์","ม.6"]],"Template_วิชา.xlsx","Template");st("ดาวน์โหลด Template")};
+  const exportS=()=>{exportExcel(["รหัสวิชา","ชื่อวิชา","ชื่อย่อ","หน่วยกิต","คาบ/สัปดาห์","กลุ่มสาระ","ระดับชั้น"],S.subjects.map(s=>[s.code,s.name,s.shortName||"",s.credits,s.periodsPerWeek,S.depts.find(d=>d.id===s.departmentId)?.name||"",S.levels.find(l=>l.id===s.levelId)?.name||""]),"รายวิชา_ดาราวิทยาลัย.xlsx","วิชา");st("Export สำเร็จ")};
+  const downloadTemplate=()=>{exportExcel(["รหัสวิชา","ชื่อวิชา","ชื่อย่อ","หน่วยกิต","คาบ/สัปดาห์","กลุ่มสาระ","ระดับชั้น"],[["ว33201","ฟิสิกส์ 3","ฟิสิกส์",1.5,3,"วิทยาศาสตร์","ม.6"],["ค33101","คณิตศาสตร์พื้นฐาน","คณิต",1,2,"คณิตศาสตร์","ม.6"]],"Template_วิชา.xlsx","Template");st("ดาวน์โหลด Template")};
 
   // กรอง + จัดกลุ่ม level → dept
   const filtered=S.subjects.filter(s=>{
@@ -1303,6 +1306,8 @@ function Subjects({S,U,st,gc}){
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:10,color:"#9CA3AF",fontWeight:600}}>{sub.code}</div>
             <h4 style={{fontSize:14,fontWeight:700,marginTop:1,wordBreak:"break-word"}}>{sub.name}</h4>
+            {sub.shortName&&<div style={{fontSize:11,color:"#6B7280",marginTop:1}}>ชื่อย่อ: <strong>{sub.shortName}</strong></div>}
+            {sub.shortName&&<div style={{fontSize:11,color:"#6B7280",marginTop:1}}>ชื่อย่อ: <strong>{sub.shortName}</strong></div>}
           </div>
           <div style={{display:"flex",gap:4,flexShrink:0,marginLeft:8}}>
             <button onClick={()=>openEdit(sub)} style={{background:"none",border:"none",cursor:"pointer",color:"#2563EB"}}><Icon name="edit" size={13}/></button>
@@ -1372,7 +1377,8 @@ function Subjects({S,U,st,gc}){
     <Modal open={modal} onClose={()=>{setModal(false);setEditId(null)}} title={editId?"แก้ไขวิชา":"เพิ่มวิชา"}>
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
         <div><label style={LS}>รหัสวิชา</label><input style={IS} value={form.code} onChange={e=>setForm(p=>({...p,code:e.target.value}))} placeholder="ว33202"/></div>
-        <div><label style={LS}>ชื่อวิชา</label><input style={IS} value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="ฟิสิกส์ 4"/></div>
+        <div><label style={LS}>ชื่อวิชาเต็ม</label><input style={IS} value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="ฟิสิกส์ 4"/></div>
+        <div><label style={LS}>ชื่อย่อ <span style={{fontWeight:400,color:"#9CA3AF"}}>(แสดงบนการ์ดและตารางพิมพ์)</span></label><input style={IS} value={form.shortName||""} onChange={e=>setForm(p=>({...p,shortName:e.target.value}))} placeholder="ฟิสิกส์"/></div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
           <div><label style={LS}>หน่วยกิต</label><input type="number" min="0.5" step="0.5" style={IS} value={form.credits} onChange={e=>setForm(p=>({...p,credits:parseFloat(e.target.value)||0}))}/></div>
           <div><label style={LS}>คาบ/สัปดาห์</label><input type="number" min="1" style={IS} value={form.periodsPerWeek} onChange={e=>setForm(p=>({...p,periodsPerWeek:parseInt(e.target.value)||1}))}/></div>
@@ -1528,7 +1534,7 @@ function Assigns({S,U,st,gc}){
             const aPending=aAssigned-aScheduled;
             return <div style={{display:"flex",justifyContent:"space-between"}}><div>
             <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-              <h4 style={{fontSize:15,fontWeight:700}}>{sub?.code} — {sub?.name}</h4>
+              <h4 style={{fontSize:15,fontWeight:700}}>{sub?.code} — {subDisplayName(sub)}</h4>
               {ca===-1&&<span style={{fontSize:9,background:"#EFF6FF",color:"#1E40AF",padding:"1px 6px",borderRadius:8,fontWeight:700}}>🔀NP</span>}
               {ca===-2&&<span style={{fontSize:9,background:"#FDF4FF",color:"#6B21A8",padding:"1px 6px",borderRadius:8,fontWeight:700}}>🏛️เศรษฐ-วิศวะ</span>}
               {ca>0&&<span style={{fontSize:9,background:"#FEF3C7",color:"#92400E",padding:"1px 6px",borderRadius:8,fontWeight:700}}>⚡{ca}ติด</span>}
@@ -1551,7 +1557,7 @@ function Assigns({S,U,st,gc}){
           {coAsgnsA.map(a=>{const sub=S.subjects.find(s=>s.id===a.subjectId);const dept=S.depts.find(d=>d.id===sub?.departmentId);const c=dept?gc(dept.id):{bg:"#7C3AED",lt:"#F5F3FF",tx:"#5B21B6"};const ca=sub?.consecutiveAllowed||0;const mainT=S.teachers.find(t=>t.id===a.teacherId);return<div key={a.id} style={{background:"#F5F3FF",borderRadius:14,borderLeft:"4px solid #7C3AED",padding:16,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
             <div style={{fontSize:10,color:"#7C3AED",fontWeight:700,marginBottom:6}}>👥 ครูร่วม (ของ {mainT?.prefix}{mainT?.firstName} {mainT?.lastName})</div>
             <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-              <h4 style={{fontSize:15,fontWeight:700,color:"#5B21B6"}}>{sub?.code} — {sub?.name}</h4>
+              <h4 style={{fontSize:15,fontWeight:700,color:"#5B21B6"}}>{sub?.code} — {subDisplayName(sub)}</h4>
               {ca===-1&&<span style={{fontSize:9,background:"#EFF6FF",color:"#1E40AF",padding:"1px 6px",borderRadius:8,fontWeight:700}}>🔀NP</span>}
               {ca===-2&&<span style={{fontSize:9,background:"#FDF4FF",color:"#6B21A8",padding:"1px 6px",borderRadius:8,fontWeight:700}}>🏛️เศรษฐ-วิศวะ</span>}
               {ca>0&&<span style={{fontSize:9,background:"#FEF3C7",color:"#92400E",padding:"1px 6px",borderRadius:8,fontWeight:700}}>⚡{ca}ติด</span>}
@@ -1644,11 +1650,11 @@ function SchedulerEntryCard({entry,cellKey,lk,cellCount,selT,mode,S,U,gc,setDrag
     >
       {compact
         ?<div style={{fontWeight:700,color:dimmed?"#9CA3AF":c.tx,fontSize:10,lineHeight:1.3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-            {sub?.name||sub?.code}
+            {subDisplayName(sub)||sub?.code}
           </div>
         :<>
             <div style={{fontWeight:700,color:dimmed?"#9CA3AF":c.tx,fontSize:11}}>{sub?.code}</div>
-            <div style={{fontWeight:600,color:dimmed?"#9CA3AF":c.tx,fontSize:10}}>{sub?.name}</div>
+            <div style={{fontWeight:600,color:dimmed?"#9CA3AF":c.tx,fontSize:10}}>{subDisplayName(sub)}</div>
             <div style={{color:dimmed?"#9CA3AF":c.tx,opacity:0.7,fontSize:10}}>
               {et?.firstName}{coTeachers.length>0?" + "+coTeachers.map(t=>t.firstName).join(", "):""}
             </div>
@@ -2114,7 +2120,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                       style={{cursor:rem>0&&!coAsgnsIds.has(a.id)?"grab":"default"}}
                     >
                       <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
-                        <span style={{fontSize:11,fontWeight:700,color:c.tx,lineHeight:1.3}}>{sub?.code}<br/>{sub?.name}</span>
+                        <span style={{fontSize:11,fontWeight:700,color:c.tx,lineHeight:1.3}}>{sub?.code}<br/>{subDisplayName(sub)}</span>
                         {sub?.consecutiveAllowed===-1&&<span style={{fontSize:8,background:"#EFF6FF",color:"#1E40AF",padding:"1px 4px",borderRadius:6,fontWeight:700}}>NP</span>}
                         {sub?.consecutiveAllowed===-2&&<span style={{fontSize:8,background:"#FDF4FF",color:"#6B21A8",padding:"1px 4px",borderRadius:6,fontWeight:700}}>เศรษฐ-วิศวะ</span>}
                         {sub?.consecutiveAllowed>0&&<span style={{fontSize:8,background:"#FEF3C7",color:"#92400E",padding:"1px 4px",borderRadius:6,fontWeight:700}}>⚡{sub.consecutiveAllowed}ติด</span>}
@@ -2347,7 +2353,7 @@ function buildLevelTableHTML(S, ay, sh, filterLevelId) {
             const t=S.teachers.find(x=>x.id===e.teacherId);
             const coIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
             const coTs=coIds.map(id=>S.teachers.find(x=>x.id===id)).filter(Boolean);
-            const subName=sub?.name||'';
+            const subName=(sub?.shortName||sub?.name||'');
             const teacherNames=[t,...coTs].filter(Boolean).map(x=>x.firstName||'').join('+');
             return '<span style="font-weight:700">'+subName+'</span><br/>'+teacherNames;
           }).join('<hr style="border:none;border-top:1px dashed #bbb;margin:0"/>');
@@ -2394,11 +2400,11 @@ function Reports({S,st,gc,ay,sh}){
     return{teacher:t,tot,used:u,rem:tot-u};
   });
 
-  const exportRoomXL=(rm)=>{const h=["วัน",...PERIODS.map(p=>`คาบ${p.id}(${p.time})`)];const d=DAYS.map(day=>[day,...PERIODS.map(p=>{const en=S.schedule[`${rm.id}_${day}_${p.id}`]||[];return en.map(e=>{const sub=S.subjects.find(s=>s.id===e.subjectId);const t=S.teachers.find(x=>x.id===e.teacherId);return`${sub?.code||""} ${sub?.name||""} (${t?.firstName||""})`}).join(" / ")})]);exportExcel(h,d,`ตารางเรียน_${rm.name}.xlsx`,rm.name);st(`Export ${rm.name}`)};
+  const exportRoomXL=(rm)=>{const h=["วัน",...PERIODS.map(p=>`คาบ${p.id}(${p.time})`)];const d=DAYS.map(day=>[day,...PERIODS.map(p=>{const en=S.schedule[`${rm.id}_${day}_${p.id}`]||[];return en.map(e=>{const sub=S.subjects.find(s=>s.id===e.subjectId);const t=S.teachers.find(x=>x.id===e.teacherId);return`${sub?.code||""} ${subDisplayName(sub)||""} (${t?.firstName||""})`}).join(" / ")})]);exportExcel(h,d,`ตารางเรียน_${rm.name}.xlsx`,rm.name);st(`Export ${rm.name}`)};
 
   const exportTeacherXL=(t)=>{const h=["วัน",...PERIODS.map(p=>`คาบ${p.id}(${p.time})`)];const d=DAYS.map(day=>[day,...PERIODS.map(p=>{let parts=[];Object.entries(S.schedule).forEach(([k,en])=>{if(!k.endsWith(`_${day}_${p.id}`))return;en?.forEach(e=>{const xCoIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);if(e.teacherId===t.id||xCoIds.includes(t.id)){const sub=S.subjects.find(s=>s.id===e.subjectId);const rid=k.split("_")[0];const rm=S.rooms.find(r=>r.id===rid);parts.push(`${sub?.code||""} ${sub?.name||""} (${rm?.name||""})`)}})});return parts.join(" / ")})]);exportExcel(h,d,`ตารางสอน_${t.prefix}${t.firstName}.xlsx`,"ตารางสอน");st(`Export ${t.firstName}`)};
 
-  const exportAllRooms=()=>{exportExcelMulti(S.rooms.map(rm=>({name:rm.name,headers:["วัน",...PERIODS.map(p=>`คาบ${p.id}(${p.time})`)],rows:DAYS.map(day=>[day,...PERIODS.map(p=>{const en=S.schedule[`${rm.id}_${day}_${p.id}`]||[];return en.map(e=>{const sub=S.subjects.find(s=>s.id===e.subjectId);const t=S.teachers.find(x=>x.id===e.teacherId);return`${sub?.code||""} ${sub?.name||""} (${t?.firstName||""})`}).join(" / ")})])})),"ตารางเรียนทุกห้อง.xlsx");st("Export ทุกห้อง")};
+  const exportAllRooms=()=>{exportExcelMulti(S.rooms.map(rm=>({name:rm.name,headers:["วัน",...PERIODS.map(p=>`คาบ${p.id}(${p.time})`)],rows:DAYS.map(day=>[day,...PERIODS.map(p=>{const en=S.schedule[`${rm.id}_${day}_${p.id}`]||[];return en.map(e=>{const sub=S.subjects.find(s=>s.id===e.subjectId);const t=S.teachers.find(x=>x.id===e.teacherId);return`${sub?.code||""} ${subDisplayName(sub)||""} (${t?.firstName||""})`}).join(" / ")})])})),"ตารางเรียนทุกห้อง.xlsx");st("Export ทุกห้อง")};
 
   const exportAllTeachers=()=>{exportExcelMulti(S.teachers.map(t=>({name:`${t.firstName} ${t.lastName}`,headers:["วัน",...PERIODS.map(p=>`คาบ${p.id}(${p.time})`)],rows:DAYS.map(day=>[day,...PERIODS.map(p=>{let parts=[];Object.entries(S.schedule).forEach(([k,en])=>{if(!k.endsWith(`_${day}_${p.id}`))return;en?.forEach(e=>{if(e.teacherId===t.id||e.coTeacherId===t.id){const sub=S.subjects.find(s=>s.id===e.subjectId);const rid=k.split("_")[0];const rm=S.rooms.find(r=>r.id===rid);parts.push(`${sub?.code||""} ${sub?.name||""} (${rm?.name||""})`)}})});return parts.join(" / ")})])})),"ตารางสอนทุกคน.xlsx");st("Export ทุกคน")};
 
@@ -2425,7 +2431,7 @@ function Reports({S,st,gc,ay,sh}){
               const sub=S.subjects.find(s=>s.id===e.subjectId);
               const rid=k.split("_")[0];
               const rm=S.rooms.find(r=>r.id===rid);
-              parts.push({sub:sub?.name||"",room:rm?.name||"",room2:""});
+              parts.push({sub:(sub?.shortName||sub?.name||""),room:rm?.name||"",room2:""});
             }
           });
         });
@@ -2458,7 +2464,7 @@ function Reports({S,st,gc,ay,sh}){
         const sub=S.subjects.find(s=>s.id===e.subjectId);
         const t2=S.teachers.find(x=>x.id===e.teacherId);
         // room2 ใช้เก็บชื่อห้อง, double flag ส่งผ่าน sub prefix
-        return[{sub:sub?.name||"",room:(t2?.prefix||"")+(t2?.firstName||""),room2:room.name,double:isDouble}];
+        return[{sub:(sub?.shortName||sub?.name||""),room:(t2?.prefix||"")+(t2?.firstName||""),room2:room.name,double:isDouble}];
       })}))
     }));
   };
@@ -2490,7 +2496,7 @@ function Reports({S,st,gc,ay,sh}){
               const sub=S.subjects.find(s=>s.id===e.subjectId);
               const rid=k.split("_")[0];
               const rm=S.rooms.find(r=>r.id===rid);
-              parts.push({sub:sub?.name||"",room:rm?.name||"",room2:""});
+              parts.push({sub:(sub?.shortName||sub?.name||""),room:rm?.name||"",room2:""});
             }
           });
         });
