@@ -41,6 +41,9 @@ const fsSetPermissions=async(uid,data)=>{
 
 // ===== FIRESTORE TIMETABLE HELPERS (Realtime) =====
 const DATA_FIELDS = ["levels","plans","depts","teachers","subjects","rooms","specialRooms","assigns","meetings","schedule","locks"];
+// ตรวจ environment: localhost = dev, github.io = production
+const IS_DEV = typeof window!=="undefined" && (window.location.hostname==="localhost"||window.location.hostname==="127.0.0.1");
+const FS_COLLECTION = IS_DEV ? "timetable_dev" : "timetable";
 
 // Save ข้อมูลทั้งหมดไป Firestore (merge เพื่อไม่ทับ _init)
 const fsSaveTimetable = async (divId, data) => {
@@ -50,17 +53,18 @@ const fsSaveTimetable = async (divId, data) => {
   DATA_FIELDS.forEach(f => { if(data[f] !== undefined) payload[f] = data[f]; });
   if(data.schoolHeader) payload.schoolHeader = data.schoolHeader;
   if(data.academicYear) payload.academicYear = data.academicYear;
-  await setDoc(doc(db,"timetable",divId), payload, {merge:true});
+  await setDoc(doc(db,FS_COLLECTION,divId), payload, {merge:true});
 };
 
 // Subscribe realtime — returns unsubscribe function
 const fsSubscribeTimetable = (divId, onData) => {
   const {db} = getFB(); if(!db) return ()=>{};
-  return onSnapshot(doc(db,"timetable",divId), (snap) => {
+  return onSnapshot(doc(db,FS_COLLECTION,divId), (snap) => {
     // ถ้า document ไม่มี → ส่ง {} เพื่อให้ระบบ init state ว่างได้ (ไม่ค้าง syncing)
     onData(snap.exists() ? snap.data() : {});
   }, (err) => { console.warn("Firestore subscribe error:", err); onData({}); });
 };
+
 // ===== LOGIN SCREEN =====
 function LoginScreen({onLogin}){
   const [loading,setLoading]=useState(false);
@@ -369,6 +373,14 @@ const PERIODS = [
 const subDisplayName = (sub) => sub?.shortName||sub?.name||"";
 
 
+// ===== Design tokens (Dara red scheme) =====
+const CRED="#B91C1C";      // แดงดารา หลัก
+const CBGW="#FFFFFF";       // white card
+const IS={width:"100%",padding:"10px 14px",border:"1.5px solid #E5E7EB",borderRadius:12,fontSize:14,outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:"#fff",color:"#1A1A1A"};
+const BS=(c=CRED)=>({padding:"10px 20px",background:c,color:"#fff",border:"none",borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,fontFamily:"inherit",letterSpacing:"0.01em"});
+const BO=(c=CRED)=>({padding:"10px 20px",background:"transparent",color:c,border:`2px solid ${c}`,borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,fontFamily:"inherit"});
+const LS={display:"block",fontSize:13,fontWeight:600,color:"#374151",marginBottom:6};
+
 // ===== SearchSelect — Searchable Dropdown =====
 function SearchSelect({value, onChange, options, placeholder="-- เลือก --", style={}, disabled=false}){
   const [open,setOpen]=useState(false);
@@ -453,30 +465,12 @@ const SROLES = [
 ];
 const gid = () => Math.random().toString(36).substr(2,9);
 
-// ===== CONFIG — ใส่ URL ของ GAS Web App ที่นี่ =====
-const GAS_URL = "https://script.google.com/macros/s/AKfycbwWym1QWA-wumRvYKpRexd44eR3FrWw6fwjXA2-shsEjGOqNq5UXLThQvpiPGICs83ZKQ/exec";
-// ====================================================
+// ===== GAS BACKUP URL (ไม่ได้ใช้แล้ว — ย้ายมา Firestore) =====
+// const GAS_URL = "https://script.google.com/macros/s/AKfycbwWym1QWA-...";
 
-// localStorage helpers (ใช้เป็น cache offline)
+// ===== LOCAL STORAGE HELPERS (ใช้เป็น offline cache) =====
 const saveLS = (key, data) => { try { localStorage.setItem(`dara_${key}`, JSON.stringify(data)); } catch(e) {} };
 const loadLS = (key, fb) => { try { const d = localStorage.getItem(`dara_${key}`); return d ? JSON.parse(d) : fb; } catch(e) { return fb; } };
-
-// GAS helpers
-const gasGet = async (divId) => {
-  const url = divId ? GAS_URL+"?division="+divId : GAS_URL;
-  const res = await fetch(url);
-  const json = await res.json();
-  return json.ok ? json.data : null;
-};
-const gasPost = async (divId, data) => {
-  // GAS ไม่รับ CORS preflight → ใช้ no-cors
-  await fetch(GAS_URL, {
-    method: "POST",
-    mode: "no-cors",
-    headers: { "Content-Type": "text/plain" },
-    body: JSON.stringify({ action: "save", division: divId, data }),
-  });
-};
 
 // Excel Export helper (SheetJS)
 const exportExcel = (headers, rows, filename, sheetName = "Sheet1") => {
@@ -568,18 +562,9 @@ const Modal = ({ open, onClose, title, children, wide }) => {
   </div>;
 };
 
-// ===== Design tokens (Dara red scheme) =====
-const CRED="#B91C1C";      // แดงดารา หลัก
-const CRED2="#DC2626";     // แดงสว่าง
-const CRED3="#991B1B";     // แดงเข้ม
-const CBGE="#F8F4F4";      // พื้นหลังอุ่น (ขาวนวลแดง)
-const CBGW="#FFFFFF";      // white card
-const CGRAY="#6B7280";
-const IS={width:"100%",padding:"10px 14px",border:"1.5px solid #E5E7EB",borderRadius:12,fontSize:14,outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:"#fff",color:"#1A1A1A"};
-const BS=(c=CRED)=>({padding:"10px 20px",background:c,color:"#fff",border:"none",borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,fontFamily:"inherit",letterSpacing:"0.01em"});
-const BO=(c=CRED)=>({padding:"10px 20px",background:"transparent",color:c,border:`2px solid ${c}`,borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,fontFamily:"inherit"});
-const LS={display:"block",fontSize:13,fontWeight:600,color:"#374151",marginBottom:6};
 
+
+// ===== TOAST NOTIFICATION =====
 const Toast=({message,type="success",onClose})=>{useEffect(()=>{const t=setTimeout(onClose,3000);return()=>clearTimeout(t)},[onClose]);return<div style={{position:"fixed",top:24,right:24,zIndex:9999,background:type==="error"?"#DC2626":type==="warning"?"#D97706":"#059669",color:"#fff",padding:"14px 24px",borderRadius:12,fontSize:14,fontWeight:600,boxShadow:"0 10px 30px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:8,animation:"slideIn 0.3s ease"}}><Icon name={type==="error"?"alert":"check"} size={16}/>{message}</div>};
 
 const DIVISIONS=[
@@ -589,6 +574,8 @@ const DIVISIONS=[
   {id:"m2",name:"มัธยมศึกษาตอนปลาย",short:"มัธยมปลาย",defaultLevels:["ม.4","ม.5","ม.6"]},
 ];
 
+
+// ===== MAIN APP COMPONENT =====
 export default function App() {
   const [page,setPage]=useState("dashboard");
   const [side,setSide]=useState(true);
@@ -1140,7 +1127,7 @@ function Depts({S,U,st,gc}){
   </div>;
 }
 
-/* ===== TEACHERS (fix#2,#5: edit + คาบที่ได้รับ) ===== */
+/* ===== TEACHERS ===== */
 function Teachers({S,U,st,gc}){
   const [modal,setModal]=useState(false);
   const [editId,setEditId]=useState(null);
@@ -1477,12 +1464,13 @@ function Subjects({S,U,st,gc}){
   </div>;
 }
 
-/* ===== ASSIGNMENTS (fix#3,#4,#5: level-filter rooms, show code+name, countdown) ===== */
+/* ===== ASSIGNMENTS ===== */
 function Assigns({S,U,st,gc}){
   const [selDept,setSelDept]=useState("");
   const [sel,setSel]=useState("");
   const [modal,setModal]=useState(false);
   const [form,setForm]=useState({subjectId:"",roomIds:[],totalPeriods:0});
+  const fileRefA=useRef(null);
   const deptTeachers=selDept?S.teachers.filter(t=>t.departmentId===selDept):[];
   const teacher=S.teachers.find(t=>t.id===sel);
   const asgns=S.assigns.filter(a=>a.teacherId===sel);
@@ -1557,11 +1545,62 @@ function Assigns({S,U,st,gc}){
   const selSub=S.subjects.find(s=>s.id===form.subjectId);
   const filteredRooms=selSub?S.rooms.filter(r=>r.levelId===selSub.levelId):S.rooms;
 
+  // Export assignments ทุกคน → Excel
+  const exportAssigns=()=>{
+    const rows=[];
+    S.assigns.forEach(a=>{
+      const t=S.teachers.find(x=>x.id===a.teacherId);
+      const sub=S.subjects.find(s=>s.id===a.subjectId);
+      const rooms=a.roomIds.map(rid=>S.rooms.find(r=>r.id===rid)?.name||"").join(",");
+      rows.push([
+        t?`${t.prefix}${t.firstName} ${t.lastName}`:"",
+        S.depts.find(d=>d.id===t?.departmentId)?.name||"",
+        sub?.code||"",sub?.name||"",
+        a.totalPeriods||0,
+        rooms,
+      ]);
+    });
+    exportExcel(["ครู","กลุ่มสาระ","รหัสวิชา","ชื่อวิชา","คาบที่มอบหมาย","ห้องเรียน"],rows,"มอบหมายงานครู.xlsx","มอบหมาย");
+    st("Export สำเร็จ");
+  };
+
+  // Import assignments จาก Excel
+  const importAssigns=async(e)=>{
+    const f=e.target.files?.[0];if(!f)return;
+    let rows;
+    if(f.name.endsWith('.csv')){const txt=await f.text();rows=parseCSV(txt);}
+    else{rows=await readExcelFile(f);}
+    if(!rows?.length){st("ไม่พบข้อมูล","error");return;}
+    const ns=[];
+    rows.forEach(r=>{
+      const tName=String(r["ครู"]||"").trim();
+      const subCode=String(r["รหัสวิชา"]||"").trim();
+      const roomNames=String(r["ห้องเรียน"]||"").split(",").map(x=>x.trim()).filter(Boolean);
+      const periods=parseInt(r["คาบที่มอบหมาย"])||1;
+      const t=S.teachers.find(x=>`${x.prefix}${x.firstName} ${x.lastName}`===tName||x.firstName===tName);
+      const sub=S.subjects.find(s=>s.code===subCode||s.name===subCode);
+      if(!t||!sub)return;
+      const roomIds=roomNames.map(n=>S.rooms.find(rm=>rm.name===n)?.id).filter(Boolean);
+      if(!roomIds.length)return;
+      // ตรวจว่ามี assignment นี้อยู่แล้วไหม
+      const exists=S.assigns.find(a=>a.teacherId===t.id&&a.subjectId===sub.id&&JSON.stringify(a.roomIds.sort())===JSON.stringify(roomIds.sort()));
+      if(!exists) ns.push({id:gid(),teacherId:t.id,subjectId:sub.id,roomIds,totalPeriods:periods});
+    });
+    if(ns.length){U.setAssigns(p=>[...p,...ns]);st(`นำเข้า ${ns.length} รายการ`);}
+    else st("ไม่พบข้อมูลใหม่ที่ตรงกัน","warning");
+    e.target.value="";
+  };
+
   return <div style={{animation:"fadeIn 0.3s"}}>
     <div style={{display:"flex",gap:12,marginBottom:24,alignItems:"center",flexWrap:"wrap"}}>
       <SearchSelect value={selDept} onChange={v=>{setSelDept(v);setSel("")}} options={[{value:"",label:"-- เลือกกลุ่มสาระก่อน --"},...S.depts.map(d=>({value:d.id,label:d.name}))]} placeholder="-- เลือกกลุ่มสาระก่อน --" style={{maxWidth:280}}/>
       {selDept&&<SearchSelect value={sel} onChange={v=>setSel(v)} options={[{value:"",label:"-- เลือกครู --"},...deptTeachers.map(t=>({value:t.id,label:`${t.prefix}${t.firstName} ${t.lastName}`}))]} placeholder="-- เลือกครู --" style={{maxWidth:350}}/>}
       {sel&&<button onClick={()=>{setForm({subjectId:"",roomIds:[],totalPeriods:0});setModal(true)}} style={BS()}><Icon name="plus" size={16}/>เพิ่มวิชา</button>}
+      <div style={{marginLeft:"auto",display:"flex",gap:8}}>
+        <button onClick={exportAssigns} style={BO("#059669")}><Icon name="download" size={16}/>Export ทั้งหมด</button>
+        <button onClick={()=>fileRefA.current?.click()} style={BO("#2563EB")}><Icon name="upload" size={16}/>Import</button>
+        <input ref={fileRefA} type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}} onChange={importAssigns}/>
+      </div>
     </div>
     {teacher&&<div>
       <div style={{background:"#fff",borderRadius:14,padding:20,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
@@ -1761,6 +1800,8 @@ function Scheduler({S,U,st,gc}){
   const [cardCoS,setCardCoS]=useState("");
   const [cardCoDept,setCardCoDept]=useState("");
   const [cardCoMap,setCardCoMap]=useState({}); // {assignId: [teacherId, ...]} สูงสุด 4 ครูร่วม
+  const [autoRunning,setAutoRunning]=useState(false);
+  const [autoResult,setAutoResult]=useState(null); // {placed, skipped, details}
 
   const teacher  = S.teachers.find(t=>t.id===selT);
   // asgns: รวม assignment ที่ครูเป็นหลัก + assignment ที่ครูถูก assign เป็น coTeacher ใน cardCoMap
@@ -1930,6 +1971,149 @@ function Scheduler({S,U,st,gc}){
       });
     });
     return c;
+  };
+
+
+  /* ── Auto Schedule ── */
+  const runAutoSchedule=()=>{
+    if(!window.confirm("ระบบจะพยายามเติมคาบที่ยังไม่ลงให้อัตโนมัติ\nจะไม่แก้ไขคาบที่จัดไว้แล้ว\nดำเนินการต่อ?"))return;
+    setAutoRunning(true);
+    setAutoResult(null);
+
+    // ใช้ setTimeout เพื่อให้ UI อัพเดทก่อนรัน algorithm
+    setTimeout(()=>{
+      const newSchedule={...S.schedule};
+      let placed=0, skipped=0;
+      const skippedList=[];
+
+      // ฟังก์ชัน helper อ่านจาก newSchedule (state ใหม่)
+      const sk2=(rid,day,p)=>rid+"_"+day+"_"+p;
+      const isBusy2=(tid,day,p,excKey,subId=null)=>{
+        for(const [k,en] of Object.entries(newSchedule)){
+          if(k===excKey)continue;
+          const pts=k.split("_"); const kDay=pts[pts.length-2]; const kPer=parseInt(pts[pts.length-1]);
+          if(kDay!==day||kPer!==p)continue;
+          for(const e of(en||[])){
+            const coIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
+            if(e.teacherId!==tid&&!coIds.includes(tid))continue;
+            if(subId){
+              const sub=S.subjects.find(s=>s.id===e.subjectId);
+              const ca=sub?.consecutiveAllowed||0;
+              if(ca===-1||ca===-2){if(e.subjectId===subId)return false;}
+            }
+            return true;
+          }
+        }
+        return false;
+      };
+      const isLocked2=(key)=>!!S.locks[key];
+      const isBlk2=(tid,day,p)=>blocked(tid).some(b=>b.day===day&&b.period===p);
+      const srBusy2=(subId,day,p)=>{
+        const sub=S.subjects.find(s=>s.id===subId);
+        if(!sub?.specialRoomId)return false;
+        for(const [k,en] of Object.entries(newSchedule)){
+          const pts=k.split("_"); if(pts[pts.length-2]!==day||parseInt(pts[pts.length-1])!==p)continue;
+          if((en||[]).some(e=>{const s2=S.subjects.find(x=>x.id===e.subjectId);return s2?.specialRoomId===sub.specialRoomId}))return true;
+        }
+        return false;
+      };
+      const countInRoom2=(aId,rId)=>{
+        let c=0;
+        for(const [k,en] of Object.entries(newSchedule)){
+          if(!k.startsWith(rId+"_"))continue;
+          (en||[]).forEach(e=>{if(e.assignmentId===aId)c++;});
+        }
+        return c;
+      };
+      const sameSubDay2=(subId,rId,day)=>{
+        const sub=S.subjects.find(s=>s.id===subId);
+        const ca=sub?.consecutiveAllowed||0;
+        if(ca>=2)return false; // อนุญาตคาบติด
+        let c=0;
+        for(const [k,en] of Object.entries(newSchedule)){
+          const pts=k.split("_");
+          if(pts.slice(0,-2).join("_")!==rId||pts[pts.length-2]!==day)continue;
+          (en||[]).forEach(e=>{if(e.subjectId===subId)c++;});
+        }
+        return c>=(ca===0?1:ca);
+      };
+
+      // สร้างรายการ "งานที่ต้องจัด" — assign × room × คาบที่ยังขาด
+      const jobs=[];
+      S.assigns.forEach(a=>{
+        const sub=S.subjects.find(s=>s.id===a.subjectId);
+        const ca=sub?.consecutiveAllowed||0;
+        if(ca===-2)return; // ข้าม mode พิเศษ เศรษฐ-วิศวะ
+        a.roomIds.forEach(rid=>{
+          const limit=sub?.periodsPerWeek||a.totalPeriods||1;
+          const placed2=countInRoom2(a.id,rid);
+          const remaining=limit-placed2;
+          if(remaining<=0)return;
+          const teacher2=S.teachers.find(t=>t.id===a.teacherId);
+          const coTids=cardCoMap[a.id]||[];
+          // score ยากง่าย: ครูยุ่งมาก = ยาก, consecutive = ยาก
+          const busyScore=teacherScheduledTotal(a.teacherId);
+          const score=busyScore*10+(ca>0?ca*5:0)+(sub?.specialRoomId?8:0);
+          for(let i=0;i<remaining;i++) jobs.push({a,rid,sub,ca,coTids,score,teacher:teacher2});
+        });
+      });
+
+      // เรียงจากยากไปง่าย
+      jobs.sort((x,y)=>y.score-x.score);
+
+      // Shuffle DAYS/PERIODS เพื่อกระจาย
+      const shuffled=(arr)=>[...arr].sort(()=>Math.random()-0.5);
+
+      // วางแต่ละ job
+      jobs.forEach(({a,rid,sub,ca,coTids,teacher:t2})=>{
+        const subId=a.subjectId;
+        const tid=a.teacherId;
+        let foundSlot=false;
+
+        // ลอง day/period ทุก combination
+        const days=shuffled(DAYS);
+        outer: for(const day of days){
+          const periods=shuffled(PERIODS);
+          for(const p of periods){
+            const key=sk2(rid,day,p.id);
+            // ตรวจ constraints
+            if(isLocked2(key))continue;
+            if((newSchedule[key]||[]).length>=3)continue;
+            if(isBlk2(tid,day,p.id))continue;
+            if(isBusy2(tid,day,p.id,null,subId))continue;
+            if(srBusy2(subId,day,p.id))continue;
+            if(sameSubDay2(subId,rid,day))continue;
+            // ตรวจ consecutive: ถ้า ca>0 ต้องมีคาบก่อนหน้าหรือหลังติดกัน
+            if(ca>=2){
+              const hasPrev=(newSchedule[sk2(rid,day,p.id-1)]||[]).some(e=>e.subjectId===subId);
+              const hasNext=(newSchedule[sk2(rid,day,p.id+1)]||[]).some(e=>e.subjectId===subId);
+              const countSameDay=(()=>{let c=0;PERIODS.forEach(pp=>{(newSchedule[sk2(rid,day,pp.id)]||[]).forEach(e=>{if(e.subjectId===subId)c++;});});return c;})();
+              if(!hasPrev&&!hasNext&&countSameDay===0){
+                // ลองหาช่องติดกัน — ต้องมี ca-1 คาบติดอยู่แล้วหรือคาบถัดไปว่าง
+                const nextKey=sk2(rid,day,p.id+1);
+                const nextFree=!isLocked2(nextKey)&&(newSchedule[nextKey]||[]).length<3&&!isBusy2(tid,day,p.id+1,null,subId)&&!isBlk2(tid,day,p.id+1);
+                if(!nextFree)continue; // ต้องมีคาบติดได้
+              }
+            }
+            // วาง entry
+            const entry={id:gid(),teacherId:tid,subjectId:subId,assignmentId:a.id,coTeacherIds:coTids,coTeacherId:coTids[0]||null};
+            newSchedule[key]=[...(newSchedule[key]||[]),entry];
+            placed++;
+            foundSlot=true;
+            break outer;
+          }
+        }
+        if(!foundSlot){
+          skipped++;
+          skippedList.push(`${sub?.code||""} ${subDisplayName(sub)||""} — ${S.rooms.find(r=>r.id===rid)?.name||""}`);
+        }
+      });
+
+      U.setSchedule(newSchedule);
+      setAutoResult({placed,skipped,details:skippedList});
+      setAutoRunning(false);
+      st(`Auto จัด: วาง ${placed} คาบ, ข้าม ${skipped} คาบ`,"success");
+    },100);
   };
 
   /* ── drop handler ── */
@@ -2208,7 +2392,28 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
             })}
           </select>
         )}
+        {/* Auto Schedule button */}
+        <button onClick={runAutoSchedule} disabled={autoRunning}
+          style={{...BS("#059669"),opacity:autoRunning?0.6:1,marginLeft:"auto"}}>
+          {autoRunning?"⏳ กำลังจัด...":"⚡ Auto จัดตาราง"}
+        </button>
       </div>
+
+      {/* Auto result panel */}
+      {autoResult&&(
+        <div style={{background:autoResult.skipped===0?"#F0FDF4":"#FFFBEB",border:`1.5px solid ${autoResult.skipped===0?"#86EFAC":"#FDE68A"}`,borderRadius:12,padding:"12px 16px",marginBottom:12,display:"flex",gap:16,alignItems:"flex-start",flexWrap:"wrap"}}>
+          <div style={{fontSize:13,fontWeight:700,color:autoResult.skipped===0?"#065F46":"#92400E"}}>
+            {autoResult.skipped===0?"✅":"⚠️"} Auto จัดตาราง: วาง <strong>{autoResult.placed}</strong> คาบ
+            {autoResult.skipped>0&&<span> | ข้ามไม่ได้ <strong>{autoResult.skipped}</strong> คาบ</span>}
+          </div>
+          {autoResult.details.length>0&&(
+            <div style={{fontSize:11,color:"#92400E",flex:1}}>
+              ❌ ไม่สามารถจัดได้: {autoResult.details.slice(0,5).join(", ")}{autoResult.details.length>5?` และอีก ${autoResult.details.length-5} รายการ`:""}
+            </div>
+          )}
+          <button onClick={()=>setAutoResult(null)} style={{background:"none",border:"none",cursor:"pointer",color:"#9CA3AF",fontSize:16}}>✕</button>
+        </div>
+      )}
 
       {/* Teacher summary bar */}
       {mode==="teacher"&&teacher&&(
@@ -2519,8 +2724,9 @@ function buildLevelTableHTML(S, ay, sh, filterLevelId) {
     +'</body></html>';
 }
 
-/* ===== REPORTS (fix#10: working page) ===== */
-function Reports({S,st,gc,ay,sh}){
+/* ===== REPORTS ===== */
+function Reports({S,U,st,gc,ay,sh}){
+  const fileRefSched=useRef(null);
   const roomSt=S.rooms.map(rm=>{let f=0;DAYS.forEach(d=>PERIODS.forEach(p=>{const k=`${rm.id}_${d}_${p.id}`;if(S.schedule[k]?.length)f++}));const total=DAYS.length*PERIODS.length;return{room:rm,filled:f,total,pct:Math.round(f/total*100)}});
   const teacherSt=S.teachers.map(t=>{
     const tot=t.totalPeriods||0;
@@ -2538,6 +2744,42 @@ function Reports({S,st,gc,ay,sh}){
     });
     return{teacher:t,tot,used:u,rem:tot-u};
   });
+
+  // Export schedule → JSON file (เก็บทุก entry ครบถ้วน)
+  const exportScheduleJSON=()=>{
+    const data={
+      version:1,
+      exportedAt:new Date().toISOString(),
+      schedule:S.schedule,
+      locks:S.locks,
+      assigns:S.assigns,
+    };
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");a.href=url;a.download="ตารางสอน_backup.json";a.click();
+    URL.revokeObjectURL(url);
+    st("Export ตารางสอนสำเร็จ");
+  };
+
+  // Import schedule จาก JSON
+  const importScheduleJSON=async(e)=>{
+    const f=e.target.files?.[0];if(!f)return;
+    try{
+      const txt=await f.text();
+      const data=JSON.parse(txt);
+      if(!data.schedule){st("ไฟล์ไม่ถูกต้อง","error");return;}
+      if(!window.confirm("จะทับข้อมูลตารางสอนปัจจุบัน\nดำเนินการต่อ?"))return;
+      U.setSchedule(data.schedule||{});
+      U.setLocks(data.locks||{});
+      if(data.assigns?.length){
+        const keep=S.assigns.filter(a=>!data.assigns.find(x=>x.id===a.id));
+        U.setAssigns([...keep,...data.assigns]);
+      }
+      st("Import ตารางสอนสำเร็จ");
+    }catch(err){st("อ่านไฟล์ไม่ได้: "+err.message,"error");}
+    e.target.value="";
+  };
+
 
   const exportRoomXL=(rm)=>{const h=["วัน",...PERIODS.map(p=>`คาบ${p.id}(${p.time})`)];const d=DAYS.map(day=>[day,...PERIODS.map(p=>{const en=S.schedule[`${rm.id}_${day}_${p.id}`]||[];return en.map(e=>{const sub=S.subjects.find(s=>s.id===e.subjectId);const t=S.teachers.find(x=>x.id===e.teacherId);return`${sub?.code||""} ${subDisplayName(sub)||""} (${t?.firstName||""})`}).join(" / ")})]);exportExcel(h,d,`ตารางเรียน_${rm.name}.xlsx`,rm.name);st(`Export ${rm.name}`)};
 
@@ -2693,6 +2935,10 @@ function Reports({S,st,gc,ay,sh}){
       <button onClick={printAllTeachersPDF} style={BS("#DC2626")}><Icon name="file" size={16}/>พิมพ์ตารางสอนทุกคน (PDF)</button>
       <button onClick={printAllRoomsPDF} style={BS("#DB2777")}><Icon name="file" size={16}/>พิมพ์ตารางเรียนทุกห้อง (PDF)</button>
       <div style={{width:"100%",height:0,borderTop:"1px solid #E5E7EB",margin:"4px 0"}}/>
+      <button onClick={exportScheduleJSON} style={BS("#0891B2")}><Icon name="download" size={16}/>💾 Backup ตารางสอน (.json)</button>
+      <button onClick={()=>fileRefSched.current?.click()} style={BO("#0891B2")}><Icon name="upload" size={16}/>📥 Restore ตารางสอน (.json)</button>
+      <input ref={fileRefSched} type="file" accept=".json" style={{display:"none"}} onChange={importScheduleJSON}/>
+      <div style={{width:"100%",height:0,borderTop:"1px solid #E5E7EB",margin:"4px 0"}}/>
       <button onClick={printMasterByDept} style={BS("#374151")}><Icon name="file" size={16}/>📋 ตารางสอนครูรวมกลุ่มสาระ (PDF)</button>
       <div style={{display:"flex",gap:8,alignItems:"center"}}>
         <select style={{...IS,maxWidth:200}} value={masterLevel} onChange={e=>setMasterLevel(e.target.value)}>
@@ -2738,7 +2984,7 @@ function Reports({S,st,gc,ay,sh}){
     </div>
   </div>;
 }
-/* ===== SETTINGS (Fix#4: academic year, school header, reset) ===== */
+/* ===== SETTINGS */
 function Settings({S,U,st,ay,setAY,sh,setSH,div}){
   const logoRef=useRef(null);
   // helper: ล้าง localStorage dara_ keys และ force sync ไป GAS
