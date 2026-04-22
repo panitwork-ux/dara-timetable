@@ -1464,94 +1464,6 @@ function Subjects({S,U,st,gc}){
   </div>;
 }
 
-/* ===== PERSONAL LOCK PANEL (Feature 4) ===== */
-function PersonalLockPanel({teacher,U,st,sel}){
-  const [plDay,setPlDay]=useState("");
-  const [plPeriods,setPlPeriods]=useState([]);
-  const [plReason,setPlReason]=useState("");
-
-  const personalLocks=teacher.personalLocks||[];
-
-  const addLock=()=>{
-    if(!plDay||!plPeriods.length){st("เลือกวันและคาบ","error");return;}
-    U.setTeachers(prev=>prev.map(t=>{
-      if(t.id!==sel)return t;
-      const existing=t.personalLocks||[];
-      const idx=existing.findIndex(l=>l.day===plDay&&(l.reason||"ส่วนตัว")===(plReason||"ส่วนตัว"));
-      if(idx>=0){
-        const merged=[...new Set([...existing[idx].periods,...plPeriods])].sort((a,b)=>a-b);
-        const updated=[...existing];
-        updated[idx]={...existing[idx],periods:merged};
-        return{...t,personalLocks:updated};
-      }
-      return{...t,personalLocks:[...existing,{id:gid(),day:plDay,periods:[...plPeriods].sort((a,b)=>a-b),reason:plReason||"ส่วนตัว"}]};
-    }));
-    setPlDay("");setPlPeriods([]);setPlReason("");
-    st("เพิ่มคาบล็อกสำเร็จ");
-  };
-
-  const removeLock=(id)=>{
-    U.setTeachers(prev=>prev.map(t=>t.id!==sel?t:{...t,personalLocks:(t.personalLocks||[]).filter(l=>l.id!==id)}));
-    st("ลบคาบล็อกแล้ว","warning");
-  };
-
-  return(
-    <div style={{background:"#fff",borderRadius:14,padding:20,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:20}}>
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
-        <span style={{fontSize:20}}>🔒</span>
-        <h3 style={{fontSize:15,fontWeight:700,margin:0}}>คาบล็อกส่วนตัว</h3>
-        <span style={{fontSize:12,color:"#6B7280"}}>— {teacher.prefix}{teacher.firstName} {teacher.lastName}</span>
-      </div>
-      {/* ฟอร์มเพิ่ม */}
-      <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"flex-end",marginBottom:16,padding:"14px 16px",background:"#FFF7ED",borderRadius:12,border:"1px solid #FED7AA"}}>
-        <div style={{flex:"1 1 130px"}}>
-          <label style={LS}>วัน</label>
-          <select style={IS} value={plDay} onChange={e=>setPlDay(e.target.value)}>
-            <option value="">-- เลือกวัน --</option>
-            {DAYS.map(d=><option key={d}>{d}</option>)}
-          </select>
-        </div>
-        <div style={{flex:"2 1 300px"}}>
-          <label style={LS}>คาบ (เลือกได้หลายคาบ)</label>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-            {PERIODS.map(p=>(
-              <button key={p.id}
-                onClick={()=>setPlPeriods(prev=>prev.includes(p.id)?prev.filter(x=>x!==p.id):[...prev,p.id])}
-                style={{width:44,height:44,borderRadius:8,border:`2px solid ${plPeriods.includes(p.id)?"#DC2626":"#D1D5DB"}`,background:plPeriods.includes(p.id)?"#DC2626":"#fff",color:plPeriods.includes(p.id)?"#fff":"#374151",fontSize:14,fontWeight:700,cursor:"pointer",flexShrink:0}}>
-                {p.id}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div style={{flex:"1 1 160px"}}>
-          <label style={LS}>เหตุผล (ไม่บังคับ)</label>
-          <input style={IS} value={plReason} onChange={e=>setPlReason(e.target.value)} placeholder="ติดธุระ, อบรม ฯ" onKeyDown={e=>e.key==="Enter"&&addLock()}/>
-        </div>
-        <button onClick={addLock} style={{...BS("#C2410C"),flexShrink:0}}>+ เพิ่มล็อก</button>
-      </div>
-      {/* รายการ locks */}
-      {personalLocks.length===0
-        ?<div style={{textAlign:"center",color:"#9CA3AF",fontSize:13,padding:"12px 0"}}>ยังไม่มีคาบล็อกส่วนตัว</div>
-        :<div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {[...personalLocks].sort((a,b)=>DAYS.indexOf(a.day)-DAYS.indexOf(b.day)).map(pl=>(
-            <div key={pl.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:"#FFF7ED",borderRadius:10,border:"1px solid #FED7AA"}}>
-              <span style={{fontSize:16}}>🔒</span>
-              <div style={{flex:1}}>
-                <span style={{fontWeight:700,color:"#C2410C",fontSize:13}}>วัน{pl.day}</span>
-                <span style={{color:"#6B7280",fontSize:12,marginLeft:8}}>คาบ {(pl.periods||[]).join(", ")}</span>
-                {pl.reason&&<span style={{marginLeft:8,fontSize:11,background:"#FFEDD5",color:"#9A3412",padding:"1px 8px",borderRadius:20,fontWeight:600}}>{pl.reason}</span>}
-              </div>
-              <button onClick={()=>removeLock(pl.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:4}}>
-                <Icon name="trash" size={14}/>
-              </button>
-            </div>
-          ))}
-        </div>
-      }
-    </div>
-  );
-}
-
 /* ===== ASSIGNMENTS ===== */
 function Assigns({S,U,st,gc}){
   const [selDept,setSelDept]=useState("");
@@ -1796,11 +1708,8 @@ function Assigns({S,U,st,gc}){
         </>}
       </div>
     </div>}
-
-    {/* Feature 4: คาบล็อกส่วนตัวของครู */}
-    {teacher&&<PersonalLockPanel teacher={teacher} U={U} st={st} sel={sel}/>}
-
-    <Modal open={modal} onClose={()=>setModal(false)} title="มอบหมายวิชา">      <div style={{display:"flex",flexDirection:"column",gap:16}}>
+    <Modal open={modal} onClose={()=>setModal(false)} title="มอบหมายวิชา">
+      <div style={{display:"flex",flexDirection:"column",gap:16}}>
         <div><label style={LS}>วิชา (รหัส — ชื่อ) — เฉพาะกลุ่มสาระ{teacher?(" "+S.depts.find(d=>d.id===teacher.departmentId)?.name):""}</label><SearchSelect value={form.subjectId} onChange={v=>setForm(p=>({...p,subjectId:v,roomIds:[]}))} options={[{value:"",label:"--"},...teacherDeptSubs.map(s=>({value:s.id,label:`${s.code} — ${s.name} (${S.levels.find(l=>l.id===s.levelId)?.name||""})`}))]} placeholder="-- เลือกวิชา --"/></div>
         <div><label style={LS}>ห้อง (เฉพาะระดับของวิชา)</label><div style={{display:"flex",gap:8,flexWrap:"wrap",maxHeight:200,overflowY:"auto"}}>{filteredRooms.map(rm=><button key={rm.id} onClick={()=>setForm(p=>({...p,roomIds:p.roomIds.includes(rm.id)?p.roomIds.filter(r=>r!==rm.id):[...p.roomIds,rm.id]}))} style={{padding:"6px 14px",borderRadius:8,border:`2px solid ${form.roomIds.includes(rm.id)?"#DC2626":"#D1D5DB"}`,background:form.roomIds.includes(rm.id)?"#FEE2E2":"#fff",fontSize:13,fontWeight:600,cursor:"pointer"}}>{form.roomIds.includes(rm.id)?"✓ ":""}{rm.name}</button>)}</div></div>
         <div><label style={LS}>คาบรวม (0=อัตโนมัติ)</label><input type="number" min="0" style={IS} value={form.totalPeriods} onChange={e=>setForm(p=>({...p,totalPeriods:parseInt(e.target.value)||0}))}/></div>
@@ -1928,12 +1837,6 @@ function Scheduler({S,U,st,gc}){
   const [cardCoS,setCardCoS]=useState("");
   const [cardCoDept,setCardCoDept]=useState("");
   const [cardCoMap,setCardCoMap]=useState({}); // {assignId: [teacherId, ...]} สูงสุด 4 ครูร่วม
-  // Feature 2: วิชาที่สอนคาบเดียวกันห้องเดียวกัน (bundle)
-  // bundleMap: {assignId: [assignId, ...]} — เมื่อลากการ์ดนี้ จะวางวิชาใน bundle ด้วย
-  const [bundleMap,setBundleMap]=useState({}); // {assignId: [{assignId, teacherId},...]}
-  const [showBundleM,setShowBundleM]=useState(null); // assignId ที่กำลัง config bundle
-  const [bundleSelSub,setBundleSelSub]=useState(""); // subjectId ที่เลือกจะ add
-  const [bundleSelTeacher,setBundleSelTeacher]=useState(""); // teacherId ที่เลือก
   const [autoRunning,setAutoRunning]=useState(false);
   const [autoResult,setAutoResult]=useState(null); // {placed, skipped, details}
   const [showAutoModal, setShowAutoModal] = useState(false);
@@ -1991,10 +1894,6 @@ function Scheduler({S,U,st,gc}){
     });
     S.meetings.filter(m=>m.departmentId===t.departmentId)
       .forEach(m=>m.periods.forEach(p=>b.push({day:m.day,period:p,reason:"ประชุม"})));
-    // Feature 4: คาบล็อกส่วนตัว
-    (t.personalLocks||[]).forEach(pl=>
-      (pl.periods||[]).forEach(p=>b.push({day:pl.day,period:p,reason:pl.reason||"ส่วนตัว"}))
-    );
     return b;
   },[S.teachers,S.meetings]);
 
@@ -2393,7 +2292,7 @@ function Scheduler({S,U,st,gc}){
       const entry=drag.entry;
       const sub=S.subjects.find(s=>s.id===entry.subjectId);
       const room=S.rooms.find(r=>r.id===rid);
-      if(room&&sub&&room.levelId!==sub.levelId){st("ระดับชั้นไม่ตรงกัน!","error");return;}
+      // ไม่ตรวจ sub.levelId เพราะวิชาอาจสอนหลายระดับ (NP/multi-room) — roomAllowed ตรวจแทนแล้ว
       if(specialRoomBusy(entry.subjectId,day,p,drag.fromKey)){
         const sr=S.specialRooms.find(r=>r.id===sub?.specialRoomId);
         st("ห้องพิเศษ '"+(sr?.name||"")+"' ถูกใช้อยู่","error");return;
@@ -2429,7 +2328,11 @@ function Scheduler({S,U,st,gc}){
       const sr=S.specialRooms.find(r=>r.id===sub?.specialRoomId);
       st("ห้องพิเศษ '"+(sr?.name||"")+"' ถูกใช้อยู่แล้วในคาบนี้","error");return;
     }
-    if(room&&sub&&room.levelId!==sub.levelId){st("ระดับชั้นไม่ตรงกัน!","error");return;}
+    if(room&&sub&&room.levelId!==sub.levelId){
+      // อนุญาตถ้าห้องนี้อยู่ใน assignment roomIds ของวิชานี้อยู่แล้ว (วิชาสอนหลายระดับ เช่น NP)
+      const assignHasRoom=S.assigns.some(a=>a.subjectId===drag.subjectId&&a.roomIds?.includes(rid));
+      if(!assignHasRoom){st("ระดับชั้นไม่ตรงกัน!","error");return;}
+    }
     if(sameSubjectSameDay(drag.subjectId,rid,day,null)){st("วิชานี้มีในวัน"+day+"แล้ว (ห้ามซ้ำ/วัน)","error");return;}
     // สำหรับ -2 mode: หา assignment ที่ตรงกับห้องปลายทาง (อาจต่างจาก drag.assignmentId)
     // -2 mode: หา assignment ที่ตรงกับ rid และ teacherId เดียวกัน ถ้าไม่มีค่อยหา assignment อื่นของ subjectId
@@ -2443,19 +2346,9 @@ function Scheduler({S,U,st,gc}){
     const limit=getPerRoomLimit(effectiveAid);
     if(placed>=limit){st("ห้องนี้ลงครบ "+limit+" คาบแล้ว","error");return;}
     const coTids=cardCoMap[drag.assignmentId]||cardCoMap[effectiveAid]||[];
-    // วาง entry หลัก
-    const mainEntry={id:gid(),teacherId:drag.teacherId,subjectId:drag.subjectId,assignmentId:effectiveAid,coTeacherIds:coTids,coTeacherId:coTids[0]||null};
-    // วาง bundle entries (วิชาที่สอนคาบเดียวกัน)
-    const bundles=bundleMap[drag.assignmentId]||[];
-    const bundleEntries=bundles.map(b=>{
-      const ba=S.assigns.find(a=>a.id===b.assignId);
-      if(!ba)return null;
-      const bCoTids=cardCoMap[b.assignId]||[];
-      return{id:gid(),teacherId:b.teacherId||ba.teacherId,subjectId:ba.subjectId,assignmentId:b.assignId,coTeacherIds:bCoTids,coTeacherId:bCoTids[0]||null};
-    }).filter(Boolean);
     U.setSchedule(prev=>({
       ...prev,
-      [key]:[...(prev[key]||[]),mainEntry,...bundleEntries]
+      [key]:[...(prev[key]||[]),{id:gid(),teacherId:drag.teacherId,subjectId:drag.subjectId,assignmentId:effectiveAid,coTeacherIds:coTids,coTeacherId:coTids[0]||null}]
     }));
     setDragBoth(null);
   };
@@ -2475,33 +2368,18 @@ function Scheduler({S,U,st,gc}){
     <div style={{flex:1,overflowX:"auto"}}>
       {roomIds.map(rid=>{
         const rm=S.rooms.find(r=>r.id===rid);
-        const rmPlan=S.plans.find(p=>p.id===rm?.planId);
-        const rmLevel=S.levels.find(l=>l.id===rm?.levelId);
-        // สีพื้นหลังตารางตามระดับชั้น (วนสี)
-        const LEVEL_COLORS=[
-          {bg:"#FFF7ED",border:"#FED7AA",head:"#EA580C"}, // ส้ม
-          {bg:"#F0FDF4",border:"#BBF7D0",head:"#16A34A"}, // เขียว
-          {bg:"#EFF6FF",border:"#BFDBFE",head:"#2563EB"}, // น้ำเงิน
-          {bg:"#FDF4FF",border:"#E9D5FF",head:"#9333EA"}, // ม่วง
-          {bg:"#FFF1F2",border:"#FECDD3",head:"#E11D48"}, // ชมพู
-          {bg:"#F0FDFA",border:"#99F6E4",head:"#0D9488"}, // เขียวน้ำทะเล
-        ];
-        const lvIdx=S.levels.findIndex(l=>l.id===rm?.levelId);
-        const lc=LEVEL_COLORS[lvIdx>=0?lvIdx%LEVEL_COLORS.length:0];
         return (
           <div key={rid} style={{marginBottom:28}}>
-            <div style={{marginBottom:8,display:"flex",alignItems:"center",gap:8}}>
-              <span style={{background:lc.head,color:"#fff",padding:"5px 16px",borderRadius:10,fontSize:12,fontWeight:700,letterSpacing:"0.02em",boxShadow:`0 2px 6px ${lc.head}55`}}>{rm?.name}</span>
-              {rmPlan&&<span style={{background:lc.bg,color:lc.head,border:`1.5px solid ${lc.border}`,padding:"4px 12px",borderRadius:20,fontSize:11,fontWeight:700}}>{rmPlan.name}</span>}
-              {rmLevel&&<span style={{color:"#9CA3AF",fontSize:11}}>{rmLevel.name}</span>}
+            <div style={{marginBottom:8}}>
+              <span style={{background:CRED,color:"#fff",padding:"5px 16px",borderRadius:10,fontSize:12,fontWeight:700,letterSpacing:"0.02em",boxShadow:"0 2px 6px rgba(153,27,27,0.2)"}}>{rm?.name}</span>
             </div>
-            <div style={{background:"#fff",borderRadius:14,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",overflow:"hidden",border:`1px solid ${lc.border}`}}>
+            <div style={{background:"#fff",borderRadius:14,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",overflow:"hidden",border:"1px solid rgba(0,0,0,0.05)"}}>
               <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed",minWidth:700}}>
                 <thead>
-                  <tr style={{borderBottom:`2px solid ${lc.head}`}}>
-                    <th style={{padding:"10px 10px",background:lc.head,color:"#fff",width:62,textAlign:"left",fontSize:13,fontWeight:700,letterSpacing:"0.02em"}}>วัน</th>
+                  <tr style={{borderBottom:"2px solid "+CRED}}>
+                    <th style={{padding:"10px 10px",background:CRED,color:"#fff",width:62,textAlign:"left",fontSize:13,fontWeight:700,letterSpacing:"0.02em"}}>วัน</th>
                     {PERIODS.map(p=>(
-                      <th key={p.id} style={{padding:"6px 2px",background:lc.head,textAlign:"center",borderLeft:"1px solid rgba(255,255,255,0.2)"}}>
+                      <th key={p.id} style={{padding:"6px 2px",background:CRED,textAlign:"center",borderLeft:"1px solid rgba(255,255,255,0.2)"}}>
                         <div style={{fontSize:11,color:"#fff",fontWeight:700}}>คาบ {p.id}</div>
                         <div style={{fontSize:9,color:"rgba(255,255,255,0.7)",fontWeight:400}}>{p.time}</div>
                       </th>
@@ -2510,8 +2388,8 @@ function Scheduler({S,U,st,gc}){
                 </thead>
                 <tbody>
                   {DAYS.map((day,di)=>(
-                    <tr key={day} style={{background:di%2===0?"#FFFFFF":lc.bg}}>
-                      <td style={{padding:"8px 8px",fontWeight:700,fontSize:12,color:lc.head,borderRight:`2px solid ${lc.border}`,borderBottom:"1px solid #F3F4F6",background:lc.bg}}>{day}</td>
+                    <tr key={day} style={{background:di%2===0?"#FFFFFF":"#FAFAFA"}}>
+                      <td style={{padding:"8px 8px",fontWeight:700,fontSize:12,color:CRED,borderRight:"2px solid #FECACA",borderBottom:"1px solid #F3F4F6",background:"#F9FAFB"}}>{day}</td>
                       {PERIODS.map(p=>{
                         const key=sk(rid,day,p.id);
                         const en=S.schedule[key]||[];
@@ -2526,7 +2404,7 @@ if(d.assignmentId){const a=S.assigns.find(x=>x.id===d.assignmentId);const sCa=S.
 e.preventDefault();e.currentTarget.classList.add("over");}}
                             onDragLeave={e=>e.currentTarget.classList.remove("over")}
                             onDrop={e=>{e.preventDefault();e.currentTarget.classList.remove("over");handleDrop(rid,day,p.id);}}
-                            style={{padding:3,verticalAlign:"top",minHeight:68,borderLeft:`1px solid ${lc.border}`,borderBottom:`1px solid ${lc.border}`,background:bl?"#FEF9C3":lk?"#F0FDF4":"#FDFAF8"}}
+                            style={{padding:3,verticalAlign:"top",minHeight:68,borderLeft:"1px solid #F5EFE9",borderBottom:"1px solid #F5EFE9",background:bl?"#FEF9C3":lk?"#F0FDF4":"#FDFAF8"}}
                           >
                             {bl&&en.length===0&&(
                               <div style={{fontSize:9,color:"#92400E",textAlign:"center",padding:4}}>
@@ -2772,7 +2650,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                     </div>
                     {/* ข้อ 4: เพิ่มครูร่วมบน sidebar */}
                     <div style={{marginTop:5,paddingTop:5,borderTop:"1px solid rgba(0,0,0,0.07)"}}>
-                      {coTeachers2.map((ct2)=>(
+                      {coTeachers2.map((ct2,ci)=>(
                           <div key={ct2.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
                             <span style={{fontSize:9,color:c.tx}}>ร่วม: {ct2.firstName}</span>
                             <button onClick={()=>setCardCoMap(p=>({...p,[a.id]:coIds2.filter(id=>id!==ct2.id)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,fontSize:11}}>✕</button>
@@ -2780,22 +2658,6 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                         ))}
                         {coTeachers2.length<4&&<button onClick={()=>setCardCoM(a.id)} style={{fontSize:9,color:c.tx,background:"rgba(0,0,0,0.06)",border:"none",borderRadius:6,padding:"2px 6px",cursor:"pointer",width:"100%",textAlign:"left"}}>+ ครูร่วม ({coTeachers2.length}/4)</button>}
                     </div>
-                    {/* Feature 2: วิชาที่สอนคาบเดียวกัน (bundle) */}
-                    {(()=>{
-                      const bundles=bundleMap[a.id]||[];
-                      return <div style={{marginTop:4,paddingTop:4,borderTop:"1px solid rgba(0,0,0,0.07)"}}>
-                        {bundles.map((b,bi)=>{
-                          const bAssign=S.assigns.find(x=>x.id===b.assignId);
-                          const bSub=S.subjects.find(s=>s.id===bAssign?.subjectId);
-                          const bTch=S.teachers.find(t=>t.id===b.teacherId);
-                          return <div key={bi} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2,background:"rgba(0,0,0,0.04)",borderRadius:4,padding:"1px 4px"}}>
-                            <span style={{fontSize:8,color:c.tx,lineHeight:1.4}}>{bSub?.code||""} {bTch?`(${bTch.firstName})`:""}</span>
-                            <button onClick={()=>setBundleMap(p=>({...p,[a.id]:bundles.filter((_,i)=>i!==bi)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,fontSize:10}}>✕</button>
-                          </div>;
-                        })}
-                        <button onClick={()=>{setShowBundleM(a.id);setBundleSelSub("");setBundleSelTeacher("");}} style={{fontSize:9,color:"#059669",background:"rgba(5,150,105,0.08)",border:"none",borderRadius:6,padding:"2px 6px",cursor:"pointer",width:"100%",textAlign:"left",marginTop:2}}>📎 + วิชาคู่ ({bundles.length})</button>
-                      </div>;
-                    })()}
                   </div>
                 );
               })}
@@ -2868,84 +2730,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
         </div>
       </Modal>
 
-      {/* Modal: วิชาคู่ (bundle) */}
-      <Modal open={!!showBundleM} onClose={()=>setShowBundleM(null)} title="📎 กำหนดวิชาที่สอนคาบเดียวกัน">
-        <div style={{display:"flex",flexDirection:"column",gap:14}}>
-          <div style={{fontSize:12,color:"#6B7280",background:"#F0FDF4",padding:"8px 12px",borderRadius:8,border:"1px solid #BBF7D0"}}>
-            เมื่อลากการ์ดนี้ลงตาราง ระบบจะวางวิชาเหล่านี้ลงในช่องเดียวกันด้วยอัตโนมัติ
-          </div>
-          {/* รายการ bundle ที่มีอยู่ */}
-          {(bundleMap[showBundleM]||[]).length>0&&(
-            <div style={{display:"flex",flexDirection:"column",gap:6}}>
-              {(bundleMap[showBundleM]||[]).map((b,bi)=>{
-                const bAssign=S.assigns.find(x=>x.id===b.assignId);
-                const bSub=S.subjects.find(s=>s.id===bAssign?.subjectId);
-                const bTch=S.teachers.find(t=>t.id===b.teacherId);
-                return <div key={bi} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:"#F0FDF4",borderRadius:10,border:"1px solid #BBF7D0"}}>
-                  <div>
-                    <div style={{fontSize:13,fontWeight:700,color:"#065F46"}}>{bSub?.code} — {subDisplayName(bSub)}</div>
-                    <div style={{fontSize:11,color:"#6B7280"}}>ครู: {bTch?`${bTch.prefix}${bTch.firstName} ${bTch.lastName}`:"(ครูหลักของ assignment)"}</div>
-                  </div>
-                  <button onClick={()=>setBundleMap(p=>({...p,[showBundleM]:(p[showBundleM]||[]).filter((_,i)=>i!==bi)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",fontSize:16}}>✕</button>
-                </div>;
-              })}
-            </div>
-          )}
-          <div style={{borderTop:"1px solid #E5E7EB",paddingTop:12}}>
-            <div style={{fontSize:12,fontWeight:700,color:"#374151",marginBottom:8}}>เพิ่มวิชาคู่ใหม่</div>
-            <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              <div>
-                <label style={LS}>วิชาที่ต้องการสอนคู่กัน</label>
-                <SearchSelect
-                  value={bundleSelSub}
-                  onChange={v=>{setBundleSelSub(v);setBundleSelTeacher("");}}
-                  options={[{value:"",label:"-- เลือกวิชา --"},...S.assigns
-                    .filter(a=>a.id!==showBundleM&&!(bundleMap[showBundleM]||[]).find(b=>b.assignId===a.id))
-                    .map(a=>{
-                      const sub=S.subjects.find(s=>s.id===a.subjectId);
-                      const tch=S.teachers.find(t=>t.id===a.teacherId);
-                      return{value:a.id,label:`${sub?.code||""} ${subDisplayName(sub)||""} — ${tch?.firstName||""} (${a.roomIds.map(r=>S.rooms.find(x=>x.id===r)?.name||"").join(",")})`};
-                    })
-                  ]}
-                  placeholder="-- เลือก assignment --"
-                />
-              </div>
-              {bundleSelSub&&(()=>{
-                const bAssign=S.assigns.find(a=>a.id===bundleSelSub);
-                const bSub=S.subjects.find(s=>s.id===bAssign?.subjectId);
-                // หาครูที่สามารถสอนวิชานี้ได้ (มี assignment ของวิชานี้)
-                const eligibleTeachers=S.assigns
-                  .filter(a=>a.subjectId===bAssign?.subjectId)
-                  .map(a=>S.teachers.find(t=>t.id===a.teacherId))
-                  .filter(Boolean);
-                return <div>
-                  <label style={LS}>ครูผู้สอน {eligibleTeachers.length>1?"(เลือกได้)":""}</label>
-                  <SearchSelect
-                    value={bundleSelTeacher}
-                    onChange={v=>setBundleSelTeacher(v)}
-                    options={[
-                      {value:"",label:"-- ใช้ครูหลักของ assignment --"},
-                      ...eligibleTeachers.map(t=>({value:t.id,label:`${t.prefix}${t.firstName} ${t.lastName}`}))
-                    ]}
-                    placeholder="-- ใช้ครูหลัก --"
-                  />
-                </div>;
-              })()}
-              <button
-                onClick={()=>{
-                  if(!bundleSelSub)return;
-                  const bAssign=S.assigns.find(a=>a.id===bundleSelSub);
-                  if(!bAssign)return;
-                  setBundleMap(p=>({...p,[showBundleM]:[...(p[showBundleM]||[]),{assignId:bundleSelSub,teacherId:bundleSelTeacher||bAssign.teacherId}]}));
-                  setBundleSelSub("");setBundleSelTeacher("");
-                }}
-                disabled={!bundleSelSub}
-                style={{...BS("#059669"),opacity:bundleSelSub?1:0.4}}
-              >+ เพิ่มวิชาคู่</button>
-            </div>
-          </div>
-        </div>
-      </Modal>
+      {/* ── Auto Schedule Modal ── */}
       {showAutoModal && (
         <div style={{position:"fixed",inset:0,zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.55)"}}>
           <div style={{background:"#fff",borderRadius:20,boxShadow:"0 30px 60px rgba(0,0,0,0.25)",width:"min(520px,94%)",maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden",fontFamily:"'Sarabun','Noto Sans Thai',sans-serif"}}>
