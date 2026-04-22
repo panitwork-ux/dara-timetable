@@ -2042,17 +2042,8 @@ function Scheduler({S,U,st,gc}){
 
   const sameSubjectSameDay=(subjectId,roomId,day,excludeKey)=>{
     const allowed=S.subjects.find(s=>s.id===subjectId)?.consecutiveAllowed||0;
-    // NP (-1): อนุญาตคนละห้อง แต่ห้ามซ้ำห้องเดิมในวันเดิว (max 1/ห้อง/วัน)
-    if(allowed===-1){
-      let c=0;
-      for(const [k,en] of Object.entries(S.schedule)){
-        if(k===excludeKey)continue;
-        const pts=k.split("_");
-        if(pts[0]!==roomId||pts[1]!==day)continue;
-        en?.forEach(e=>{if(e.subjectId===subjectId)c++;});
-      }
-      return c>=1;
-    }
+    // NP (-1): อนุญาตลงวันเดิมได้ไม่จำกัดคาบ (สอนหลายห้องพร้อมกัน นับครูแค่ 1 คาบ)
+    if(allowed===-1) return false;
     // เศรษฐ-วิศวะ (-2): อนุญาต 2 คาบต่อห้องต่อวัน (2 คาบติด) แต่ห้ามเกิน 2
     if(allowed===-2){
       let c=0;
@@ -2217,6 +2208,7 @@ function Scheduler({S,U,st,gc}){
         const sameSubDay2 = (subId, rId, day) => {
           const sub = S.subjects.find(s => s.id === subId);
           const ca = sub?.consecutiveAllowed || 0;
+          if (ca === -1) return false; // NP: ลงวันเดิมได้ไม่จำกัด
           if (ca >= 2) return false;
           let c = 0;
           for (const [k, en] of Object.entries(newSchedule)) {
