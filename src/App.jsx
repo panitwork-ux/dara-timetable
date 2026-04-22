@@ -3613,6 +3613,31 @@ function Settings({S,U,st,ay,setAY,sh,setSH,div}){
 
 
 /* ===== PDF HELPER — ตามแบบฟอร์มดาราวิทยาลัย (A4 แนวตั้ง) ===== */
+
+// Merge entries ที่วิชาเดียวกันในคาบเดียว → แสดงชื่อวิชาแค่ครั้งเดียว เรียงห้องลงมา
+function groupEntries(entries) {
+  if (!entries || !entries.length) return [];
+  const map = {};
+  entries.forEach(function(e) {
+    const key = e.sub;
+    if (!map[key]) {
+      map[key] = { sub: e.sub, rooms: [], double: e.double };
+    }
+    if (e.room && !map[key].rooms.includes(e.room)) map[key].rooms.push(e.room);
+    if (e.double) map[key].double = true;
+  });
+  return Object.values(map).map(function(g) {
+    g.rooms.sort(function(a, b) {
+      var na = parseInt((a.match(/(\d+)$/) || [0, 9999])[1]);
+      var nb = parseInt((b.match(/(\d+)$/) || [0, 9999])[1]);
+      return na !== nb ? na - nb : a.localeCompare(b, 'th');
+    });
+    // แต่ละห้องเป็น div แยกบรรทัด
+    var roomHtml = g.rooms.map(function(r){ return '<div class="ent-room">' + r + '</div>'; }).join('');
+    return { sub: g.sub, roomHtml: roomHtml, room2: '', double: g.double, roomCount: g.rooms.length };
+  });
+}
+
 function pdfPage(title, subtitle, dayRows, footerText, logoBase64) {
   const PLIST = [
     { id: 1, time: "08.30-09.20" }, { id: 2, time: "09.20-10.10" },
@@ -3625,13 +3650,12 @@ function pdfPage(title, subtitle, dayRows, footerText, logoBase64) {
   const thTimes = PLIST.map(p => '<th class="period-time">' + p.time + '</th>').join("");
 
   const bodyRows = dayRows.map(function(r) {
-    const dayCells = r.cells.map(function(entries) {
-      if (!entries || !entries.length) return '<td class="slot"></td>';
-      const isDouble = entries.some(function(e){ return e.double; });
+    const dayCells = r.cells.map(function(rawEntries) {
+      if (!rawEntries || !rawEntries.length) return '<td class="slot"></td>';
+      const entries = groupEntries(rawEntries);
+      const isDouble = entries.some(function(e){ return e.double || e.roomCount > 1; });
       const inner = entries.map(function(e) {
-        let h = '<div class="ent"><div class="ent-sub">' + e.sub + '</div><div class="ent-room">' + e.room + '</div>';
-        if (e.room2) h += '<div class="ent-room2">' + e.room2 + '</div>';
-        h += '</div>';
+        let h = '<div class="ent"><div class="ent-sub">' + e.sub + '</div>' + e.roomHtml + '</div>';
         return h;
       }).join("");
       return '<td class="slot' + (isDouble ? ' slot-hi' : '') + '">' + inner + '</td>';
@@ -3709,13 +3733,12 @@ function pdfMultiPage(pages, logoBase64) {
 
   const buildBlock = (pg) => {
     const bodyRows = pg.dayRows.map(function(r) {
-      const dayCells = r.cells.map(function(entries) {
-        if (!entries || !entries.length) return '<td class="slot"></td>';
-        const isDouble = entries.some(function(e){ return e.double; });
+      const dayCells = r.cells.map(function(rawEntries) {
+        if (!rawEntries || !rawEntries.length) return '<td class="slot"></td>';
+        const entries = groupEntries(rawEntries);
+        const isDouble = entries.some(function(e){ return e.double || e.roomCount > 1; });
         const inner = entries.map(function(e) {
-          let h = '<div class="ent"><div class="ent-sub">' + e.sub + '</div><div class="ent-room">' + e.room + '</div>';
-          if (e.room2) h += '<div class="ent-room2">' + e.room2 + '</div>';
-          h += '</div>';
+          let h = '<div class="ent"><div class="ent-sub">' + e.sub + '</div>' + e.roomHtml + '</div>';
           return h;
         }).join("");
         return '<td class="slot' + (isDouble ? ' slot-hi' : '') + '">' + inner + '</td>';
