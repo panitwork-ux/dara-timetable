@@ -2041,10 +2041,6 @@ function Scheduler({S,U,st,gc}){
         setAutoProgress({ run: runIdx + 1, total: opts.runs });
 
         // ── เริ่มต้น schedule ──
-        const base = opts.mode === "full"
-          ? {} // รีเซ็ต: ลบทุกคาบที่ไม่ได้ล็อค
-          : { ...S.schedule };
-
         // ถ้า full mode → เก็บเฉพาะคาบที่ล็อคไว้
         const newSchedule = {};
         if (opts.mode === "full") {
@@ -2171,11 +2167,10 @@ function Scheduler({S,U,st,gc}){
             const placed2 = countInRoom2(a.id, rid);
             const remaining = limit - placed2;
             if (remaining <= 0) return;
-            const teacher2 = S.teachers.find(t => t.id === a.teacherId);
             const coTids = cardCoMap[a.id] || [];
             const busyScore = teacherScheduledTotal(a.teacherId);
             const score = busyScore * 10 + (ca > 0 ? ca * 5 : 0) + (sub?.specialRoomId ? 8 : 0);
-            for (let i = 0; i < remaining; i++) jobs.push({ a, rid, sub, ca, coTids, score, teacher: teacher2 });
+            for (let i = 0; i < remaining; i++) jobs.push({ a, rid, sub, ca, coTids, score });
           });
         });
 
