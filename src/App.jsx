@@ -852,7 +852,7 @@ export default function App() {
   const divHasAccess=!firebaseConfigured||userPerms?.divisions?.[divId]===true;
 
   return <div style={{display:"flex",height:"100vh",fontFamily:"'Sarabun','Noto Sans Thai',sans-serif",background:"linear-gradient(145deg,#EEF2FF 0%,#F8F9FF 40%,#FFF5F5 100%)",overflow:"hidden"}}>
-    <style>{`@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#D4C5BA;border-radius:4px}::-webkit-scrollbar-track{background:transparent}@keyframes slideIn{from{transform:translateX(100px);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}.ni:hover{background:rgba(255,255,255,0.12)!important;border-radius:10px}.ni.a{background:rgba(255,255,255,0.15)!important;border-radius:10px}input:focus,select:focus{border-color:#991B1B!important;box-shadow:0 0 0 3px rgba(153,27,27,0.12)!important}input,select{transition:border-color 0.15s,box-shadow 0.15s}.drag-card{cursor:grab;user-select:none}.drag-card:active{cursor:grabbing}.dz{transition:background 0.15s,outline 0.15s}.dz.over{background:#FEE2E2!important;outline:2px dashed #DC2626}button:hover{opacity:0.88;transition:opacity 0.15s}select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:36px!important}.div-sel{appearance:none!important;background:rgba(0,0,0,0.2)!important;background-image:none!important;border:1px solid rgba(255,255,255,0.25)!important;border-radius:10px!important;color:#fff!important;font-size:13px!important;font-weight:600!important;font-family:inherit!important;padding:8px 32px 8px 12px!important;width:100%!important;cursor:pointer!important;outline:none!important;transition:border-color 0.15s}.div-sel:focus{box-shadow:0 0 0 2px rgba(255,255,255,0.2)!important;border-color:rgba(255,255,255,0.5)!important}.div-sel option{background:#991B1B;color:#fff}`}</style>
+    <style>{`@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#D4C5BA;border-radius:4px}::-webkit-scrollbar-track{background:transparent}@keyframes slideIn{from{transform:translateX(100px);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}.ni:hover{background:rgba(255,255,255,0.12)!important;border-radius:10px}.ni.a{background:rgba(255,255,255,0.15)!important;border-radius:10px}input:focus,select:focus{border-color:#991B1B!important;box-shadow:0 0 0 3px rgba(153,27,27,0.12)!important}input,select{transition:border-color 0.15s,box-shadow 0.15s}.drag-card{cursor:grab;user-select:none}.drag-card:active{cursor:grabbing}.dz{transition:background 0.15s,outline 0.15s}.dz.over{background:#FEE2E2!important;outline:2px dashed #DC2626}button:hover{opacity:0.88;transition:opacity 0.15s}select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:36px!important}.div-sel{appearance:none!important;background:rgba(0,0,0,0.2)!important;background-image:none!important;border:1px solid rgba(255,255,255,0.25)!important;border-radius:10px!important;color:#fff!important;font-size:13px!important;font-weight:600!important;font-family:inherit!important;padding:8px 32px 8px 12px!important;width:100%!important;cursor:pointer!important;outline:none!important;transition:border-color 0.15s}.div-sel:focus{box-shadow:0 0 0 2px rgba(255,255,255,0.2)!important;border-color:rgba(255,255,255,0.5)!important}.div-sel option{background:#991B1B;color:#fff}`}</style>
 
     <div style={{width:side?240:0,background:"linear-gradient(180deg,#B91C1C 0%,#991B1B 100%)",transition:"width 0.3s",overflow:"hidden",flexShrink:0,display:"flex",flexDirection:"column",boxShadow:"2px 0 12px rgba(185,28,28,0.2)"}}>
       <div style={{padding:"20px 16px",borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
@@ -1572,22 +1572,59 @@ function Assigns({S,U,st,gc}){
     else{rows=await readExcelFile(f);}
     if(!rows?.length){st("ไม่พบข้อมูล","error");return;}
     const ns=[];
+    const failLog=[];
     rows.forEach(r=>{
       const tName=String(r["ครู"]||"").trim();
       const subCode=String(r["รหัสวิชา"]||"").trim();
+      const subName=String(r["ชื่อวิชา"]||"").trim();
       const roomNames=String(r["ห้องเรียน"]||"").split(",").map(x=>x.trim()).filter(Boolean);
       const periods=parseInt(r["คาบที่มอบหมาย"])||1;
-      const t=S.teachers.find(x=>`${x.prefix}${x.firstName} ${x.lastName}`===tName||x.firstName===tName);
-      const sub=S.subjects.find(s=>s.code===subCode||s.name===subCode);
-      if(!t||!sub)return;
-      const roomIds=roomNames.map(n=>S.rooms.find(rm=>rm.name===n)?.id).filter(Boolean);
-      if(!roomIds.length)return;
-      // ตรวจว่ามี assignment นี้อยู่แล้วไหม
+      if(!tName||!subName||!roomNames.length)return;
+      const normalize=(n)=>n.replace(/^ม\./,"").replace(/\s+/g,"");
+      // ค้นหาครู
+      const t=S.teachers.find(x=>{
+        const full=`${x.prefix}${x.firstName} ${x.lastName}`.replace(/\s+/g," ");
+        const noPrefix=`${x.firstName} ${x.lastName}`.replace(/\s+/g," ");
+        const tn=tName.replace(/\s+/g," ");
+        return full===tn||noPrefix===tn||x.firstName===tn;
+      });
+      if(!t){
+        // หาครูที่ชื่อใกล้เคียง (firstName หรือ lastName มี substring)
+        const hint=S.teachers.find(x=>tName.includes(x.firstName)||x.firstName.includes(tName.split(" ")[0]));
+        failLog.push({row:`${tName} / ${subName}`, reason:`ไม่เจอครู "${tName}"`, hint:hint?`ในระบบมี: "${hint.prefix}${hint.firstName} ${hint.lastName}"`:""});
+        return;
+      }
+      // ค้นหาวิชา
+      const sub=S.subjects.find(s=>
+        (subCode&&s.code===subCode)||s.name===subName||(s.shortName&&s.shortName===subName)
+      );
+      if(!sub){
+        const hint=S.subjects.find(s=>s.name.includes(subName.substring(0,4))||subName.includes(s.name.substring(0,4)));
+        failLog.push({row:`${tName} / ${subName}`, reason:`ไม่เจอวิชา "${subName}"`, hint:hint?`ในระบบมี: "${hint.name}"`:""});
+        return;
+      }
+      // ค้นหาห้อง
+      const roomIds=roomNames.map(n=>{
+        const norm=normalize(n);
+        return (S.rooms.find(rm=>rm.name===n)||S.rooms.find(rm=>normalize(rm.name)===norm))?.id;
+      }).filter(Boolean);
+      if(!roomIds.length){
+        const sampleRooms=S.rooms.slice(0,5).map(rm=>rm.name).join(", ");
+        failLog.push({row:`${tName} / ${subName}`, reason:`ไม่เจอห้อง "${roomNames[0]}"`, hint:`ตัวอย่างห้องในระบบ: ${sampleRooms}`});
+        return;
+      }
       const exists=S.assigns.find(a=>a.teacherId===t.id&&a.subjectId===sub.id&&JSON.stringify(a.roomIds.sort())===JSON.stringify(roomIds.sort()));
       if(!exists) ns.push({id:gid(),teacherId:t.id,subjectId:sub.id,roomIds,totalPeriods:periods});
     });
-    if(ns.length){U.setAssigns(p=>[...p,...ns]);st(`นำเข้า ${ns.length} รายการ`);}
-    else st("ไม่พบข้อมูลใหม่ที่ตรงกัน","warning");
+    if(ns.length) U.setAssigns(p=>[...p,...ns]);
+    // แสดง diagnostic popup
+    if(failLog.length>0){
+      const lines=failLog.slice(0,8).map(f=>`• ${f.reason}${f.hint?" → "+f.hint:""}`).join("\n");
+      const extra=failLog.length>8?`\n... และอีก ${failLog.length-8} รายการ`:"";
+      alert(`${ns.length>0?`นำเข้าสำเร็จ ${ns.length} รายการ\n\n`:""}ข้าม ${failLog.length} รายการ:\n${lines}${extra}\n\n💡 วิธีแก้: กด Export ก่อน แล้วใช้ไฟล์นั้นเป็นแม่แบบ`);
+    } else if(ns.length){
+      st(`นำเข้า ${ns.length} รายการ`);
+    }
     e.target.value="";
   };
 
@@ -1802,6 +1839,19 @@ function Scheduler({S,U,st,gc}){
   const [cardCoMap,setCardCoMap]=useState({}); // {assignId: [teacherId, ...]} สูงสุด 4 ครูร่วม
   const [autoRunning,setAutoRunning]=useState(false);
   const [autoResult,setAutoResult]=useState(null); // {placed, skipped, details}
+  const [showAutoModal, setShowAutoModal] = useState(false);
+  const [autoOpts, setAutoOpts] = useState({
+    mode:        "remaining",   // "remaining" | "full"
+    allowNormal: true,          // วิชาปกติ (ไม่มี consecutive)
+    allowConsec: false,         // วิชาคาบติด (consecutive ≥ 2)
+    allowNP:     false,         // วิชา NP (−1)
+    allowSR:     false,         // วิชาห้องพิเศษ
+    spreadDay:   true,          // กระจายไม่ให้วิชาเดียวอยู่วันเดียวกัน 2 คาบ (default เปิด)
+    noFirstLast: true,          // ไม่วางคาบ 1 + คาบ 7 วันเดียวกัน (วิชาเดิม)
+    maxConsecTeacher: 0,        // 0 = ไม่จำกัด, 3/4 = ห้ามครูสอนติดกันเกิน N คาบ
+    runs:        10,            // จำนวนรอบ (10 default)
+  });
+  const [autoProgress, setAutoProgress] = useState(null); // {run, total}
 
   const teacher  = S.teachers.find(t=>t.id===selT);
   // asgns: รวม assignment ที่ครูเป็นหลัก + assignment ที่ครูถูก assign เป็น coTeacher ใน cardCoMap
@@ -1974,146 +2024,256 @@ function Scheduler({S,U,st,gc}){
   };
 
 
-  /* ── Auto Schedule ── */
-  const runAutoSchedule=()=>{
-    if(!window.confirm("ระบบจะพยายามเติมคาบที่ยังไม่ลงให้อัตโนมัติ\nจะไม่แก้ไขคาบที่จัดไว้แล้ว\nดำเนินการต่อ?"))return;
+  /* ── Auto Schedule (multi-run) ── */
+  const runAutoSchedule = () => setShowAutoModal(true);
+
+  const executeAutoSchedule = (opts) => {
+    setShowAutoModal(false);
     setAutoRunning(true);
     setAutoResult(null);
+    setAutoProgress({ run: 0, total: opts.runs });
 
-    // ใช้ setTimeout เพื่อให้ UI อัพเดทก่อนรัน algorithm
-    setTimeout(()=>{
-      const newSchedule={...S.schedule};
-      let placed=0, skipped=0;
-      const skippedList=[];
+    // รันแบบ async loop เพื่อให้ UI อัพเดท progress ได้
+    let bestResult = null;
 
-      // ฟังก์ชัน helper อ่านจาก newSchedule (state ใหม่)
-      const sk2=(rid,day,p)=>rid+"_"+day+"_"+p;
-      const isBusy2=(tid,day,p,excKey,subId=null)=>{
-        for(const [k,en] of Object.entries(newSchedule)){
-          if(k===excKey)continue;
-          const pts=k.split("_"); const kDay=pts[pts.length-2]; const kPer=parseInt(pts[pts.length-1]);
-          if(kDay!==day||kPer!==p)continue;
-          for(const e of(en||[])){
-            const coIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
-            if(e.teacherId!==tid&&!coIds.includes(tid))continue;
-            if(subId){
-              const sub=S.subjects.find(s=>s.id===e.subjectId);
-              const ca=sub?.consecutiveAllowed||0;
-              if(ca===-1||ca===-2){if(e.subjectId===subId)return false;}
-            }
-            return true;
-          }
+    const runOnce = (runIdx) => {
+      setTimeout(() => {
+        setAutoProgress({ run: runIdx + 1, total: opts.runs });
+
+        // ── เริ่มต้น schedule ──
+        const base = opts.mode === "full"
+          ? {} // รีเซ็ต: ลบทุกคาบที่ไม่ได้ล็อค
+          : { ...S.schedule };
+
+        // ถ้า full mode → เก็บเฉพาะคาบที่ล็อคไว้
+        const newSchedule = {};
+        if (opts.mode === "full") {
+          Object.entries(S.schedule).forEach(([k, en]) => {
+            if (S.locks[k]) newSchedule[k] = en; // เก็บคาบที่ล็อค
+          });
+        } else {
+          Object.assign(newSchedule, S.schedule);
         }
-        return false;
-      };
-      const isLocked2=(key)=>!!S.locks[key];
-      const isBlk2=(tid,day,p)=>blocked(tid).some(b=>b.day===day&&b.period===p);
-      const srBusy2=(subId,day,p)=>{
-        const sub=S.subjects.find(s=>s.id===subId);
-        if(!sub?.specialRoomId)return false;
-        for(const [k,en] of Object.entries(newSchedule)){
-          const pts=k.split("_"); if(pts[pts.length-2]!==day||parseInt(pts[pts.length-1])!==p)continue;
-          if((en||[]).some(e=>{const s2=S.subjects.find(x=>x.id===e.subjectId);return s2?.specialRoomId===sub.specialRoomId}))return true;
-        }
-        return false;
-      };
-      const countInRoom2=(aId,rId)=>{
-        let c=0;
-        for(const [k,en] of Object.entries(newSchedule)){
-          if(!k.startsWith(rId+"_"))continue;
-          (en||[]).forEach(e=>{if(e.assignmentId===aId)c++;});
-        }
-        return c;
-      };
-      const sameSubDay2=(subId,rId,day)=>{
-        const sub=S.subjects.find(s=>s.id===subId);
-        const ca=sub?.consecutiveAllowed||0;
-        if(ca>=2)return false; // อนุญาตคาบติด
-        let c=0;
-        for(const [k,en] of Object.entries(newSchedule)){
-          const pts=k.split("_");
-          if(pts.slice(0,-2).join("_")!==rId||pts[pts.length-2]!==day)continue;
-          (en||[]).forEach(e=>{if(e.subjectId===subId)c++;});
-        }
-        return c>=(ca===0?1:ca);
-      };
 
-      // สร้างรายการ "งานที่ต้องจัด" — assign × room × คาบที่ยังขาด
-      const jobs=[];
-      S.assigns.forEach(a=>{
-        const sub=S.subjects.find(s=>s.id===a.subjectId);
-        const ca=sub?.consecutiveAllowed||0;
-        if(ca===-2)return; // ข้าม mode พิเศษ เศรษฐ-วิศวะ
-        a.roomIds.forEach(rid=>{
-          const limit=sub?.periodsPerWeek||a.totalPeriods||1;
-          const placed2=countInRoom2(a.id,rid);
-          const remaining=limit-placed2;
-          if(remaining<=0)return;
-          const teacher2=S.teachers.find(t=>t.id===a.teacherId);
-          const coTids=cardCoMap[a.id]||[];
-          // score ยากง่าย: ครูยุ่งมาก = ยาก, consecutive = ยาก
-          const busyScore=teacherScheduledTotal(a.teacherId);
-          const score=busyScore*10+(ca>0?ca*5:0)+(sub?.specialRoomId?8:0);
-          for(let i=0;i<remaining;i++) jobs.push({a,rid,sub,ca,coTids,score,teacher:teacher2});
-        });
-      });
+        let placed = 0, skipped = 0;
+        const skippedList = [];
 
-      // เรียงจากยากไปง่าย
-      jobs.sort((x,y)=>y.score-x.score);
+        // ── helper functions ──
+        const sk2 = (rid, day, p) => rid + "_" + day + "_" + p;
 
-      // Shuffle DAYS/PERIODS เพื่อกระจาย
-      const shuffled=(arr)=>[...arr].sort(()=>Math.random()-0.5);
-
-      // วางแต่ละ job
-      jobs.forEach(({a,rid,sub,ca,coTids,teacher:t2})=>{
-        const subId=a.subjectId;
-        const tid=a.teacherId;
-        let foundSlot=false;
-
-        // ลอง day/period ทุก combination
-        const days=shuffled(DAYS);
-        outer: for(const day of days){
-          const periods=shuffled(PERIODS);
-          for(const p of periods){
-            const key=sk2(rid,day,p.id);
-            // ตรวจ constraints
-            if(isLocked2(key))continue;
-            if((newSchedule[key]||[]).length>=3)continue;
-            if(isBlk2(tid,day,p.id))continue;
-            if(isBusy2(tid,day,p.id,null,subId))continue;
-            if(srBusy2(subId,day,p.id))continue;
-            if(sameSubDay2(subId,rid,day))continue;
-            // ตรวจ consecutive: ถ้า ca>0 ต้องมีคาบก่อนหน้าหรือหลังติดกัน
-            if(ca>=2){
-              const hasPrev=(newSchedule[sk2(rid,day,p.id-1)]||[]).some(e=>e.subjectId===subId);
-              const hasNext=(newSchedule[sk2(rid,day,p.id+1)]||[]).some(e=>e.subjectId===subId);
-              const countSameDay=(()=>{let c=0;PERIODS.forEach(pp=>{(newSchedule[sk2(rid,day,pp.id)]||[]).forEach(e=>{if(e.subjectId===subId)c++;});});return c;})();
-              if(!hasPrev&&!hasNext&&countSameDay===0){
-                // ลองหาช่องติดกัน — ต้องมี ca-1 คาบติดอยู่แล้วหรือคาบถัดไปว่าง
-                const nextKey=sk2(rid,day,p.id+1);
-                const nextFree=!isLocked2(nextKey)&&(newSchedule[nextKey]||[]).length<3&&!isBusy2(tid,day,p.id+1,null,subId)&&!isBlk2(tid,day,p.id+1);
-                if(!nextFree)continue; // ต้องมีคาบติดได้
+        const isBusy2 = (tid, day, p, excKey, subId = null) => {
+          for (const [k, en] of Object.entries(newSchedule)) {
+            if (k === excKey) continue;
+            const pts = k.split("_");
+            const kDay = pts[pts.length - 2];
+            const kPer = parseInt(pts[pts.length - 1]);
+            if (kDay !== day || kPer !== p) continue;
+            for (const e of (en || [])) {
+              const coIds = e.coTeacherIds?.length ? e.coTeacherIds : (e.coTeacherId ? [e.coTeacherId] : []);
+              if (e.teacherId !== tid && !coIds.includes(tid)) continue;
+              if (subId) {
+                const sub = S.subjects.find(s => s.id === e.subjectId);
+                const ca = sub?.consecutiveAllowed || 0;
+                if ((ca === -1 || ca === -2) && e.subjectId === subId) return false;
               }
+              return true;
             }
-            // วาง entry
-            const entry={id:gid(),teacherId:tid,subjectId:subId,assignmentId:a.id,coTeacherIds:coTids,coTeacherId:coTids[0]||null};
-            newSchedule[key]=[...(newSchedule[key]||[]),entry];
-            placed++;
-            foundSlot=true;
-            break outer;
           }
-        }
-        if(!foundSlot){
-          skipped++;
-          skippedList.push(`${sub?.code||""} ${subDisplayName(sub)||""} — ${S.rooms.find(r=>r.id===rid)?.name||""}`);
-        }
-      });
+          return false;
+        };
 
-      U.setSchedule(newSchedule);
-      setAutoResult({placed,skipped,details:skippedList});
-      setAutoRunning(false);
-      st(`Auto จัด: วาง ${placed} คาบ, ข้าม ${skipped} คาบ`,"success");
-    },100);
+        const isLocked2 = (key) => !!S.locks[key];
+        const isBlk2 = (tid, day, p) => blocked(tid).some(b => b.day === day && b.period === p);
+
+        const srBusy2 = (subId, day, p) => {
+          const sub = S.subjects.find(s => s.id === subId);
+          if (!sub?.specialRoomId) return false;
+          for (const [k, en] of Object.entries(newSchedule)) {
+            const pts = k.split("_");
+            if (pts[pts.length - 2] !== day || parseInt(pts[pts.length - 1]) !== p) continue;
+            if ((en || []).some(e => {
+              const s2 = S.subjects.find(x => x.id === e.subjectId);
+              return s2?.specialRoomId === sub.specialRoomId;
+            })) return true;
+          }
+          return false;
+        };
+
+        const countInRoom2 = (aId, rId) => {
+          let c = 0;
+          for (const [k, en] of Object.entries(newSchedule)) {
+            if (!k.startsWith(rId + "_")) continue;
+            (en || []).forEach(e => { if (e.assignmentId === aId) c++; });
+          }
+          return c;
+        };
+
+        const sameSubDay2 = (subId, rId, day) => {
+          const sub = S.subjects.find(s => s.id === subId);
+          const ca = sub?.consecutiveAllowed || 0;
+          if (ca >= 2) return false;
+          let c = 0;
+          for (const [k, en] of Object.entries(newSchedule)) {
+            const pts = k.split("_");
+            if (pts.slice(0, -2).join("_") !== rId || pts[pts.length - 2] !== day) continue;
+            (en || []).forEach(e => { if (e.subjectId === subId) c++; });
+          }
+          return c >= (ca === 0 ? 1 : ca);
+        };
+
+        // ── เงื่อนไขเพิ่มเติม ──
+
+        // noFirstLast: ถ้าวิชานี้มีคาบ 1 อยู่แล้ว ห้ามวางคาบ 7 ในวันเดิม (และกลับกัน)
+        const violatesFirstLast = (subId, rId, day, period) => {
+          if (!opts.noFirstLast) return false;
+          if (period !== 1 && period !== 7) return false;
+          const counterPeriod = period === 1 ? 7 : 1;
+          const counterKey = sk2(rId, day, counterPeriod);
+          return (newSchedule[counterKey] || []).some(e => e.subjectId === subId);
+        };
+
+        // maxConsecTeacher: ครูสอนติดกันไม่เกิน N คาบ
+        const teacherConsecCount = (tid, day, period) => {
+          if (!opts.maxConsecTeacher) return false;
+          // นับคาบที่ครูสอนติดกันก่อนหน้า period
+          let streak = 0;
+          for (let p = period - 1; p >= 1; p--) {
+            let found = false;
+            Object.entries(newSchedule).forEach(([k, en]) => {
+              const pts = k.split("_");
+              if (pts[pts.length - 2] !== day || parseInt(pts[pts.length - 1]) !== p) return;
+              if ((en || []).some(e => {
+                const coIds = e.coTeacherIds?.length ? e.coTeacherIds : (e.coTeacherId ? [e.coTeacherId] : []);
+                return e.teacherId === tid || coIds.includes(tid);
+              })) found = true;
+            });
+            if (found) streak++;
+            else break;
+          }
+          return streak >= opts.maxConsecTeacher;
+        };
+
+        // ── สร้าง jobs ──
+        const jobs = [];
+        S.assigns.forEach(a => {
+          const sub = S.subjects.find(s => s.id === a.subjectId);
+          const ca = sub?.consecutiveAllowed || 0;
+
+          // กรองตาม opts
+          if (ca === -2) return; // เศรษฐ-วิศวะ ข้ามเสมอ (complex)
+          if (ca === -1 && !opts.allowNP) return;
+          if (ca >= 2 && !opts.allowConsec) return;
+          if (sub?.specialRoomId && !opts.allowSR) return;
+          if (ca === 0 && !sub?.specialRoomId && !opts.allowNormal) return;
+
+          a.roomIds.forEach(rid => {
+            const limit = sub?.periodsPerWeek || a.totalPeriods || 1;
+            const placed2 = countInRoom2(a.id, rid);
+            const remaining = limit - placed2;
+            if (remaining <= 0) return;
+            const teacher2 = S.teachers.find(t => t.id === a.teacherId);
+            const coTids = cardCoMap[a.id] || [];
+            const busyScore = teacherScheduledTotal(a.teacherId);
+            const score = busyScore * 10 + (ca > 0 ? ca * 5 : 0) + (sub?.specialRoomId ? 8 : 0);
+            for (let i = 0; i < remaining; i++) jobs.push({ a, rid, sub, ca, coTids, score, teacher: teacher2 });
+          });
+        });
+
+        // เรียงจากยากไปง่าย
+        jobs.sort((x, y) => y.score - x.score);
+
+        const shuffled = (arr) => [...arr].sort(() => Math.random() - 0.5);
+
+        // วาง jobs
+        jobs.forEach(({ a, rid, sub, ca, coTids }) => {
+          const subId = a.subjectId;
+          const tid = a.teacherId;
+          let foundSlot = false;
+
+          const days = shuffled(DAYS);
+          outer: for (const day of days) {
+            const periods = shuffled(PERIODS);
+            for (const p of periods) {
+              const key = sk2(rid, day, p.id);
+
+              if (isLocked2(key)) continue;
+              if ((newSchedule[key] || []).length >= 3) continue;
+              if (isBlk2(tid, day, p.id)) continue;
+              if (isBusy2(tid, day, p.id, null, subId)) continue;
+              if (srBusy2(subId, day, p.id)) continue;
+              if (sameSubDay2(subId, rid, day)) continue;
+
+              // เงื่อนไขเพิ่มเติม
+              if (violatesFirstLast(subId, rid, day, p.id)) continue;
+              if (teacherConsecCount(tid, day, p.id)) continue;
+
+              // consecutive ≥ 2
+              if (ca >= 2) {
+                const hasPrev = (newSchedule[sk2(rid, day, p.id - 1)] || []).some(e => e.subjectId === subId);
+                const hasNext = (newSchedule[sk2(rid, day, p.id + 1)] || []).some(e => e.subjectId === subId);
+                const countSameDay = (() => {
+                  let c = 0;
+                  PERIODS.forEach(pp => {
+                    (newSchedule[sk2(rid, day, pp.id)] || []).forEach(e => { if (e.subjectId === subId) c++; });
+                  });
+                  return c;
+                })();
+                if (!hasPrev && !hasNext && countSameDay === 0) {
+                  const nextKey = sk2(rid, day, p.id + 1);
+                  const nextFree = !isLocked2(nextKey)
+                    && (newSchedule[nextKey] || []).length < 3
+                    && !isBusy2(tid, day, p.id + 1, null, subId)
+                    && !isBlk2(tid, day, p.id + 1);
+                  if (!nextFree) continue;
+                }
+              }
+
+              const entry = {
+                id: gid(),
+                teacherId: tid,
+                subjectId: subId,
+                assignmentId: a.id,
+                coTeacherIds: coTids,
+                coTeacherId: coTids[0] || null,
+              };
+              newSchedule[key] = [...(newSchedule[key] || []), entry];
+              placed++;
+              foundSlot = true;
+              break outer;
+            }
+          }
+          if (!foundSlot) {
+            skipped++;
+            skippedList.push(`${sub?.code || ""} ${subDisplayName(sub) || ""} — ${S.rooms.find(r => r.id === rid)?.name || ""}`);
+          }
+        });
+
+        const result = { placed, skipped, details: skippedList, schedule: newSchedule };
+
+        // เลือกผลที่ดีที่สุด (placed มากสุด, skipped น้อยสุด)
+        if (!bestResult || placed > bestResult.placed || (placed === bestResult.placed && skipped < bestResult.skipped)) {
+          bestResult = result;
+        }
+
+        if (runIdx + 1 < opts.runs) {
+          runOnce(runIdx + 1);
+        } else {
+          // จบครบ opts.runs รอบ — ใช้ bestResult
+          U.setSchedule(bestResult.schedule);
+          setAutoResult({
+            placed: bestResult.placed,
+            skipped: bestResult.skipped,
+            details: bestResult.details,
+            runs: opts.runs,
+          });
+          setAutoRunning(false);
+          setAutoProgress(null);
+          st(`Auto จัด (${opts.runs} รอบ): วาง ${bestResult.placed} คาบ, ข้าม ${bestResult.skipped} คาบ`, "success");
+        }
+      }, 80); // delay เล็กน้อยให้ UI re-render ได้
+    };
+
+    runOnce(0);
   };
 
   /* ── drop handler ── */
@@ -2394,17 +2554,24 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
         )}
         {/* Auto Schedule button */}
         <button onClick={runAutoSchedule} disabled={autoRunning}
-          style={{...BS("#059669"),opacity:autoRunning?0.6:1,marginLeft:"auto"}}>
-          {autoRunning?"⏳ กำลังจัด...":"⚡ Auto จัดตาราง"}
+          style={{...BS("#059669"),opacity:autoRunning?0.6:1,marginLeft:"auto",position:"relative",minWidth:160}}>
+          {autoRunning
+            ? <span style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{display:"inline-block",width:14,height:14,border:"2px solid rgba(255,255,255,0.4)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+                รอบ {autoProgress?.run||0}/{autoProgress?.total||10}...
+              </span>
+            : "⚡ Auto จัดตาราง"
+          }
         </button>
       </div>
 
       {/* Auto result panel */}
       {autoResult&&(
         <div style={{background:autoResult.skipped===0?"#F0FDF4":"#FFFBEB",border:`1.5px solid ${autoResult.skipped===0?"#86EFAC":"#FDE68A"}`,borderRadius:12,padding:"12px 16px",marginBottom:12,display:"flex",gap:16,alignItems:"flex-start",flexWrap:"wrap"}}>
-          <div style={{fontSize:13,fontWeight:700,color:autoResult.skipped===0?"#065F46":"#92400E"}}>
-            {autoResult.skipped===0?"✅":"⚠️"} Auto จัดตาราง: วาง <strong>{autoResult.placed}</strong> คาบ
-            {autoResult.skipped>0&&<span> | ข้ามไม่ได้ <strong>{autoResult.skipped}</strong> คาบ</span>}
+          <div style={{fontSize:13,fontWeight:700,color:autoResult.skipped===0?"#065F46":"#92400E",display:"flex",gap:12,flexWrap:"wrap",alignItems:"center"}}>
+            {autoResult.skipped===0?"✅":"⚠️"}
+            <span>จัดด้วย <strong>{autoResult.runs} รอบ</strong> — วาง <strong>{autoResult.placed}</strong> คาบ</span>
+            {autoResult.skipped>0&&<span style={{color:"#DC2626"}}>| ข้ามไม่ได้ <strong>{autoResult.skipped}</strong> คาบ</span>}
           </div>
           {autoResult.details.length>0&&(
             <div style={{fontSize:11,color:"#92400E",flex:1}}>
@@ -2558,6 +2725,141 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
             style={BS()}>ยืนยัน</button>
         </div>
       </Modal>
+
+      {/* ── Auto Schedule Modal ── */}
+      {showAutoModal && (
+        <div style={{position:"fixed",inset:0,zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.55)"}}>
+          <div style={{background:"#fff",borderRadius:20,boxShadow:"0 30px 60px rgba(0,0,0,0.25)",width:"min(520px,94%)",maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden",fontFamily:"'Sarabun','Noto Sans Thai',sans-serif"}}>
+            {/* Header */}
+            <div style={{background:"linear-gradient(135deg,#991B1B,#B91C1C)",padding:"20px 24px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <div>
+                <div style={{color:"#fff",fontSize:17,fontWeight:700}}>⚡ Auto จัดตารางสอน</div>
+                <div style={{color:"rgba(255,255,255,0.7)",fontSize:12,marginTop:2}}>เลือกเงื่อนไขก่อนกด "เริ่มจัด"</div>
+              </div>
+              <button onClick={()=>setShowAutoModal(false)} style={{background:"rgba(255,255,255,0.15)",border:"none",borderRadius:8,padding:"6px 10px",cursor:"pointer",color:"#fff",fontSize:16}}>✕</button>
+            </div>
+            <div style={{padding:"20px 24px",overflowY:"auto",flex:1,display:"flex",flexDirection:"column",gap:18}}>
+              {/* Section 1: Mode */}
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:"#374151",marginBottom:10}}>📌 วิธีจัด</div>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {[
+                    {val:"remaining", label:"เติมเฉพาะคาบที่ยังไม่ได้ลง", sub:"ปลอดภัยที่สุด — ไม่แตะคาบที่วางไว้แล้ว", badge:null, safe:true},
+                    {val:"full",      label:"รีเซ็ตแล้วจัดใหม่ทั้งหมด",   sub:"จะลบทุกคาบที่ไม่ได้ล็อค แล้วจัดใหม่ตั้งแต่ต้น", badge:"⚠️ อันตราย", safe:false},
+                  ].map(o=>(
+                    <label key={o.val} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 14px",borderRadius:12,border:`2px solid ${autoOpts.mode===o.val?(o.safe?"#059669":"#DC2626"):"#E5E7EB"}`,background:autoOpts.mode===o.val?(o.safe?"#F0FDF4":"#FEF2F2"):"#F9FAFB",cursor:"pointer"}}>
+                      <input type="radio" name="autoMode" value={o.val} checked={autoOpts.mode===o.val} onChange={()=>setAutoOpts(p=>({...p,mode:o.val}))} style={{marginTop:2,accentColor:o.safe?"#059669":"#DC2626",flexShrink:0}}/>
+                      <div>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{fontSize:14,fontWeight:700,color:autoOpts.mode===o.val?(o.safe?"#065F46":"#991B1B"):"#374151"}}>{o.label}</span>
+                          {o.badge&&<span style={{fontSize:10,background:"#FEE2E2",color:"#991B1B",padding:"1px 8px",borderRadius:20,fontWeight:700}}>{o.badge}</span>}
+                        </div>
+                        <div style={{fontSize:11,color:"#6B7280",marginTop:2}}>{o.sub}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              {/* Section 2: ประเภทวิชา */}
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:"#374151",marginBottom:4}}>📚 ประเภทวิชาที่ให้ระบบจัด</div>
+                <div style={{fontSize:11,color:"#6B7280",marginBottom:10}}>วิชายากแนะนำให้ลงเอง — ติ๊กเฉพาะที่ต้องการให้ระบบช่วย</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  {[
+                    {key:"allowNormal", label:"วิชาปกติ",        sub:"ไม่มี consecutive", emoji:"📖", recommended:true},
+                    {key:"allowConsec", label:"วิชาคาบติด",       sub:"consecutive ≥ 2",    emoji:"⚡", recommended:false},
+                    {key:"allowNP",     label:"วิชา NP",          sub:"สอนหลายห้องพร้อมกัน", emoji:"🔀", recommended:false},
+                    {key:"allowSR",     label:"วิชาห้องพิเศษ",    sub:"แล็บ, พละ, ศิลปะ ฯ", emoji:"🏫", recommended:false},
+                  ].map(o=>(
+                    <label key={o.key} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 12px",borderRadius:12,border:`2px solid ${autoOpts[o.key]?"#2563EB":"#E5E7EB"}`,background:autoOpts[o.key]?"#EFF6FF":"#F9FAFB",cursor:"pointer"}}>
+                      <input type="checkbox" checked={!!autoOpts[o.key]} onChange={e=>setAutoOpts(p=>({...p,[o.key]:e.target.checked}))} style={{marginTop:2,accentColor:"#2563EB",flexShrink:0}}/>
+                      <div>
+                        <div style={{display:"flex",alignItems:"center",gap:5}}>
+                          <span style={{fontSize:14}}>{o.emoji}</span>
+                          <span style={{fontSize:13,fontWeight:700,color:autoOpts[o.key]?"#1E40AF":"#374151"}}>{o.label}</span>
+                          {o.recommended&&<span style={{fontSize:9,background:"#D1FAE5",color:"#065F46",padding:"1px 6px",borderRadius:20,fontWeight:700}}>แนะนำ</span>}
+                        </div>
+                        <div style={{fontSize:10,color:"#6B7280"}}>{o.sub}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              {/* Section 3: เงื่อนไขเพิ่มเติม */}
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:"#374151",marginBottom:10}}>🛡️ เงื่อนไขเพิ่มเติม</div>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {[
+                    {key:"spreadDay",   label:"กระจายวิชา — ไม่ซ้ำวันเดิม",          sub:"วิชาเดียวกันในห้องเดิม จะไม่ถูกวาง 2 คาบในวันเดียว"},
+                    {key:"noFirstLast", label:"ไม่วางคาบ 1 + คาบ 7 วันเดิม (วิชาเดิม)", sub:"ป้องกันวิชาหนักอยู่หัว-ท้ายวันพร้อมกัน"},
+                  ].map(o=>(
+                    <label key={o.key} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"10px 14px",borderRadius:12,border:`2px solid ${autoOpts[o.key]?"#7C3AED":"#E5E7EB"}`,background:autoOpts[o.key]?"#F5F3FF":"#F9FAFB",cursor:"pointer"}}>
+                      <input type="checkbox" checked={!!autoOpts[o.key]} onChange={e=>setAutoOpts(p=>({...p,[o.key]:e.target.checked}))} style={{marginTop:2,accentColor:"#7C3AED",flexShrink:0}}/>
+                      <div>
+                        <span style={{fontSize:13,fontWeight:600,color:autoOpts[o.key]?"#5B21B6":"#374151"}}>{o.label}</span>
+                        <div style={{fontSize:11,color:"#6B7280",marginTop:1}}>{o.sub}</div>
+                      </div>
+                    </label>
+                  ))}
+                  <div style={{padding:"10px 14px",borderRadius:12,border:`2px solid ${autoOpts.maxConsecTeacher>0?"#D97706":"#E5E7EB"}`,background:autoOpts.maxConsecTeacher>0?"#FFFBEB":"#F9FAFB"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                      <div>
+                        <span style={{fontSize:13,fontWeight:600,color:autoOpts.maxConsecTeacher>0?"#92400E":"#374151"}}>⏱ ครูสอนติดกันสูงสุด</span>
+                        <div style={{fontSize:11,color:"#6B7280",marginTop:1}}>0 = ไม่จำกัด</div>
+                      </div>
+                      <select value={autoOpts.maxConsecTeacher} onChange={e=>setAutoOpts(p=>({...p,maxConsecTeacher:parseInt(e.target.value)}))} style={{padding:"6px 28px 6px 10px",border:"1.5px solid #D97706",borderRadius:8,fontSize:13,fontWeight:700,color:"#92400E",background:"#fff",cursor:"pointer",outline:"none",fontFamily:"inherit"}}>
+                        <option value={0}>ไม่จำกัด</option>
+                        <option value={2}>สูงสุด 2 คาบติด</option>
+                        <option value={3}>สูงสุด 3 คาบติด</option>
+                        <option value={4}>สูงสุด 4 คาบติด</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {/* Section 4: จำนวนรอบ */}
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:"#374151",marginBottom:10}}>🔁 จำนวนรอบ (เลือกผลดีสุด)</div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  {[
+                    {val:1,label:"1 รอบ",sub:"เร็ว"},
+                    {val:5,label:"5 รอบ",sub:"แนะนำ"},
+                    {val:10,label:"10 รอบ",sub:"ดีที่สุด",highlight:true},
+                    {val:20,label:"20 รอบ",sub:"ช้ามาก"},
+                  ].map(o=>(
+                    <button key={o.val} onClick={()=>setAutoOpts(p=>({...p,runs:o.val}))} style={{flex:"1 1 80px",padding:"10px 8px",borderRadius:12,border:`2px solid ${autoOpts.runs===o.val?"#059669":"#E5E7EB"}`,background:autoOpts.runs===o.val?"#F0FDF4":"#F9FAFB",cursor:"pointer",fontFamily:"inherit"}}>
+                      <div style={{fontSize:16,fontWeight:800,color:autoOpts.runs===o.val?"#065F46":"#374151"}}>{o.label}</div>
+                      <div style={{fontSize:10,color:autoOpts.runs===o.val?"#059669":"#9CA3AF"}}>{o.sub}</div>
+                      {o.highlight&&<div style={{fontSize:9,background:"#D1FAE5",color:"#065F46",padding:"1px 6px",borderRadius:20,fontWeight:700,marginTop:3,display:"inline-block"}}>default</div>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* Summary */}
+              <div style={{background:"#F8FAFF",border:"1.5px solid #BFDBFE",borderRadius:12,padding:"12px 16px"}}>
+                <div style={{fontSize:12,fontWeight:700,color:"#1E40AF",marginBottom:6}}>📋 สรุปการตั้งค่า</div>
+                <div style={{fontSize:12,color:"#374151",display:"flex",flexDirection:"column",gap:3}}>
+                  <span>{autoOpts.mode==="remaining"?"✅ เติมเฉพาะคาบที่ยังขาด":"⚠️ รีเซ็ตแล้วจัดใหม่ทั้งหมด"}</span>
+                  <span>📚 จัดวิชา: {[autoOpts.allowNormal&&"ปกติ",autoOpts.allowConsec&&"คาบติด",autoOpts.allowNP&&"NP",autoOpts.allowSR&&"ห้องพิเศษ"].filter(Boolean).join(", ")||"— ยังไม่ได้เลือก"}</span>
+                  <span>🔁 {autoOpts.runs} รอบ — ใช้ผลที่ดีที่สุด</span>
+                  {autoOpts.maxConsecTeacher>0&&<span>⏱ ครูสอนติดกันไม่เกิน {autoOpts.maxConsecTeacher} คาบ</span>}
+                </div>
+              </div>
+            </div>
+            {/* Footer */}
+            <div style={{padding:"16px 24px",borderTop:"1px solid #E5E7EB",display:"flex",gap:10,justifyContent:"flex-end",background:"#FAFAFA"}}>
+              <button onClick={()=>setShowAutoModal(false)} style={BO()}>ยกเลิก</button>
+              <button
+                onClick={()=>executeAutoSchedule(autoOpts)}
+                disabled={!autoOpts.allowNormal&&!autoOpts.allowConsec&&!autoOpts.allowNP&&!autoOpts.allowSR}
+                style={{...BS("#059669"),opacity:(!autoOpts.allowNormal&&!autoOpts.allowConsec&&!autoOpts.allowNP&&!autoOpts.allowSR)?0.4:1,cursor:(!autoOpts.allowNormal&&!autoOpts.allowConsec&&!autoOpts.allowNP&&!autoOpts.allowSR)?"not-allowed":"pointer"}}
+              >
+                ⚡ เริ่มจัดตาราง ({autoOpts.runs} รอบ)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
