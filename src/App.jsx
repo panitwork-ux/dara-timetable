@@ -3292,6 +3292,13 @@ function Reports({S,U,st,gc,ay,sh}){
   // PDF: ตารางสอนครู — แสดง วิชา + ห้อง (ไม่มีครูร่วม)
   const printTeacherPDF=(t)=>{
     const w=window.open('','_blank');
+    // helper เรียงห้องจากน้อยไปมาก
+    const sortParts=(parts)=>parts.sort((a,b)=>{
+      const numA=parseInt((a.room.match(/(\d+)$/)||[0,9999])[1]);
+      const numB=parseInt((b.room.match(/(\d+)$/)||[0,9999])[1]);
+      if(numA!==numB) return numA-numB;
+      return a.room.localeCompare(b.room,"th");
+    });
     let html=pdfPage(
       "ตารางสอน "+(t.prefix||"")+(t.firstName||"")+" "+(t.lastName||""),
       "ภาคเรียนที่ "+(ay?.semester||"1")+"/"+(ay?.year||"2568")+" "+(sh?.name||"โรงเรียนดาราวิทยาลัย"),
@@ -3310,7 +3317,7 @@ function Reports({S,U,st,gc,ay,sh}){
             }
           });
         });
-        return parts;
+        return sortParts(parts);
       })})),
       "",
       sh?.logo||null
@@ -3374,6 +3381,13 @@ function Reports({S,U,st,gc,ay,sh}){
               parts.push({sub:(sub?.shortName||sub?.name||""),room:rm?.name||"",room2:""});
             }
           });
+        });
+        // เรียงห้องจากน้อยไปมาก (เช่น ม.6/1, ม.6/5, ม.6/6)
+        parts.sort((a,b)=>{
+          const numA=parseInt((a.room.match(/(\d+)$/)||[0,9999])[1]);
+          const numB=parseInt((b.room.match(/(\d+)$/)||[0,9999])[1]);
+          if(numA!==numB) return numA-numB;
+          return a.room.localeCompare(b.room,"th");
         });
         return parts;
       })}))
