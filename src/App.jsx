@@ -2610,30 +2610,30 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
     const totalUsed=teacherScheduledTotal(selT);
     const quota=teacher?.totalPeriods||0;
     return (
-      <div style={{position:"sticky",bottom:0,zIndex:100,background:"rgba(255,255,255,0.97)",backdropFilter:"blur(8px)",borderTop:"2px solid #BFDBFE",boxShadow:"0 -4px 20px rgba(0,0,0,0.08)",marginTop:8}}>
-        {/* Toggle bar — คลิกเพื่อ expand/collapse */}
+      <div style={{position:"fixed",bottom:16,left:16,zIndex:200,maxWidth:420,fontFamily:"'Sarabun','Noto Sans Thai',sans-serif"}}>
+        {/* Compact pill — แสดงตลอด */}
         <div
           onClick={()=>setShowWeekly(v=>!v)}
-          style={{display:"flex",alignItems:"center",gap:12,padding:"10px 18px",cursor:"pointer",userSelect:"none"}}
+          style={{display:"flex",alignItems:"center",gap:8,padding:"7px 14px",background:"rgba(30,58,95,0.92)",backdropFilter:"blur(8px)",borderRadius:showWeekly?"12px 12px 0 0":12,cursor:"pointer",userSelect:"none",boxShadow:"0 4px 16px rgba(0,0,0,0.2)"}}
         >
-          <span style={{fontSize:13,fontWeight:700,color:"#1E40AF"}}>📋 ตารางสอนรวม — {teacher?.prefix}{teacher?.firstName} {teacher?.lastName}</span>
-          <span style={{fontSize:12,background:totalUsed>=quota?"#D1FAE5":"#FEF3C7",color:totalUsed>=quota?"#065F46":"#92400E",padding:"2px 12px",borderRadius:20,fontWeight:700}}>
-            จัดแล้ว {totalUsed}/{quota} คาบ {totalUsed>=quota?"✓":""}
+          <span style={{fontSize:11,fontWeight:700,color:"#fff",whiteSpace:"nowrap"}}>📋 {teacher?.firstName} {teacher?.lastName}</span>
+          <span style={{fontSize:11,background:totalUsed>=quota?"#D1FAE5":"#FEF3C7",color:totalUsed>=quota?"#065F46":"#92400E",padding:"1px 8px",borderRadius:20,fontWeight:700,flexShrink:0}}>
+            {totalUsed}/{quota} {totalUsed>=quota?"✓":""}
           </span>
-          <span style={{marginLeft:"auto",fontSize:11,color:"#2563EB",fontWeight:600}}>{showWeekly?"▼ ซ่อน":"▲ แสดง"}</span>
+          <span style={{fontSize:10,color:"rgba(255,255,255,0.7)",marginLeft:4}}>{showWeekly?"▼":"▲"}</span>
         </div>
-        {/* ตารางสรุป — แสดงเมื่อ expand */}
+        {/* ตารางสรุป — expand ขึ้นข้างบน */}
         {showWeekly&&(
-          <div style={{maxHeight:"40vh",overflowY:"auto",borderTop:"1px solid #E0EEFF"}}>
-            <div style={{background:"#fff",overflow:"hidden"}}>
-              <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed",minWidth:700}}>
+          <div style={{maxHeight:"45vh",overflowY:"auto",background:"#fff",borderRadius:"0 12px 0 0",boxShadow:"0 -4px 20px rgba(0,0,0,0.15)",border:"1px solid #BFDBFE",borderBottom:"none"}}>
+            <div style={{overflow:"hidden"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed",minWidth:560}}>
                 <thead>
                   <tr>
-                    <th style={{padding:"8px 10px",background:"#1E3A5F",color:"#fff",width:70,textAlign:"left",fontSize:12,fontWeight:700,position:"sticky",top:0,zIndex:2}}>วัน</th>
+                    <th style={{padding:"6px 8px",background:"#1E3A5F",color:"#fff",width:60,textAlign:"left",fontSize:11,fontWeight:700,position:"sticky",top:0,zIndex:2}}>วัน</th>
                     {PERIODS.map(p=>(
-                      <th key={p.id} style={{padding:"5px 2px",background:"#1E3A5F",textAlign:"center",borderLeft:"1px solid rgba(255,255,255,0.15)",position:"sticky",top:0,zIndex:2}}>
-                        <div style={{fontSize:11,color:"#fff",fontWeight:700}}>คาบ {p.id}</div>
-                        <div style={{fontSize:9,color:"rgba(255,255,255,0.6)"}}>{p.time}</div>
+                      <th key={p.id} style={{padding:"4px 2px",background:"#1E3A5F",textAlign:"center",borderLeft:"1px solid rgba(255,255,255,0.15)",position:"sticky",top:0,zIndex:2}}>
+                        <div style={{fontSize:10,color:"#fff",fontWeight:700}}>{p.id}</div>
+                        <div style={{fontSize:8,color:"rgba(255,255,255,0.6)"}}>{p.time.split("-")[0]}</div>
                       </th>
                     ))}
                   </tr>
@@ -2641,7 +2641,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                 <tbody>
                   {DAYS.map((day,di)=>(
                     <tr key={day} style={{background:di%2===0?"#FFFFFF":"#F0F7FF",borderBottom:"1px solid #E0EEFF"}}>
-                      <td style={{padding:"8px 10px",fontWeight:700,fontSize:12,color:"#1E3A5F",borderRight:"2px solid #BFDBFE",background:"#EFF6FF"}}>{day}</td>
+                      <td style={{padding:"5px 8px",fontWeight:700,fontSize:11,color:"#1E3A5F",borderRight:"2px solid #BFDBFE",background:"#EFF6FF"}}>{day.substring(0,2)}</td>
                   {PERIODS.map(p=>{
                     const blk=isBlk(selT,day,p.id);
                     // หาทุกห้องที่ครูสอนในคาบนี้
@@ -2685,11 +2685,6 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
             </div>
           </div>
         )}
-        {showWeekly&&<div style={{padding:"4px 18px 6px",fontSize:11,color:"#9CA3AF",display:"flex",gap:16,borderTop:"1px solid #F0F0F0"}}>
-          <span>🔴 = ห้องที่สอน</span>
-          <span>🔒 = คาบล็อค/ประชุม</span>
-          <span>— = ว่าง</span>
-        </div>}
       </div>
     );
   };
@@ -2803,12 +2798,12 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                 const coTeachers2=coIds2.map(id=>S.teachers.find(t=>t.id===id)).filter(Boolean);
                 const buns=bundleMap[a.id]||[];
                 return (
-                  <div key={a.id} style={{background:lc.bg,border:`1.5px solid ${lc.border}`,borderRadius:12,padding:"10px 12px",opacity:rem<=0?0.35:1,marginBottom:10,boxShadow:`0 2px 8px ${lc.head}22`,transition:"opacity 0.2s",position:"relative"}}>
+                  <div key={a.id} style={{background:rem<=0?"#F3F4F6":lc.bg,border:`1.5px solid ${rem<=0?"#D1D5DB":lc.border}`,borderRadius:12,padding:"10px 12px",marginBottom:10,boxShadow:rem<=0?"none":`0 2px 8px ${lc.head}22`,transition:"all 0.2s",position:"relative"}}>
                     {/* ปุ่ม ⚙️ settings มุมขวาบน */}
                     <button
                       onClick={()=>setShowGearId(showGearId===a.id?null:a.id)}
                       title="ครูร่วม / วิชาคู่"
-                      style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.07)",border:"none",borderRadius:6,width:22,height:22,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",color:lc.tx}}>⚙</button>
+                      style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.07)",border:"none",borderRadius:6,width:22,height:22,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",color:rem<=0?"#9CA3AF":lc.tx}}>⚙</button>
 
                     {coAsgnsIds.has(a.id)&&<div style={{fontSize:9,color:"#7C3AED",fontWeight:700,marginBottom:3}}>👥 ครูร่วม ({S.teachers.find(t=>t.id===a.teacherId)?.firstName||""})</div>}
 
@@ -2820,10 +2815,10 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                       style={{cursor:rem>0&&!coAsgnsIds.has(a.id)?"grab":"default",paddingRight:20}}
                     >
                       {/* ชื่อวิชา ตัวใหญ่ชัดเจน */}
-                      <div style={{fontSize:13,fontWeight:800,color:lc.tx,lineHeight:1.4,marginBottom:3}}>
+                      <div style={{fontSize:13,fontWeight:800,color:rem<=0?"#9CA3AF":lc.tx,lineHeight:1.4,marginBottom:2,textDecoration:rem<=0?"line-through":"none"}}>
                         {subDisplayName(sub)||sub?.code}
                       </div>
-                      <div style={{fontSize:10,color:lc.head,fontWeight:600,marginBottom:4}}>{sub?.code}</div>
+                      <div style={{fontSize:10,color:rem<=0?"#9CA3AF":lc.head,fontWeight:700,marginBottom:4}}>{sub?.code}</div>
 
                       {/* badges */}
                       <div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:5}}>
