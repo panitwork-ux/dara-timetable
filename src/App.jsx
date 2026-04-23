@@ -389,69 +389,82 @@ function SearchSelect({value, onChange, options, placeholder="-- เลือก
   const inputRef=useRef(null);
   const selected=options.find(o=>o.value===value);
 
+  // ปิด dropdown เมื่อคลิกนอก
   useEffect(()=>{
-    const handler=(e)=>{ if(ref.current&&!ref.current.contains(e.target)) setOpen(false); };
+    const handler=(e)=>{
+      if(ref.current&&!ref.current.contains(e.target)){
+        setOpen(false);
+        setQ("");
+      }
+    };
     document.addEventListener("mousedown",handler);
     return()=>document.removeEventListener("mousedown",handler);
   },[]);
-
-  // focus ทันทีที่ open โดยใช้ requestAnimationFrame แทน setTimeout เพื่อความเร็ว
-  useEffect(()=>{
-    if(open){
-      const raf=requestAnimationFrame(()=>{
-        inputRef.current?.focus();
-      });
-      return()=>cancelAnimationFrame(raf);
-    }
-  },[open]);
 
   const filtered=q.trim()
     ?options.filter(o=>o.label.toLowerCase().includes(q.toLowerCase()))
     :options;
 
+  const displayText = open ? q : (selected ? selected.label : "");
+
   return(
     <div ref={ref} style={{position:"relative",width:"100%",...style}}>
-      <div
-        onMouseDown={e=>{
-          // ป้องกัน document mousedown handler ปิด dropdown ก่อน focus
-          e.stopPropagation();
-        }}
-        onClick={()=>{ if(!disabled){setOpen(v=>!v);setQ("");} }}
-        style={{...IS,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:disabled?"default":"pointer",background:disabled?"#F3F4F6":"#F9FAFB",userSelect:"none",paddingRight:36}}
-      >
-        <span style={{color:selected?"#111":"#9CA3AF",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-          {selected?selected.label:placeholder}
+      {/* Input เป็น trigger หลัก — คลิกแล้วพิมพ์ได้เลย */}
+      <div style={{position:"relative"}}>
+        <input
+          ref={inputRef}
+          value={displayText}
+          readOnly={disabled}
+          placeholder={open ? "พิมพ์เพื่อค้นหา..." : placeholder}
+          onClick={()=>{ if(!disabled){ setOpen(true); setQ(""); } }}
+          onChange={e=>{ setOpen(true); setQ(e.target.value); }}
+          onKeyDown={e=>{
+            if(e.key==="Enter"&&filtered.length>0){ onChange(filtered[0].value); setOpen(false); setQ(""); inputRef.current?.blur(); }
+            if(e.key==="Escape"){ setOpen(false); setQ(""); inputRef.current?.blur(); }
+            if(e.key==="ArrowDown"){ setOpen(true); }
+          }}
+          style={{
+            ...IS,
+            cursor:disabled?"default":"text",
+            background:disabled?"#F3F4F6":open?"#fff":"#F9FAFB",
+            paddingRight:36,
+            color: open ? "#111" : (selected ? "#111" : "#9CA3AF"),
+            borderColor: open ? "#991B1B" : undefined,
+          }}
+        />
+        <span
+          style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",color:"#9CA3AF",fontSize:10,pointerEvents:"none",userSelect:"none"}}>
+          {open?"▲":"▼"}
         </span>
-        <span style={{position:"absolute",right:12,color:"#9CA3AF",fontSize:10,pointerEvents:"none"}}>{open?"▲":"▼"}</span>
       </div>
-      {open&&(
+
+      {/* Dropdown list */}
+      {open&&!disabled&&(
         <div
-          onMouseDown={e=>e.stopPropagation()}
-          style={{position:"fixed",background:"#fff",border:"1.5px solid #E5E7EB",borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,0.15)",zIndex:99999,width:ref.current?.offsetWidth||300,maxHeight:280,display:"flex",flexDirection:"column",
-            // คำนวณตำแหน่งจาก bounding rect เพื่อหลีกเลี่ยง overflow:hidden ของ parent
-            top:(()=>{if(!ref.current)return 0;const r=ref.current.getBoundingClientRect();return r.bottom+window.scrollY+4;})(),
-            left:(()=>{if(!ref.current)return 0;const r=ref.current.getBoundingClientRect();return r.left+window.scrollX;})(),
+          onMouseDown={e=>e.preventDefault()} // ป้องกัน input blur เมื่อคลิกใน list
+          style={{
+            position:"absolute",top:"calc(100% + 2px)",left:0,right:0,
+            background:"#fff",border:"1.5px solid #E5E7EB",borderRadius:10,
+            boxShadow:"0 8px 24px rgba(0,0,0,0.13)",zIndex:9999,
+            maxHeight:260,display:"flex",flexDirection:"column",overflow:"hidden",
           }}>
-          <div style={{padding:"8px 8px 4px"}}>
-            <input
-              ref={inputRef}
-              value={q}
-              onChange={e=>setQ(e.target.value)}
-              placeholder="พิมพ์เพื่อค้นหา..."
-              style={{width:"100%",padding:"7px 10px",border:"1.5px solid #991B1B",borderRadius:8,fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}
-              onKeyDown={e=>{
-                if(e.key==="Enter"&&filtered.length>0){onChange(filtered[0].value);setOpen(false);setQ("");}
-                if(e.key==="Escape"){setOpen(false);setQ("");}
-              }}
-            />
-          </div>
-          <div style={{overflowY:"auto",maxHeight:210}}>
+          <div style={{overflowY:"auto",maxHeight:260}}>
             {filtered.length===0
               ?<div style={{padding:"10px 12px",color:"#9CA3AF",fontSize:13}}>ไม่พบผลลัพธ์</div>
               :filtered.map(o=>(
                 <div key={o.value}
-                  onMouseDown={e=>{e.preventDefault();onChange(o.value);setOpen(false);setQ("");}}
-                  style={{padding:"9px 12px",cursor:"pointer",fontSize:13,background:o.value===value?"#FEF2F2":"transparent",color:o.value===value?CRED:"#111",fontWeight:o.value===value?700:400}}
+                  onMouseDown={e=>{
+                    e.preventDefault();
+                    onChange(o.value);
+                    setOpen(false);
+                    setQ("");
+                  }}
+                  style={{
+                    padding:"9px 12px",cursor:"pointer",fontSize:13,
+                    background:o.value===value?"#FEF2F2":"transparent",
+                    color:o.value===value?CRED:"#111",
+                    fontWeight:o.value===value?700:400,
+                  }}
                   onMouseEnter={e=>e.currentTarget.style.background=o.value===value?"#FEF2F2":"#F9FAFB"}
                   onMouseLeave={e=>e.currentTarget.style.background=o.value===value?"#FEF2F2":"transparent"}
                 >{o.label}</div>
