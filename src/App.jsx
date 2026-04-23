@@ -631,7 +631,9 @@ export default function App() {
         // โหลด permissions ครั้งแรก
         let perms=await fsGetPermissions(u.uid);
 
-        if(!perms&&db){
+        // ตรวจ pre-key เสมอ ถ้า perms ยังไม่มีสิทธิ์ใดเลย (รวมกรณี user เคย login แล้วแต่ admin เพิ่มสิทธิ์ทีหลังผ่าน pre-key)
+        const hasAnyAccess=perms&&Object.values(perms.divisions||{}).some(Boolean);
+        if((!perms||!hasAnyAccess)&&db){
           const emailKey=makePreKey(u.email);
           const preSnap=await getDoc(doc(db,"permissions",emailKey));
           if(preSnap.exists()&&!preSnap.data().merged){
@@ -639,9 +641,9 @@ export default function App() {
             const divs=preData.divisions||{p1:false,p2:false,m1:false,m2:false};
             await setDoc(doc(db,"permissions",u.uid),{
               displayName:u.displayName||"",email:u.email,divisions:divs,preAdded:false,
-            });
+            },{merge:true});
             await setDoc(doc(db,"permissions",emailKey),{merged:true},{merge:true});
-            perms={divisions:divs};
+            perms={...perms,divisions:divs};
           }
         }
 
@@ -650,8 +652,11 @@ export default function App() {
           await fsSetPermissions(u.uid,{displayName:u.displayName||"",email:u.email,divisions:emptyDivs});
           setUserPerms({divisions:emptyDivs});
         } else {
-          await fsSetPermissions(u.uid,{displayName:u.displayName||"",email:u.email});
-          setUserPerms(perms);
+          // merge เฉพาะ displayName/email ไม่ทับ divisions ที่ admin ตั้งไว้
+          await setDoc(doc(db,"permissions",u.uid),{displayName:u.displayName||"",email:u.email},{merge:true});
+          // re-fetch เพื่อให้ได้ค่าล่าสุดจาก Firestore (กัน race condition)
+          const freshPerms=await fsGetPermissions(u.uid);
+          setUserPerms(freshPerms||perms);
         }
 
         // Real-time listener — permissions อัปเดตทันทีเมื่อ admin แก้ไข
