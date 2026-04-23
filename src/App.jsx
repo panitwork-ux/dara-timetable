@@ -1886,11 +1886,11 @@ function EmptyState({icon,title}){
 
 /* ===== SCHEDULER ENTRY CARD (top-level เพื่อกัน React recreate) ===== */
 function SchedulerEntryCard({entry,cellKey,lk,cellCount,selT,mode,S,U,gc,setDrag,setCoM}){
+  const [showActions,setShowActions]=useState(false);
   const sub=S.subjects.find(s=>s.id===entry.subjectId);
   const dept=S.depts.find(d=>d.id===sub?.departmentId);
   const c=dept?gc(dept.id):{bg:"#6B7280",lt:"#F3F4F6",tx:"#374151",bd:"#D1D5DB"};
   const et=S.teachers.find(t=>t.id===entry.teacherId);
-  // รองรับทั้ง coTeacherId (เดิม) และ coTeacherIds (array, mode -2)
   const coIds=entry.coTeacherIds?.length?entry.coTeacherIds:(entry.coTeacherId?[entry.coTeacherId]:[]);
   const coTeachers=coIds.map(id=>S.teachers.find(t=>t.id===id)).filter(Boolean);
   const isOwn=entry.teacherId===selT||coIds.includes(selT);
@@ -1906,11 +1906,13 @@ function SchedulerEntryCard({entry,cellKey,lk,cellCount,selT,mode,S,U,gc,setDrag
       draggable={!lk&&!dimmed}
       onDragStart={e=>{if(dimmed){e.preventDefault();return;}e.stopPropagation();const parts=cellKey.split('_');const fromRoomId=parts.slice(0,parts.length-2).join('_');setDrag({fromKey:cellKey,fromRoomId,entry});}}
       onDragEnd={()=>setDrag(null)}
+      onMouseEnter={()=>setShowActions(true)}
+      onMouseLeave={()=>setShowActions(false)}
       style={{
         background:dimmed?"#F9FAFB":c.lt,
         border:"2px solid "+(dimmed?"#E5E7EB":c.bd),
         borderRadius:8,
-        padding:compact?"3px 5px":"6px 8px",
+        padding:compact?"3px 22px 3px 5px":"6px 8px",
         marginBottom:2,
         fontSize:11,
         position:"relative",
@@ -1922,9 +1924,21 @@ function SchedulerEntryCard({entry,cellKey,lk,cellCount,selT,mode,S,U,gc,setDrag
       }}
     >
       {compact
-        ?<div style={{fontWeight:700,color:dimmed?"#9CA3AF":c.tx,fontSize:10,lineHeight:1.3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-            {subDisplayName(sub)||sub?.code}
-          </div>
+        ?<>
+            <div style={{fontWeight:700,color:dimmed?"#9CA3AF":c.tx,fontSize:10,lineHeight:1.3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+              {subDisplayName(sub)||sub?.code}
+            </div>
+            {/* ชื่อครู ใน compact */}
+            {et&&<div style={{fontSize:9,color:dimmed?"#9CA3AF":c.tx,opacity:0.75,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{et.firstName}</div>}
+            {/* action buttons สำหรับ compact — แสดงเมื่อ hover */}
+            {!lk&&(
+              <div style={{position:"absolute",top:1,right:1,display:"flex",gap:1,opacity:showActions?1:0,transition:"opacity 0.15s"}}>
+                <button onMouseDown={e=>{e.stopPropagation();e.preventDefault();setCoM({key:cellKey,entryId:entry.id});}} style={{background:"rgba(255,255,255,0.9)",border:"none",cursor:"pointer",color:"#2563EB",padding:"1px 2px",lineHeight:1,borderRadius:3}}><Icon name="users" size={9}/></button>
+                <button onMouseDown={e=>{e.stopPropagation();e.preventDefault();removeEntry();}} style={{background:"rgba(255,255,255,0.9)",border:"none",cursor:"pointer",color:"#EF4444",padding:"1px 2px",lineHeight:1,borderRadius:3}}><Icon name="x" size={9}/></button>
+                <button onMouseDown={e=>{e.stopPropagation();e.preventDefault();lockEntry();}} style={{background:"rgba(255,255,255,0.9)",border:"none",cursor:"pointer",color:"#059669",padding:"1px 2px",lineHeight:1,borderRadius:3}}><Icon name="lock" size={9}/></button>
+              </div>
+            )}
+          </>
         :<>
             <div style={{fontWeight:700,color:dimmed?"#9CA3AF":c.tx,fontSize:11}}>{sub?.code}</div>
             <div style={{fontWeight:600,color:dimmed?"#9CA3AF":c.tx,fontSize:10}}>{subDisplayName(sub)}</div>
@@ -1933,16 +1947,13 @@ function SchedulerEntryCard({entry,cellKey,lk,cellCount,selT,mode,S,U,gc,setDrag
             </div>
           </>
       }
-      {/* action buttons */}
+      {/* action buttons สำหรับ non-compact */}
       {!lk&&!compact&&(
         <div style={{display:"flex",gap:3,marginTop:3}}>
           <button onClick={removeEntry} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,lineHeight:1}}><Icon name="x" size={10}/></button>
           <button onClick={()=>setCoM({key:cellKey,entryId:entry.id})} style={{background:"none",border:"none",cursor:"pointer",color:"#2563EB",padding:0,lineHeight:1}}><Icon name="users" size={10}/></button>
           <button onClick={lockEntry} style={{background:"none",border:"none",cursor:"pointer",color:"#059669",padding:0,lineHeight:1}}><Icon name="lock" size={10}/></button>
         </div>
-      )}
-      {!lk&&compact&&(
-        <button onClick={removeEntry} style={{position:"absolute",top:1,right:1,background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,lineHeight:1}}><Icon name="x" size={9}/></button>
       )}
       {lk&&(
         <div style={{position:"absolute",top:2,right:4}}>
@@ -2551,7 +2562,7 @@ function Scheduler({S,U,st,gc}){
                 <tbody>
                   {DAYS.map((day,di)=>(
                     <tr key={day} style={{background:di%2===0?"#FFFFFF":lc.bg}}>
-                      <td style={{padding:"8px 8px",fontWeight:700,fontSize:12,color:lc.head,borderRight:`2px solid ${lc.border}`,borderBottom:"1px solid #F3F4F6",background:lc.bg}}>{day}</td>
+                      <td style={{padding:"8px 8px",fontWeight:700,fontSize:12,color:lc.head,borderRight:`2px solid ${lc.border}`,borderBottom:`1px solid ${lc.border}`,background:di%2===0?lc.bg+"66":lc.bg}}>{day}</td>
                       {PERIODS.map(p=>{
                         const key=sk(rid,day,p.id);
                         const en=S.schedule[key]||[];
