@@ -2610,30 +2610,30 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
     const totalUsed=teacherScheduledTotal(selT);
     const quota=teacher?.totalPeriods||0;
     return (
-      <div style={{position:"fixed",bottom:16,left:16,zIndex:200,maxWidth:420,fontFamily:"'Sarabun','Noto Sans Thai',sans-serif"}}>
+      <div style={{position:"fixed",bottom:16,left:"calc(240px + 16px)",zIndex:200,maxWidth:"calc(100vw - 280px)",fontFamily:"'Sarabun','Noto Sans Thai',sans-serif"}}>
         {/* Compact pill — แสดงตลอด */}
         <div
           onClick={()=>setShowWeekly(v=>!v)}
-          style={{display:"flex",alignItems:"center",gap:8,padding:"7px 14px",background:"rgba(30,58,95,0.92)",backdropFilter:"blur(8px)",borderRadius:showWeekly?"12px 12px 0 0":12,cursor:"pointer",userSelect:"none",boxShadow:"0 4px 16px rgba(0,0,0,0.2)"}}
+          style={{display:"inline-flex",alignItems:"center",gap:8,padding:"7px 14px",background:"rgba(30,58,95,0.95)",backdropFilter:"blur(8px)",borderRadius:showWeekly?"12px 12px 0 0":12,cursor:"pointer",userSelect:"none",boxShadow:"0 4px 16px rgba(0,0,0,0.25)"}}
         >
-          <span style={{fontSize:11,fontWeight:700,color:"#fff",whiteSpace:"nowrap"}}>📋 {teacher?.firstName} {teacher?.lastName}</span>
-          <span style={{fontSize:11,background:totalUsed>=quota?"#D1FAE5":"#FEF3C7",color:totalUsed>=quota?"#065F46":"#92400E",padding:"1px 8px",borderRadius:20,fontWeight:700,flexShrink:0}}>
-            {totalUsed}/{quota} {totalUsed>=quota?"✓":""}
+          <span style={{fontSize:12,fontWeight:700,color:"#fff",whiteSpace:"nowrap"}}>📋 {teacher?.prefix}{teacher?.firstName} {teacher?.lastName}</span>
+          <span style={{fontSize:12,background:totalUsed>=quota?"#D1FAE5":"#FEF3C7",color:totalUsed>=quota?"#065F46":"#92400E",padding:"2px 10px",borderRadius:20,fontWeight:800,flexShrink:0}}>
+            {totalUsed}/{quota} คาบ {totalUsed>=quota?"✓":""}
           </span>
-          <span style={{fontSize:10,color:"rgba(255,255,255,0.7)",marginLeft:4}}>{showWeekly?"▼":"▲"}</span>
+          <span style={{fontSize:11,color:"rgba(255,255,255,0.75)"}}>{showWeekly?"▼ ซ่อน":"▲ แสดง"}</span>
         </div>
         {/* ตารางสรุป — expand ขึ้นข้างบน */}
         {showWeekly&&(
-          <div style={{maxHeight:"45vh",overflowY:"auto",background:"#fff",borderRadius:"0 12px 0 0",boxShadow:"0 -4px 20px rgba(0,0,0,0.15)",border:"1px solid #BFDBFE",borderBottom:"none"}}>
-            <div style={{overflow:"hidden"}}>
-              <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed",minWidth:560}}>
+          <div style={{maxHeight:"50vh",overflowY:"auto",background:"#fff",borderRadius:"0 12px 0 0",boxShadow:"0 -4px 20px rgba(0,0,0,0.18)",border:"1px solid #BFDBFE",borderBottom:"none",width:"calc(100vw - 296px)",maxWidth:900}}>
+            <div style={{overflow:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed",minWidth:680}}>
                 <thead>
                   <tr>
-                    <th style={{padding:"6px 8px",background:"#1E3A5F",color:"#fff",width:60,textAlign:"left",fontSize:11,fontWeight:700,position:"sticky",top:0,zIndex:2}}>วัน</th>
+                    <th style={{padding:"7px 10px",background:"#1E3A5F",color:"#fff",width:72,textAlign:"left",fontSize:12,fontWeight:700,position:"sticky",top:0,zIndex:2}}>วัน</th>
                     {PERIODS.map(p=>(
-                      <th key={p.id} style={{padding:"4px 2px",background:"#1E3A5F",textAlign:"center",borderLeft:"1px solid rgba(255,255,255,0.15)",position:"sticky",top:0,zIndex:2}}>
-                        <div style={{fontSize:10,color:"#fff",fontWeight:700}}>{p.id}</div>
-                        <div style={{fontSize:8,color:"rgba(255,255,255,0.6)"}}>{p.time.split("-")[0]}</div>
+                      <th key={p.id} style={{padding:"5px 3px",background:"#1E3A5F",textAlign:"center",borderLeft:"1px solid rgba(255,255,255,0.15)",position:"sticky",top:0,zIndex:2}}>
+                        <div style={{fontSize:12,color:"#fff",fontWeight:700}}>คาบ {p.id}</div>
+                        <div style={{fontSize:9,color:"rgba(255,255,255,0.65)"}}>{p.time}</div>
                       </th>
                     ))}
                   </tr>
@@ -2641,7 +2641,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                 <tbody>
                   {DAYS.map((day,di)=>(
                     <tr key={day} style={{background:di%2===0?"#FFFFFF":"#F0F7FF",borderBottom:"1px solid #E0EEFF"}}>
-                      <td style={{padding:"5px 8px",fontWeight:700,fontSize:11,color:"#1E3A5F",borderRight:"2px solid #BFDBFE",background:"#EFF6FF"}}>{day.substring(0,2)}</td>
+                      <td style={{padding:"7px 10px",fontWeight:700,fontSize:12,color:"#1E3A5F",borderRight:"2px solid #BFDBFE",background:"#EFF6FF"}}>{day}</td>
                   {PERIODS.map(p=>{
                     const blk=isBlk(selT,day,p.id);
                     // หาทุกห้องที่ครูสอนในคาบนี้
@@ -2661,19 +2661,19 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                       });
                     });
                     return (
-                      <td key={p.id} style={{textAlign:"center",padding:"4px 3px",borderLeft:"1px solid #F0F0F0",verticalAlign:"middle",minHeight:40}}>
+                      <td key={p.id} style={{textAlign:"center",padding:"5px 3px",borderLeft:"1px solid #F0F0F0",verticalAlign:"middle",minHeight:48}}>
                         {blk
-                          ? <div style={{background:"#FEF9C3",color:"#92400E",fontSize:9,borderRadius:6,padding:"3px 4px",fontWeight:600}}>
+                          ? <div style={{background:"#FEF9C3",color:"#92400E",fontSize:10,borderRadius:6,padding:"3px 5px",fontWeight:700}}>
                               🔒{S.meetings.some(m=>m.day===day&&m.periods?.includes(p.id)&&m.departmentId===teacher?.departmentId)?"ประชุม":blocked(selT).find(b=>b.day===day&&b.period===p.id)?.reason||"ล็อค"}
                             </div>
                           : roomsThisPeriod.length>0
                             ? roomsThisPeriod.map((r,i)=>(
-                                <div key={i} style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:6,padding:"3px 5px",marginBottom:i<roomsThisPeriod.length-1?2:0}}>
-                                  <div style={{fontSize:10,fontWeight:700,color:"#1E40AF"}}>{r.rmName}</div>
-                                  <div style={{fontSize:9,color:"#6B7280"}}>{r.subName}</div>
+                                <div key={i} style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:6,padding:"4px 6px",marginBottom:i<roomsThisPeriod.length-1?2:0}}>
+                                  <div style={{fontSize:11,fontWeight:800,color:"#1E40AF"}}>{r.rmName}</div>
+                                  <div style={{fontSize:10,color:"#374151",fontWeight:600}}>{r.subName}</div>
                                 </div>
                               ))
-                            : <span style={{color:"#D1D5DB",fontSize:11}}>—</span>
+                            : <span style={{color:"#D1D5DB",fontSize:12}}>—</span>
                         }
                       </td>
                     );
