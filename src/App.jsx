@@ -1855,24 +1855,195 @@ function Assigns({S,U,st,gc}){
 
 /* ===== MEETINGS ===== */
 function Meetings({S,U,st,gc}){
-  const [form,setForm]=useState({departmentId:"",day:"",periods:[]});
+  const [tab,setTab]=useState("dept");   // "dept" | "custom"
+
+  // ── ฟอร์ม: คาบล็อคกลุ่มสาระ (เดิม — 1 วัน หลายคาบ) ──
+  const [deptForm,setDeptForm]=useState({departmentId:"",day:"",periods:[]});
+
+  // ── ฟอร์ม: คาบล็อคแผนก (ใหม่ — หลายวัน หลายคาบ + ชื่อ) ──
+  const BLANK_CUSTOM={departmentId:"",name:"",slots:[]}; // slots: [{day,period}]
+  const [cusForm,setCusForm]=useState(BLANK_CUSTOM);
+
+  const toggleSlot=(day,pid)=>{
+    setCusForm(prev=>{
+      const exists=prev.slots.find(s=>s.day===day&&s.period===pid);
+      return{...prev,slots:exists
+        ?prev.slots.filter(s=>!(s.day===day&&s.period===pid))
+        :[...prev.slots,{day,period:pid}]};
+    });
+  };
+  const slotActive=(day,pid)=>!!cusForm.slots.find(s=>s.day===day&&s.period===pid);
+
+  const saveDept=()=>{
+    if(!deptForm.departmentId||!deptForm.day||!deptForm.periods.length){st("กรอกให้ครบ","error");return;}
+    U.setMeetings(p=>[...p,{id:gid(),...deptForm}]);
+    setDeptForm({departmentId:"",day:"",periods:[]});
+    st("เพิ่มสำเร็จ");
+  };
+
+  const saveCustom=()=>{
+    if(!cusForm.name||!cusForm.slots.length){st("กรอกชื่อและเลือกคาบ","error");return;}
+    // type:"custom" ไม่ผูกกับ departmentId → ล็อคทุกคน
+    U.setMeetings(p=>[...p,{id:gid(),departmentId:"all",name:cusForm.name,slots:cusForm.slots,type:"custom"}]);
+    setCusForm(BLANK_CUSTOM);
+    st("เพิ่มคาบล็อคสำเร็จ");
+  };
+
+  // แยก meetings ตาม type
+  const deptMeetings=S.meetings.filter(m=>!m.type||m.type==="dept");
+  const customMeetings=S.meetings.filter(m=>m.type==="custom");
+
+  const TAB_STYLE=(active)=>({
+    padding:"9px 20px",fontWeight:700,fontSize:13,cursor:"pointer",border:"none",fontFamily:"inherit",
+    background:active?CRED:"transparent",color:active?"#fff":"#6B7280",
+    borderBottom:active?"2px solid "+CRED:"2px solid transparent",transition:"all 0.15s",
+  });
+
   return <div style={{animation:"fadeIn 0.3s"}}>
-    <div style={{background:"#fff",borderRadius:14,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:24,maxWidth:600}}>
-      <h3 style={{fontSize:16,fontWeight:700,marginBottom:16}}>เพิ่มคาบล็อค</h3>
-      <div style={{display:"flex",flexDirection:"column",gap:16}}>
-        <div><label style={LS}>กลุ่มสาระ</label><SearchSelect value={form.departmentId} onChange={v=>setForm(p=>({...p,departmentId:v}))} options={[{value:"",label:"--"},...S.depts.map(d=>({value:d.id,label:d.name}))]} placeholder="-- เลือกกลุ่มสาระ --"/></div>
-        <div><label style={LS}>วัน</label><select style={IS} value={form.day} onChange={e=>setForm(p=>({...p,day:e.target.value}))}><option value="">--</option>{DAYS.map(d=><option key={d}>{d}</option>)}</select></div>
-        <div><label style={LS}>คาบ</label><div style={{display:"flex",gap:8}}>{PERIODS.map(p=><button key={p.id} onClick={()=>setForm(prev=>({...prev,periods:prev.periods.includes(p.id)?prev.periods.filter(x=>x!==p.id):[...prev.periods,p.id]}))} style={{width:48,height:48,borderRadius:10,border:`2px solid ${form.periods.includes(p.id)?"#DC2626":"#D1D5DB"}`,background:form.periods.includes(p.id)?"#DC2626":"#fff",color:form.periods.includes(p.id)?"#fff":"#374151",fontSize:16,fontWeight:700,cursor:"pointer"}}>{p.id}</button>)}</div></div>
-        <button onClick={()=>{if(!form.departmentId||!form.day||!form.periods.length){st("กรอกให้ครบ","error");return}U.setMeetings(p=>[...p,{id:gid(),...form}]);setForm({departmentId:"",day:"",periods:[]});st("เพิ่มสำเร็จ")}} style={BS()}>เพิ่มคาบล็อค</button>
-      </div>
+    {/* Tab bar */}
+    <div style={{display:"flex",borderBottom:"2px solid #F3F4F6",marginBottom:20}}>
+      <button style={TAB_STYLE(tab==="dept")} onClick={()=>setTab("dept")}>🔒 คาบล็อคกลุ่มสาระ (เดิม)</button>
+      <button style={TAB_STYLE(tab==="custom")} onClick={()=>setTab("custom")}>📅 คาบล็อคแผนก (หลายวัน)</button>
     </div>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:16}}>
-      {S.meetings.map(m=>{const dept=S.depts.find(d=>d.id===m.departmentId);const c=dept?gc(dept.id):{bg:"#6B7280"};return<div key={m.id} style={{background:"#fff",borderRadius:14,borderLeft:`4px solid ${c.bg}`,padding:16,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
-        <div style={{display:"flex",justifyContent:"space-between"}}><div><h4 style={{fontSize:15,fontWeight:700}}>{dept?.name}</h4><div style={{fontSize:13,color:"#6B7280",marginTop:4}}>วัน{m.day} — คาบ {m.periods.sort().join(", ")}</div></div>
-          <button onClick={()=>{U.setMeetings(p=>p.filter(x=>x.id!==m.id));st("ลบแล้ว","warning")}} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444"}}><Icon name="trash" size={14}/></button>
+
+    {/* ── Tab 1: คาบล็อคกลุ่มสาระ เดิม ── */}
+    {tab==="dept"&&<>
+      <div style={{background:"#fff",borderRadius:14,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:24,maxWidth:600}}>
+        <h3 style={{fontSize:16,fontWeight:700,marginBottom:16}}>เพิ่มคาบล็อคกลุ่มสาระ</h3>
+        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+          <div><label style={LS}>กลุ่มสาระ</label>
+            <SearchSelect value={deptForm.departmentId} onChange={v=>setDeptForm(p=>({...p,departmentId:v}))} options={[{value:"",label:"--"},...S.depts.map(d=>({value:d.id,label:d.name}))]} placeholder="-- เลือกกลุ่มสาระ --"/>
+          </div>
+          <div><label style={LS}>วัน</label>
+            <select style={IS} value={deptForm.day} onChange={e=>setDeptForm(p=>({...p,day:e.target.value}))}>
+              <option value="">--</option>{DAYS.map(d=><option key={d}>{d}</option>)}
+            </select>
+          </div>
+          <div><label style={LS}>คาบ</label>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {PERIODS.map(p=><button key={p.id}
+                onClick={()=>setDeptForm(prev=>({...prev,periods:prev.periods.includes(p.id)?prev.periods.filter(x=>x!==p.id):[...prev.periods,p.id]}))}
+                style={{width:48,height:48,borderRadius:10,border:`2px solid ${deptForm.periods.includes(p.id)?"#DC2626":"#D1D5DB"}`,background:deptForm.periods.includes(p.id)?"#DC2626":"#fff",color:deptForm.periods.includes(p.id)?"#fff":"#374151",fontSize:16,fontWeight:700,cursor:"pointer"}}>
+                {p.id}
+              </button>)}
+            </div>
+          </div>
+          <button onClick={saveDept} style={BS()}>เพิ่มคาบล็อค</button>
         </div>
-      </div>})}
-    </div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:16}}>
+        {deptMeetings.map(m=>{
+          const dept=S.depts.find(d=>d.id===m.departmentId);
+          const c=dept?gc(dept.id):{bg:"#6B7280"};
+          return<div key={m.id} style={{background:"#fff",borderRadius:14,borderLeft:`4px solid ${c.bg}`,padding:16,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
+            <div style={{display:"flex",justifyContent:"space-between"}}>
+              <div>
+                <h4 style={{fontSize:15,fontWeight:700}}>{dept?.name}</h4>
+                <div style={{fontSize:13,color:"#6B7280",marginTop:4}}>วัน{m.day} — คาบ {(m.periods||[]).slice().sort().join(", ")}</div>
+              </div>
+              <button onClick={()=>{U.setMeetings(p=>p.filter(x=>x.id!==m.id));st("ลบแล้ว","warning")}} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444"}}><Icon name="trash" size={14}/></button>
+            </div>
+          </div>;
+        })}
+      </div>
+    </>}
+
+    {/* ── Tab 2: คาบล็อคแผนก หลายวันหลายคาบ ── */}
+    {tab==="custom"&&<>
+      <div style={{background:"#fff",borderRadius:14,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:24}}>
+        <h3 style={{fontSize:16,fontWeight:700,marginBottom:16}}>เพิ่มคาบล็อคแผนก</h3>
+        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+          {/* ชื่อ */}
+          <div style={{flex:"1 1 300px"}}>
+            <label style={LS}>ชื่อคาบล็อค</label>
+            <input style={IS} value={cusForm.name} onChange={e=>setCusForm(p=>({...p,name:e.target.value}))} placeholder="เช่น ประชุมวิชาการ, อบรม, สอบกลางภาค"/>
+          </div>
+
+          {/* ตาราง grid วัน × คาบ เลือกได้หลายช่อง */}
+          <div>
+            <label style={LS}>เลือกวัน × คาบ (คลิกเพื่อเลือก/ยกเลิก)</label>
+            <div style={{overflowX:"auto"}}>
+              <table style={{borderCollapse:"collapse",minWidth:500}}>
+                <thead>
+                  <tr>
+                    <th style={{padding:"8px 12px",background:"#F3F4F6",fontSize:12,fontWeight:700,color:"#374151",border:"1px solid #E5E7EB",minWidth:70}}>วัน \ คาบ</th>
+                    {PERIODS.map(p=>(
+                      <th key={p.id} style={{padding:"6px 8px",background:"#F3F4F6",fontSize:12,fontWeight:700,color:"#374151",border:"1px solid #E5E7EB",textAlign:"center",minWidth:52}}>
+                        <div>{p.id}</div>
+                        <div style={{fontSize:9,fontWeight:400,color:"#9CA3AF"}}>{p.time.split("-")[0]}</div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {DAYS.map((day,di)=>(
+                    <tr key={day} style={{background:di%2===0?"#fff":"#FAFAFA"}}>
+                      <td style={{padding:"8px 12px",fontWeight:700,fontSize:13,color:"#374151",border:"1px solid #E5E7EB",background:"#F9FAFB"}}>{day}</td>
+                      {PERIODS.map(p=>{
+                        const active=slotActive(day,p.id);
+                        return(
+                          <td key={p.id}
+                            onClick={()=>toggleSlot(day,p.id)}
+                            style={{padding:"6px 4px",border:"1px solid #E5E7EB",textAlign:"center",cursor:"pointer",
+                              background:active?"#DC2626":"transparent",
+                              transition:"background 0.1s"}}
+                          >
+                            {active&&<span style={{color:"#fff",fontSize:14,fontWeight:700}}>✓</span>}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {cusForm.slots.length>0&&(
+              <div style={{marginTop:8,fontSize:12,color:"#6B7280"}}>
+                เลือกแล้ว {cusForm.slots.length} ช่อง:&nbsp;
+                {DAYS.filter(d=>cusForm.slots.some(s=>s.day===d)).map(d=>(
+                  <span key={d} style={{marginRight:8}}>
+                    <strong>{d}</strong> คาบ {cusForm.slots.filter(s=>s.day===d).map(s=>s.period).sort((a,b)=>a-b).join(",")}
+                  </span>
+                ))}
+                <button onClick={()=>setCusForm(p=>({...p,slots:[]}))} style={{marginLeft:8,fontSize:11,color:"#EF4444",background:"none",border:"none",cursor:"pointer"}}>ล้างทั้งหมด</button>
+              </div>
+            )}
+          </div>
+          <button onClick={saveCustom} style={BS()}>เพิ่มคาบล็อค</button>
+        </div>
+      </div>
+
+      {/* รายการ custom locks */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:16}}>
+        {customMeetings.map(m=>{
+          const slotsByDay=DAYS.map(day=>{
+            const ps=(m.slots||[]).filter(s=>s.day===day).map(s=>s.period).sort((a,b)=>a-b);
+            return ps.length?{day,periods:ps}:null;
+          }).filter(Boolean);
+          return<div key={m.id} style={{background:"#fff",borderRadius:14,borderLeft:"4px solid #DC2626",padding:16,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                  <h4 style={{fontSize:15,fontWeight:700}}>{m.name}</h4>
+                  <span style={{fontSize:11,background:"#FEE2E2",color:"#991B1B",padding:"1px 8px",borderRadius:20,fontWeight:600}}>🏫 ทุกกลุ่มสาระ</span>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                  {slotsByDay.map(({day,periods})=>(
+                    <div key={day} style={{fontSize:12,color:"#374151"}}>
+                      <span style={{fontWeight:700,color:"#6B7280",minWidth:60,display:"inline-block"}}>{day}</span>
+                      <span>คาบ {periods.join(", ")}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{marginTop:6,fontSize:11,color:"#9CA3AF"}}>{(m.slots||[]).length} ช่องรวม</div>
+              </div>
+              <button onClick={()=>{U.setMeetings(p=>p.filter(x=>x.id!==m.id));st("ลบแล้ว","warning")}} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",flexShrink:0}}><Icon name="trash" size={14}/></button>
+            </div>
+          </div>;
+        })}
+        {customMeetings.length===0&&<div style={{color:"#9CA3AF",fontSize:13,padding:"20px 0"}}>ยังไม่มีคาบล็อคแผนก</div>}
+      </div>
+    </>}
   </div>;
 }
 
@@ -2042,7 +2213,11 @@ function Scheduler({S,U,st,gc}){
       const r=SROLES.find(x=>x.id===rid);
       r?.blocked?.forEach(bl=>bl.periods.forEach(p=>b.push({day:bl.day,period:p,reason:r.name})));
     });
-    S.meetings.filter(m=>m.departmentId===t.departmentId)
+    // คาบล็อคแผนก (custom) — ล็อคทุกคนในโรงเรียน
+    S.meetings.filter(m=>m.type==="custom")
+      .forEach(m=>(m.slots||[]).forEach(sl=>b.push({day:sl.day,period:sl.period,reason:m.name||"ล็อคแผนก"})));
+    // คาบล็อคกลุ่มสาระ (เดิม) — ล็อคเฉพาะกลุ่มสาระ
+    S.meetings.filter(m=>(!m.type||m.type==="dept")&&m.departmentId===t.departmentId)
       .forEach(m=>m.periods.forEach(p=>b.push({day:m.day,period:p,reason:"ประชุม"})));
     // คาบล็อกส่วนตัว
     (t.personalLocks||[]).forEach(pl=>
@@ -2560,9 +2735,11 @@ function Scheduler({S,U,st,gc}){
                   </tr>
                 </thead>
                 <tbody>
-                  {DAYS.map((day,di)=>(
-                    <tr key={day} style={{background:di%2===0?"#FFFFFF":lc.border+"55",borderBottom:`1px solid ${lc.border}`}}>
-                      <td style={{padding:"8px 8px",fontWeight:700,fontSize:12,color:lc.head,borderRight:`2px solid ${lc.border}`,background:lc.bg}}>{day}</td>
+                  {DAYS.map((day,di)=>{
+                    const rowBg=di%2===0?"#FFFFFF":lc.border+"44";
+                    return(
+                    <tr key={day} style={{background:rowBg}}>
+                      <td style={{padding:"8px 8px",fontWeight:700,fontSize:12,color:lc.head,borderRight:`2px solid ${lc.border}`,borderBottom:`1px solid ${lc.border}`,background:lc.bg}}>{day}</td>
                       {PERIODS.map(p=>{
                         const key=sk(rid,day,p.id);
                         const en=S.schedule[key]||[];
@@ -2577,7 +2754,7 @@ if(d.assignmentId){const a=S.assigns.find(x=>x.id===d.assignmentId);const sCa=S.
 e.preventDefault();e.currentTarget.classList.add("over");}}
                             onDragLeave={e=>e.currentTarget.classList.remove("over")}
                             onDrop={e=>{e.preventDefault();e.currentTarget.classList.remove("over");handleDrop(rid,day,p.id);}}
-                            style={{padding:3,verticalAlign:"top",minHeight:68,borderLeft:`1px solid ${lc.border}`,borderBottom:`1px solid ${lc.border}`,background:bl?"#FEF9C3":lk?"#F0FDF4":"#FDFAF8"}}
+                            style={{padding:3,verticalAlign:"top",minHeight:68,borderLeft:`1px solid ${lc.border}`,borderBottom:`1px solid ${lc.border}`,background:bl?"#FEF9C3":lk?"#F0FDF4":"inherit"}}
                           >
                             {bl&&en.length===0&&(
                               <div style={{fontSize:9,color:"#92400E",textAlign:"center",padding:4}}>
@@ -2604,7 +2781,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                         );
                       })}
                     </tr>
-                  ))}
+                  );})}
                 </tbody>
               </table>
             </div>
