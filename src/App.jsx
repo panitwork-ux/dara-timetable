@@ -1966,7 +1966,8 @@ function Scheduler({S,U,st,gc}){
   const [coM,setCoM]=useState(null);   // {key, entryId} — modal บนการ์ดที่วางแล้ว
   const [coS,setCoS]=useState("");
   const [coDept,setCoDept]=useState("");
-  const [cardCoM,setCardCoM]=useState(null); // assignId — modal บน sidebar card
+  const [cardCoM,setCardCoM]=useState(null); // assignId — modal ครูร่วม (เดิม)
+  const [showGearId,setShowGearId]=useState(null); // assignId — gear panel inline
   const [cardCoS,setCardCoS]=useState("");
   const [cardCoDept,setCardCoDept]=useState("");
   const [cardCoMap,setCardCoMap]=useState({}); // {assignId: [teacherId, ...]} สูงสุด 4 ครูร่วม
@@ -2805,10 +2806,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                   <div key={a.id} style={{background:lc.bg,border:`1.5px solid ${lc.border}`,borderRadius:12,padding:"10px 12px",opacity:rem<=0?0.35:1,marginBottom:10,boxShadow:`0 2px 8px ${lc.head}22`,transition:"opacity 0.2s",position:"relative"}}>
                     {/* ปุ่ม ⚙️ settings มุมขวาบน */}
                     <button
-                      onClick={()=>{setShowBundleM(null);setCardCoM(null);
-                        // toggle mini-panel สำหรับ card นี้
-                        setCardCoM(cardCoM===a.id?null:a.id);
-                      }}
+                      onClick={()=>setShowGearId(showGearId===a.id?null:a.id)}
                       title="ครูร่วม / วิชาคู่"
                       style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.07)",border:"none",borderRadius:6,width:22,height:22,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",color:lc.tx}}>⚙</button>
 
@@ -2855,7 +2853,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                     </div>
 
                     {/* Mini panel ⚙️ — ครูร่วม + วิชาคู่ */}
-                    {cardCoM===a.id&&(
+                    {showGearId===a.id&&(
                       <div style={{marginTop:8,padding:"8px 10px",background:"rgba(0,0,0,0.04)",borderRadius:8,border:`1px solid ${lc.border}`}}>
                         {/* ครูร่วม */}
                         <div style={{fontSize:10,fontWeight:700,color:lc.tx,marginBottom:5}}>👥 ครูร่วม</div>
@@ -2866,7 +2864,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                           </div>
                         ))}
                         {coTeachers2.length<4&&(
-                          <button onClick={()=>{setCardCoM(null);setCardCoM(null);/* เปิด Modal ครูร่วมปกติ */setTimeout(()=>setCardCoM(a.id),0);}} style={{fontSize:10,color:lc.head,background:"rgba(0,0,0,0.06)",border:`1px solid ${lc.border}`,borderRadius:6,padding:"3px 8px",cursor:"pointer",width:"100%",textAlign:"left",marginBottom:6}}>
+                          <button onClick={()=>{ setShowGearId(null); setCardCoM(a.id); }} style={{fontSize:10,color:lc.head,background:"rgba(0,0,0,0.06)",border:`1px solid ${lc.border}`,borderRadius:6,padding:"3px 8px",cursor:"pointer",width:"100%",textAlign:"left",marginBottom:6}}>
                             + เพิ่มครูร่วม ({coTeachers2.length}/4)
                           </button>
                         )}
@@ -2881,7 +2879,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                             <button onClick={()=>setBundleMap(p=>({...p,[a.id]:buns.filter((_,i)=>i!==bi)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,fontSize:10}}>✕</button>
                           </div>;
                         })}
-                        <button onClick={()=>{setCardCoM(null);setShowBundleM(a.id);setBundleSelSub("");setBundleSelTeacher("");}} style={{fontSize:10,color:"#059669",background:"rgba(5,150,105,0.08)",border:"1px solid #BBF7D0",borderRadius:6,padding:"3px 8px",cursor:"pointer",width:"100%",textAlign:"left"}}>+ เพิ่มวิชาคู่</button>
+                        <button onClick={()=>{ setShowGearId(null); setShowBundleM(a.id); setBundleSelSub(""); setBundleSelTeacher(""); }} style={{fontSize:10,color:"#059669",background:"rgba(5,150,105,0.08)",border:"1px solid #BBF7D0",borderRadius:6,padding:"3px 8px",cursor:"pointer",width:"100%",textAlign:"left"}}>+ เพิ่มวิชาคู่</button>
                       </div>
                     )}
                   </div>
