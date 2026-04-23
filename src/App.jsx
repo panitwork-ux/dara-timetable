@@ -736,6 +736,19 @@ export default function App() {
     st("เปลี่ยนเป็น "+d.name);
   };
 
+  // Auto-switch ไปยัง division แรกที่มีสิทธิ์ ถ้า divId ปัจจุบันไม่มีสิทธิ์
+  useEffect(()=>{
+    if(!firebaseConfigured||!userPerms)return;
+    const currentOk=userPerms?.divisions?.[divId]===true;
+    if(!currentOk){
+      const firstAllowed=DIVISIONS.find(d=>userPerms?.divisions?.[d.id]===true);
+      if(firstAllowed&&firstAllowed.id!==divId){
+        switchDivision(firstAllowed.id);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[userPerms]);
+
   // ===== FIRESTORE REALTIME SYNC =====
   const saveTimer=useRef(null);
   const fsReadyRef=useRef(false); // กัน loop: onSnapshot trigger → setState → save → onSnapshot
