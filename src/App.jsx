@@ -2610,11 +2610,11 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
     const totalUsed=teacherScheduledTotal(selT);
     const quota=teacher?.totalPeriods||0;
     return (
-      <div style={{position:"fixed",bottom:16,left:"calc(240px + 16px)",zIndex:200,maxWidth:"calc(100vw - 280px)",fontFamily:"'Sarabun','Noto Sans Thai',sans-serif"}}>
+      <div style={{position:"fixed",bottom:16,left:"calc(240px + 16px)",zIndex:200,fontFamily:"'Sarabun','Noto Sans Thai',sans-serif"}}>
         {/* Compact pill — แสดงตลอด */}
         <div
           onClick={()=>setShowWeekly(v=>!v)}
-          style={{display:"inline-flex",alignItems:"center",gap:8,padding:"7px 14px",background:"rgba(30,58,95,0.95)",backdropFilter:"blur(8px)",borderRadius:showWeekly?"12px 12px 0 0":12,cursor:"pointer",userSelect:"none",boxShadow:"0 4px 16px rgba(0,0,0,0.25)"}}
+          style={{display:"inline-flex",alignItems:"center",gap:8,padding:"7px 14px",background:"rgba(30,58,95,0.95)",backdropFilter:"blur(8px)",borderRadius:showWeekly?"12px 12px 0 0":12,cursor:"pointer",userSelect:"none",boxShadow:"0 4px 16px rgba(0,0,0,0.25)",width:230,boxSizing:"border-box"}}
         >
           <span style={{fontSize:12,fontWeight:700,color:"#fff",whiteSpace:"nowrap"}}>📋 {teacher?.prefix}{teacher?.firstName} {teacher?.lastName}</span>
           <span style={{fontSize:12,background:totalUsed>=quota?"#D1FAE5":"#FEF3C7",color:totalUsed>=quota?"#065F46":"#92400E",padding:"2px 10px",borderRadius:20,fontWeight:800,flexShrink:0}}>
@@ -2624,7 +2624,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
         </div>
         {/* ตารางสรุป — expand ขึ้นข้างบน */}
         {showWeekly&&(
-          <div style={{maxHeight:"50vh",overflowY:"auto",background:"#fff",borderRadius:"0 12px 0 0",boxShadow:"0 -4px 20px rgba(0,0,0,0.18)",border:"1px solid #BFDBFE",borderBottom:"none",width:"calc(100vw - 296px)",maxWidth:900}}>
+          <div style={{maxHeight:"50vh",overflowY:"auto",background:"#fff",borderRadius:"0 12px 0 0",boxShadow:"0 -4px 20px rgba(0,0,0,0.18)",border:"1px solid #BFDBFE",borderBottom:"none",width:"calc(100vw - 296px)",maxWidth:900,position:"absolute",bottom:"100%",left:0}}>
             <div style={{overflow:"auto"}}>
               <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed",minWidth:680}}>
                 <thead>
