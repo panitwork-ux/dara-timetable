@@ -1985,7 +1985,8 @@ function Scheduler({S,U,st,gc}){
     allowSR:     false,         // วิชาห้องพิเศษ
     spreadDay:   true,          // กระจายไม่ให้วิชาเดียวอยู่วันเดียวกัน 2 คาบ (default เปิด)
     noFirstLast: true,          // ไม่วางคาบ 1 + คาบ 7 วันเดียวกัน (วิชาเดิม)
-    maxConsecTeacher: 0,        // 0 = ไม่จำกัด, 3/4 = ห้ามครูสอนติดกันเกิน N คาบ
+    maxConsecTeacher: 0,        // 0 = ไม่จำกัด, 2/3/4 = ห้ามครูสอนติดกันเกิน N คาบ
+    maxPerDayTeacher: false,    // true = ครูสอนไม่เกิน 1 คาบ/วัน (กระจายทั้งสัปดาห์)
     runs:        10,            // จำนวนรอบ (10 default)
   });
   const [autoProgress, setAutoProgress] = useState(null); // {run, total}
@@ -2264,7 +2265,6 @@ function Scheduler({S,U,st,gc}){
         // maxConsecTeacher: ครูสอนติดกันไม่เกิน N คาบ
         const teacherConsecCount = (tid, day, period) => {
           if (!opts.maxConsecTeacher) return false;
-          // นับคาบที่ครูสอนติดกันก่อนหน้า period
           let streak = 0;
           for (let p = period - 1; p >= 1; p--) {
             let found = false;
@@ -2280,6 +2280,20 @@ function Scheduler({S,U,st,gc}){
             else break;
           }
           return streak >= opts.maxConsecTeacher;
+        };
+
+        // maxPerDayTeacher: ครูสอนไม่เกิน 1 คาบ/วัน
+        const teacherAlreadyTaughtToday = (tid, day) => {
+          if (!opts.maxPerDayTeacher) return false;
+          for (const [k, en] of Object.entries(newSchedule)) {
+            const pts = k.split("_");
+            if (pts[pts.length - 2] !== day) continue;
+            if ((en || []).some(e => {
+              const coIds = e.coTeacherIds?.length ? e.coTeacherIds : (e.coTeacherId ? [e.coTeacherId] : []);
+              return e.teacherId === tid || coIds.includes(tid);
+            })) return true;
+          }
+          return false;
         };
 
         // ── สร้าง jobs ──
@@ -2334,6 +2348,7 @@ function Scheduler({S,U,st,gc}){
               // เงื่อนไขเพิ่มเติม
               if (violatesFirstLast(subId, rid, day, p.id)) continue;
               if (teacherConsecCount(tid, day, p.id)) continue;
+              if (teacherAlreadyTaughtToday(tid, day)) continue;
 
               // consecutive ≥ 2
               if (ca >= 2) {
@@ -2587,40 +2602,45 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
     </div>
   );
 
-  /* ── ตารางสรุปสัปดาห์ครู ── */
+  /* ── ตารางสรุปสัปดาห์ครู (sticky bottom) ── */
   const renderTeacherWeeklySummary=()=>{
     if(!selT||mode!=="teacher") return null;
     const teacher=S.teachers.find(t=>t.id===selT);
     const totalUsed=teacherScheduledTotal(selT);
     const quota=teacher?.totalPeriods||0;
     return (
-      <div style={{marginTop:24}}>
-        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:showWeekly?10:0}}>
-          <button onClick={()=>setShowWeekly(v=>!v)} style={{display:"flex",alignItems:"center",gap:8,background:showWeekly?"#EFF6FF":"#fff",border:"1.5px solid #2563EB",borderRadius:10,padding:"7px 16px",cursor:"pointer",fontFamily:"inherit"}}>
-            <span style={{fontSize:13,fontWeight:700,color:"#1E40AF"}}>📋 ตารางสอนรวม — {teacher?.prefix}{teacher?.firstName} {teacher?.lastName}</span>
-            <span style={{fontSize:11,color:"#2563EB"}}>{showWeekly?"▲ ซ่อน":"▼ แสดง"}</span>
-          </button>
-          <span style={{fontSize:12,background:totalUsed>=quota?"#D1FAE5":"#FEF3C7",color:totalUsed>=quota?"#065F46":"#92400E",padding:"3px 12px",borderRadius:20,fontWeight:700}}>
+      <div style={{position:"sticky",bottom:0,zIndex:100,background:"rgba(255,255,255,0.97)",backdropFilter:"blur(8px)",borderTop:"2px solid #BFDBFE",boxShadow:"0 -4px 20px rgba(0,0,0,0.08)",marginTop:8}}>
+        {/* Toggle bar — คลิกเพื่อ expand/collapse */}
+        <div
+          onClick={()=>setShowWeekly(v=>!v)}
+          style={{display:"flex",alignItems:"center",gap:12,padding:"10px 18px",cursor:"pointer",userSelect:"none"}}
+        >
+          <span style={{fontSize:13,fontWeight:700,color:"#1E40AF"}}>📋 ตารางสอนรวม — {teacher?.prefix}{teacher?.firstName} {teacher?.lastName}</span>
+          <span style={{fontSize:12,background:totalUsed>=quota?"#D1FAE5":"#FEF3C7",color:totalUsed>=quota?"#065F46":"#92400E",padding:"2px 12px",borderRadius:20,fontWeight:700}}>
             จัดแล้ว {totalUsed}/{quota} คาบ {totalUsed>=quota?"✓":""}
           </span>
+          <span style={{marginLeft:"auto",fontSize:11,color:"#2563EB",fontWeight:600}}>{showWeekly?"▼ ซ่อน":"▲ แสดง"}</span>
         </div>
-        {showWeekly&&<div style={{background:"#fff",borderRadius:14,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",overflow:"hidden",border:"1px solid rgba(0,0,0,0.05)"}}>
-          <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed",minWidth:700}}>
-            <thead>
-              <tr>
-                <th style={{padding:"8px 10px",background:"#1E3A5F",color:"#fff",width:70,textAlign:"left",fontSize:12,fontWeight:700}}>วัน</th>
-                {PERIODS.map(p=>(
-                  <th key={p.id} style={{padding:"5px 2px",background:"#1E3A5F",textAlign:"center",borderLeft:"1px solid rgba(255,255,255,0.15)"}}>
-                    <div style={{fontSize:11,color:"#fff",fontWeight:700}}>คาบ {p.id}</div>
-                    <div style={{fontSize:9,color:"rgba(255,255,255,0.6)"}}>{p.time}</div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {DAYS.map((day,di)=>(
-                <tr key={day} style={{background:di%2===0?"#FFFFFF":"#F0F7FF",borderBottom:"1px solid #E0EEFF"}}>
-                  <td style={{padding:"8px 10px",fontWeight:700,fontSize:12,color:"#1E3A5F",borderRight:"2px solid #BFDBFE",background:"#EFF6FF"}}>{day}</td>
+        {/* ตารางสรุป — แสดงเมื่อ expand */}
+        {showWeekly&&(
+          <div style={{maxHeight:"40vh",overflowY:"auto",borderTop:"1px solid #E0EEFF"}}>
+            <div style={{background:"#fff",overflow:"hidden"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed",minWidth:700}}>
+                <thead>
+                  <tr>
+                    <th style={{padding:"8px 10px",background:"#1E3A5F",color:"#fff",width:70,textAlign:"left",fontSize:12,fontWeight:700,position:"sticky",top:0,zIndex:2}}>วัน</th>
+                    {PERIODS.map(p=>(
+                      <th key={p.id} style={{padding:"5px 2px",background:"#1E3A5F",textAlign:"center",borderLeft:"1px solid rgba(255,255,255,0.15)",position:"sticky",top:0,zIndex:2}}>
+                        <div style={{fontSize:11,color:"#fff",fontWeight:700}}>คาบ {p.id}</div>
+                        <div style={{fontSize:9,color:"rgba(255,255,255,0.6)"}}>{p.time}</div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {DAYS.map((day,di)=>(
+                    <tr key={day} style={{background:di%2===0?"#FFFFFF":"#F0F7FF",borderBottom:"1px solid #E0EEFF"}}>
+                      <td style={{padding:"8px 10px",fontWeight:700,fontSize:12,color:"#1E3A5F",borderRight:"2px solid #BFDBFE",background:"#EFF6FF"}}>{day}</td>
                   {PERIODS.map(p=>{
                     const blk=isBlk(selT,day,p.id);
                     // หาทุกห้องที่ครูสอนในคาบนี้
@@ -2661,8 +2681,10 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
               ))}
             </tbody>
           </table>
-        </div>}
-        {showWeekly&&<div style={{marginTop:8,fontSize:11,color:"#9CA3AF",display:"flex",gap:16}}>
+            </div>
+          </div>
+        )}
+        {showWeekly&&<div style={{padding:"4px 18px 6px",fontSize:11,color:"#9CA3AF",display:"flex",gap:16,borderTop:"1px solid #F0F0F0"}}>
           <span>🔴 = ห้องที่สอน</span>
           <span>🔒 = คาบล็อค/ประชุม</span>
           <span>— = ว่าง</span>
@@ -2758,62 +2780,110 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
               {allAsgns.map(a=>{
                 const sub=S.subjects.find(s=>s.id===a.subjectId);
                 const dept=S.depts.find(d=>d.id===sub?.departmentId);
-                const c=dept?gc(dept.id):{bg:"#6B7280",lt:"#F3F4F6",tx:"#374151",bd:"#D1D5DB"};
+                // สีตามระดับชั้นของห้องแรก
+                const LEVEL_COLORS_CARD=[
+                  {bg:"#FFF7ED",border:"#FED7AA",head:"#EA580C",tx:"#9A3412"},
+                  {bg:"#F0FDF4",border:"#BBF7D0",head:"#16A34A",tx:"#14532D"},
+                  {bg:"#EFF6FF",border:"#BFDBFE",head:"#2563EB",tx:"#1E3A8A"},
+                  {bg:"#FDF4FF",border:"#E9D5FF",head:"#9333EA",tx:"#581C87"},
+                  {bg:"#FFF1F2",border:"#FECDD3",head:"#E11D48",tx:"#881337"},
+                  {bg:"#F0FDFA",border:"#99F6E4",head:"#0D9488",tx:"#134E4A"},
+                ];
+                const firstRoom=S.rooms.find(r=>a.roomIds.includes(r.id));
+                const lvIdx=S.levels.findIndex(l=>l.id===firstRoom?.levelId);
+                const lc=LEVEL_COLORS_CARD[lvIdx>=0?lvIdx%LEVEL_COLORS_CARD.length:0];
                 const u=aUsed(a.id);
-                // -2 mode: totalPeriods รวมทุก assignment ของวิชานี้ (periodsPerWeek × 2 ห้อง แต่ deduplicate)
                 const subCa2=sub?.consecutiveAllowed||0;
                 const totalForCard=subCa2===-2
-                  ? (sub?.periodsPerWeek||2) * S.assigns.filter(x=>x.subjectId===a.subjectId).reduce((s,x)=>s+x.roomIds.length,0) // periodsPerWeek × จำนวนห้องรวม
+                  ? (sub?.periodsPerWeek||2) * S.assigns.filter(x=>x.subjectId===a.subjectId).reduce((s,x)=>s+x.roomIds.length,0)
                   : a.totalPeriods;
                 const rem=totalForCard-u;
                 const coIds2=Array.isArray(cardCoMap[a.id])?cardCoMap[a.id]:(cardCoMap[a.id]?[cardCoMap[a.id]]:[]);
                 const coTeachers2=coIds2.map(id=>S.teachers.find(t=>t.id===id)).filter(Boolean);
+                const buns=bundleMap[a.id]||[];
                 return (
-                  <div key={a.id} style={{background:c.lt,border:"1px solid "+c.bd,borderRadius:12,padding:"8px 10px",opacity:rem<=0?0.3:1,marginBottom:8,boxShadow:"0 2px 8px rgba(0,0,0,0.04)",transition:"opacity 0.2s"}}>
-                    {coAsgnsIds.has(a.id)&&<div style={{fontSize:8,color:"#7C3AED",fontWeight:700,marginBottom:2}}>👥 ครูร่วม ({S.teachers.find(t=>t.id===a.teacherId)?.firstName||""})</div>}
+                  <div key={a.id} style={{background:lc.bg,border:`1.5px solid ${lc.border}`,borderRadius:12,padding:"10px 12px",opacity:rem<=0?0.35:1,marginBottom:10,boxShadow:`0 2px 8px ${lc.head}22`,transition:"opacity 0.2s",position:"relative"}}>
+                    {/* ปุ่ม ⚙️ settings มุมขวาบน */}
+                    <button
+                      onClick={()=>{setShowBundleM(null);setCardCoM(null);
+                        // toggle mini-panel สำหรับ card นี้
+                        setCardCoM(cardCoM===a.id?null:a.id);
+                      }}
+                      title="ครูร่วม / วิชาคู่"
+                      style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.07)",border:"none",borderRadius:6,width:22,height:22,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",color:lc.tx}}>⚙</button>
+
+                    {coAsgnsIds.has(a.id)&&<div style={{fontSize:9,color:"#7C3AED",fontWeight:700,marginBottom:3}}>👥 ครูร่วม ({S.teachers.find(t=>t.id===a.teacherId)?.firstName||""})</div>}
+
                     <div
                       className="drag-card"
                       draggable={rem>0&&!coAsgnsIds.has(a.id)}
                       onDragStart={()=>setDragBoth({teacherId:selT,subjectId:a.subjectId,assignmentId:a.id})}
                       onDragEnd={()=>setDragBoth(null)}
-                      style={{cursor:rem>0&&!coAsgnsIds.has(a.id)?"grab":"default"}}
+                      style={{cursor:rem>0&&!coAsgnsIds.has(a.id)?"grab":"default",paddingRight:20}}
                     >
-                      <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
-                        <span style={{fontSize:11,fontWeight:700,color:c.tx,lineHeight:1.3}}>{sub?.code}<br/>{subDisplayName(sub)}</span>
-                        {sub?.consecutiveAllowed===-1&&<span style={{fontSize:8,background:"#EFF6FF",color:"#1E40AF",padding:"1px 4px",borderRadius:6,fontWeight:700}}>NP</span>}
-                        {sub?.consecutiveAllowed===-2&&<span style={{fontSize:8,background:"#FDF4FF",color:"#6B21A8",padding:"1px 4px",borderRadius:6,fontWeight:700}}>เศรษฐ-วิศวะ</span>}
-                        {sub?.consecutiveAllowed>0&&<span style={{fontSize:8,background:"#FEF3C7",color:"#92400E",padding:"1px 4px",borderRadius:6,fontWeight:700}}>⚡{sub.consecutiveAllowed}ติด</span>}
+                      {/* ชื่อวิชา ตัวใหญ่ชัดเจน */}
+                      <div style={{fontSize:13,fontWeight:800,color:lc.tx,lineHeight:1.4,marginBottom:3}}>
+                        {subDisplayName(sub)||sub?.code}
                       </div>
-                      {(()=>{const sr=S.specialRooms.find(r=>r.id===sub?.specialRoomId);return sr?<div style={{fontSize:8,color:"#7C3AED",marginTop:1}}>📍 {sr.name}</div>:null;})()}
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:5}}>
-                        <div style={{display:"flex",gap:2,flexWrap:"wrap"}}>
+                      <div style={{fontSize:10,color:lc.head,fontWeight:600,marginBottom:4}}>{sub?.code}</div>
+
+                      {/* badges */}
+                      <div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:5}}>
+                        {sub?.consecutiveAllowed===-1&&<span style={{fontSize:8,background:"#EFF6FF",color:"#1E40AF",padding:"1px 5px",borderRadius:6,fontWeight:700}}>NP</span>}
+                        {sub?.consecutiveAllowed===-2&&<span style={{fontSize:8,background:"#FDF4FF",color:"#6B21A8",padding:"1px 5px",borderRadius:6,fontWeight:700}}>เศรษฐ-วิศวะ</span>}
+                        {sub?.consecutiveAllowed>0&&<span style={{fontSize:8,background:"#FEF3C7",color:"#92400E",padding:"1px 5px",borderRadius:6,fontWeight:700}}>⚡{sub.consecutiveAllowed}ติด</span>}
+                        {(()=>{const sr=S.specialRooms.find(r=>r.id===sub?.specialRoomId);return sr?<span style={{fontSize:8,background:"#EDE9FE",color:"#5B21B6",padding:"1px 5px",borderRadius:6,fontWeight:700}}>📍{sr.name}</span>:null;})()}
+                      </div>
+
+                      {/* ห้องเรียน + คาบคงเหลือ */}
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                        <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
                           {a.roomIds.map(rid=>(
-                            <span key={rid} style={{background:"rgba(0,0,0,0.1)",padding:"1px 6px",borderRadius:8,fontSize:9,fontWeight:600}}>{S.rooms.find(r=>r.id===rid)?.name}</span>
+                            <span key={rid} style={{background:lc.head,color:"#fff",padding:"2px 7px",borderRadius:8,fontSize:10,fontWeight:700}}>{S.rooms.find(r=>r.id===rid)?.name}</span>
                           ))}
                         </div>
-                        <span style={{background:rem>0?c.bg:"#9CA3AF",color:"#fff",padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:700}}>{rem}/{totalForCard}</span>
+                        <span style={{background:rem>0?lc.head:"#9CA3AF",color:"#fff",padding:"3px 9px",borderRadius:20,fontSize:11,fontWeight:800,flexShrink:0}}>{rem}/{totalForCard}</span>
                       </div>
+
+                      {/* สรุป co-teacher/bundle ย่อ */}
+                      {(coTeachers2.length>0||buns.length>0)&&(
+                        <div style={{marginTop:5,display:"flex",gap:4,flexWrap:"wrap"}}>
+                          {coTeachers2.map(ct=><span key={ct.id} style={{fontSize:9,background:"rgba(124,58,237,0.12)",color:"#5B21B6",padding:"1px 6px",borderRadius:10,fontWeight:600}}>👥{ct.firstName}</span>)}
+                          {buns.map((b,bi)=>{const bS=S.subjects.find(s=>s.id===S.assigns.find(x=>x.id===b.assignId)?.subjectId);return<span key={bi} style={{fontSize:9,background:"rgba(5,150,105,0.12)",color:"#065F46",padding:"1px 6px",borderRadius:10,fontWeight:600}}>📎{bS?.code||"?"}</span>;})}
+                        </div>
+                      )}
                     </div>
-                    {/* เพิ่มครูร่วมบน sidebar */}
-                    <div style={{marginTop:5,paddingTop:5,borderTop:"1px solid rgba(0,0,0,0.07)"}}>
-                      {coTeachers2.map((ct2)=>(
-                          <div key={ct2.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
-                            <span style={{fontSize:9,color:c.tx}}>ร่วม: {ct2.firstName}</span>
-                            <button onClick={()=>setCardCoMap(p=>({...p,[a.id]:coIds2.filter(id=>id!==ct2.id)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,fontSize:11}}>✕</button>
+
+                    {/* Mini panel ⚙️ — ครูร่วม + วิชาคู่ */}
+                    {cardCoM===a.id&&(
+                      <div style={{marginTop:8,padding:"8px 10px",background:"rgba(0,0,0,0.04)",borderRadius:8,border:`1px solid ${lc.border}`}}>
+                        {/* ครูร่วม */}
+                        <div style={{fontSize:10,fontWeight:700,color:lc.tx,marginBottom:5}}>👥 ครูร่วม</div>
+                        {coTeachers2.map((ct2)=>(
+                          <div key={ct2.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
+                            <span style={{fontSize:10,color:lc.tx}}>{ct2.firstName} {ct2.lastName}</span>
+                            <button onClick={()=>setCardCoMap(p=>({...p,[a.id]:coIds2.filter(id=>id!==ct2.id)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,fontSize:12}}>✕</button>
                           </div>
                         ))}
-                        {coTeachers2.length<4&&<button onClick={()=>setCardCoM(a.id)} style={{fontSize:9,color:c.tx,background:"rgba(0,0,0,0.06)",border:"none",borderRadius:6,padding:"2px 6px",cursor:"pointer",width:"100%",textAlign:"left"}}>+ ครูร่วม ({coTeachers2.length}/4)</button>}
-                    </div>
-                    {/* วิชาคู่ (bundle) */}
-                    {(()=>{const buns=bundleMap[a.id]||[];return<div style={{marginTop:4,paddingTop:4,borderTop:"1px solid rgba(0,0,0,0.07)"}}>
-                      {buns.map((b,bi)=>{const bA=S.assigns.find(x=>x.id===b.assignId);const bS=S.subjects.find(s=>s.id===bA?.subjectId);const bT=S.teachers.find(t=>t.id===b.teacherId);
-                        return<div key={bi} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2,background:"rgba(5,150,105,0.07)",borderRadius:4,padding:"1px 4px"}}>
-                          <span style={{fontSize:8,color:"#065F46",lineHeight:1.4}}>{bS?.code||""}{bT?` (${bT.firstName})`:""}</span>
-                          <button onClick={()=>setBundleMap(p=>({...p,[a.id]:buns.filter((_,i)=>i!==bi)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,fontSize:10}}>✕</button>
-                        </div>;
-                      })}
-                      <button onClick={()=>{setShowBundleM(a.id);setBundleSelSub("");setBundleSelTeacher("");}} style={{fontSize:9,color:"#059669",background:"rgba(5,150,105,0.08)",border:"none",borderRadius:6,padding:"2px 6px",cursor:"pointer",width:"100%",textAlign:"left",marginTop:2}}>📎 + วิชาคู่ ({buns.length})</button>
-                    </div>;})()} 
+                        {coTeachers2.length<4&&(
+                          <button onClick={()=>{setCardCoM(null);setCardCoM(null);/* เปิด Modal ครูร่วมปกติ */setTimeout(()=>setCardCoM(a.id),0);}} style={{fontSize:10,color:lc.head,background:"rgba(0,0,0,0.06)",border:`1px solid ${lc.border}`,borderRadius:6,padding:"3px 8px",cursor:"pointer",width:"100%",textAlign:"left",marginBottom:6}}>
+                            + เพิ่มครูร่วม ({coTeachers2.length}/4)
+                          </button>
+                        )}
+                        {/* วิชาคู่ */}
+                        <div style={{fontSize:10,fontWeight:700,color:"#065F46",marginTop:4,marginBottom:5}}>📎 วิชาคู่</div>
+                        {buns.map((b,bi)=>{
+                          const bA=S.assigns.find(x=>x.id===b.assignId);
+                          const bS=S.subjects.find(s=>s.id===bA?.subjectId);
+                          const bT=S.teachers.find(t=>t.id===b.teacherId);
+                          return<div key={bi} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3,background:"rgba(5,150,105,0.07)",borderRadius:4,padding:"2px 6px"}}>
+                            <span style={{fontSize:9,color:"#065F46"}}>{bS?.code||""}{bT?` (${bT.firstName})`:""}</span>
+                            <button onClick={()=>setBundleMap(p=>({...p,[a.id]:buns.filter((_,i)=>i!==bi)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,fontSize:10}}>✕</button>
+                          </div>;
+                        })}
+                        <button onClick={()=>{setCardCoM(null);setShowBundleM(a.id);setBundleSelSub("");setBundleSelTeacher("");}} style={{fontSize:10,color:"#059669",background:"rgba(5,150,105,0.08)",border:"1px solid #BBF7D0",borderRadius:6,padding:"3px 8px",cursor:"pointer",width:"100%",textAlign:"left"}}>+ เพิ่มวิชาคู่</button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -3015,6 +3085,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                   {[
                     {key:"spreadDay",   label:"กระจายวิชา — ไม่ซ้ำวันเดิม",          sub:"วิชาเดียวกันในห้องเดิม จะไม่ถูกวาง 2 คาบในวันเดียว"},
                     {key:"noFirstLast", label:"ไม่วางคาบ 1 + คาบ 7 วันเดิม (วิชาเดิม)", sub:"ป้องกันวิชาหนักอยู่หัว-ท้ายวันพร้อมกัน"},
+                    {key:"maxPerDayTeacher", label:"ครูสอน 1 คาบ/วัน (กระจายทั้งสัปดาห์)", sub:"ครูแต่ละคนจะไม่ถูกวางมากกว่า 1 คาบในวันเดียวกัน"},
                   ].map(o=>(
                     <label key={o.key} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"10px 14px",borderRadius:12,border:`2px solid ${autoOpts[o.key]?"#7C3AED":"#E5E7EB"}`,background:autoOpts[o.key]?"#F5F3FF":"#F9FAFB",cursor:"pointer"}}>
                       <input type="checkbox" checked={!!autoOpts[o.key]} onChange={e=>setAutoOpts(p=>({...p,[o.key]:e.target.checked}))} style={{marginTop:2,accentColor:"#7C3AED",flexShrink:0}}/>
@@ -3066,6 +3137,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                   <span>📚 จัดวิชา: {[autoOpts.allowNormal&&"ปกติ",autoOpts.allowConsec&&"คาบติด",autoOpts.allowNP&&"NP",autoOpts.allowSR&&"ห้องพิเศษ"].filter(Boolean).join(", ")||"— ยังไม่ได้เลือก"}</span>
                   <span>🔁 {autoOpts.runs} รอบ — ใช้ผลที่ดีที่สุด</span>
                   {autoOpts.maxConsecTeacher>0&&<span>⏱ ครูสอนติดกันไม่เกิน {autoOpts.maxConsecTeacher} คาบ</span>}
+                  {autoOpts.maxPerDayTeacher&&<span>📅 ครูสอน 1 คาบ/วัน (กระจายสัปดาห์)</span>}
                 </div>
               </div>
             </div>
