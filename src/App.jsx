@@ -1954,9 +1954,9 @@ function Meetings({S,U,st,gc}){
         <h3 style={{fontSize:16,fontWeight:700,marginBottom:16}}>เพิ่มคาบล็อคแผนก</h3>
         <div style={{display:"flex",flexDirection:"column",gap:16}}>
           {/* ชื่อ */}
-          <div style={{flex:"1 1 300px"}}>
+          <div>
             <label style={LS}>ชื่อคาบล็อค</label>
-            <input style={IS} value={cusForm.name} onChange={e=>setCusForm(p=>({...p,name:e.target.value}))} placeholder="เช่น ประชุมวิชาการ, อบรม, สอบกลางภาค"/>
+            <input style={{...IS,maxWidth:400}} value={cusForm.name} onChange={e=>setCusForm(p=>({...p,name:e.target.value}))} placeholder="เช่น ประชุมวิชาการ, อบรม, สอบกลางภาค"/>
           </div>
 
           {/* ตาราง grid วัน × คาบ เลือกได้หลายช่อง */}
