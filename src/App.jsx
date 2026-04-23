@@ -2561,8 +2561,8 @@ function Scheduler({S,U,st,gc}){
                 </thead>
                 <tbody>
                   {DAYS.map((day,di)=>(
-                    <tr key={day} style={{background:di%2===0?"#FFFFFF":lc.bg}}>
-                      <td style={{padding:"8px 8px",fontWeight:700,fontSize:12,color:lc.head,borderRight:`2px solid ${lc.border}`,borderBottom:`1px solid ${lc.border}`,background:di%2===0?lc.bg+"66":lc.bg}}>{day}</td>
+                    <tr key={day} style={{background:di%2===0?"#FFFFFF":lc.border+"55",borderBottom:`1px solid ${lc.border}`}}>
+                      <td style={{padding:"8px 8px",fontWeight:700,fontSize:12,color:lc.head,borderRight:`2px solid ${lc.border}`,background:lc.bg}}>{day}</td>
                       {PERIODS.map(p=>{
                         const key=sk(rid,day,p.id);
                         const en=S.schedule[key]||[];
