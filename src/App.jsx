@@ -1340,7 +1340,7 @@ function SpecialRooms({S,U,st}){
 function Subjects({S,U,st,gc}){
   const [modal,setModal]=useState(false);
   const [editId,setEditId]=useState(null);
-  const BLANK={code:"",name:"",shortName:"",credits:1,periodsPerWeek:1,departmentId:"",levelId:"",specialRoomId:"",consecutiveAllowed:0};
+  const BLANK={code:"",name:"",shortName:"",credits:1,periodsPerWeek:1,departmentId:"",levelId:"",specialRoomId:"",consecutiveAllowed:0,allDepts:false};
   const [form,setForm]=useState(BLANK);
   const fileRef=useRef(null);
   const [filterLv,setFilterLv]=useState("");
@@ -1422,6 +1422,7 @@ function Subjects({S,U,st,gc}){
           {sub.consecutiveAllowed>0&&<span style={{background:"#FEF3C7",color:"#92400E",padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:600}}>⚡{sub.consecutiveAllowed}คาบติด</span>}
           {sub.consecutiveAllowed===-1&&<span style={{background:"#EFF6FF",color:"#1E40AF",padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:600}}>🔀NP</span>}
           {sub.consecutiveAllowed===-2&&<span style={{background:"#FDF4FF",color:"#6B21A8",padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:600}}>🏛️เศรษฐ-วิศวะ</span>}
+          {sub.allDepts&&<span style={{background:"#FEF9C3",color:"#92400E",padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:700}}>🏫 ทุกกลุ่มสาระ</span>}
         </div>
       </div>
     </div>;
@@ -1508,6 +1509,16 @@ function Subjects({S,U,st,gc}){
             📌 <strong>ห้องเศรษฐศาสตร์วิศวกรรม:</strong> 2 ห้องเรียนพร้อมกัน วางคาบเดียวกันคนละห้องได้ · ต้องวาง 2 คาบติดกัน · ครูทุกคนในการ์ดนับคาบตามนี้ · นับแต่ละคาบ 1 ครั้ง (ไม่ซ้ำข้ามห้อง)
           </div>}
         </div>
+
+        {/* allDepts flag */}
+        <label style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 14px",borderRadius:12,border:`2px solid ${form.allDepts?"#D97706":"#E5E7EB"}`,background:form.allDepts?"#FFFBEB":"#F9FAFB",cursor:"pointer"}}>
+          <input type="checkbox" checked={!!form.allDepts} onChange={e=>setForm(p=>({...p,allDepts:e.target.checked}))} style={{marginTop:2,accentColor:"#D97706",flexShrink:0}}/>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:form.allDepts?"#92400E":"#374151"}}>🏫 วิชาที่ทุกกลุ่มสาระสอนร่วมกัน</div>
+            <div style={{fontSize:11,color:"#6B7280",marginTop:2}}>เช่น กิจกรรมพัฒนาผู้เรียน, ลูกเสือ — ครูต่างสาระสามารถ assign วิชานี้ได้ และระบบจะตรวจการชนของครูทุกคนที่สอนวิชานี้</div>
+          </div>
+        </label>
+
         <button onClick={save} style={BS()}>{editId?"บันทึก":"เพิ่มวิชา"}</button>
       </div>
     </Modal>
@@ -1602,6 +1613,7 @@ function Assigns({S,U,st,gc}){
   const [sel,setSel]=useState("");
   const [modal,setModal]=useState(false);
   const [form,setForm]=useState({subjectId:"",roomIds:[],totalPeriods:0});
+  const [modalDeptFilter,setModalDeptFilter]=useState(""); // filter กลุ่มสาระใน modal วิชา
   const fileRefA=useRef(null);
   const deptTeachers=selDept?S.teachers.filter(t=>t.departmentId===selDept):[];
   const teacher=S.teachers.find(t=>t.id===sel);
@@ -1670,8 +1682,13 @@ function Assigns({S,U,st,gc}){
   const remaining=teacherQuota-totalAssigned;
   const notScheduled=totalAssigned-totalScheduled; // มอบหมายแล้วแต่ยังไม่ลงตาราง
 
-  // ข้อ 2: filter วิชาเฉพาะกลุ่มสาระของครูที่เลือก
-  const teacherDeptSubs=teacher?S.subjects.filter(s=>s.departmentId===teacher.departmentId):S.subjects;
+  // แสดงวิชาทุกสาระเรียงตามกลุ่มสาระ พร้อม label บอกสาระ
+  const teacherDeptSubs = S.subjects.slice().sort((a,b)=>{
+    const da = S.depts.find(d=>d.id===a.departmentId)?.name||"zzz";
+    const db = S.depts.find(d=>d.id===b.departmentId)?.name||"zzz";
+    if(da!==db) return da.localeCompare(db,"th");
+    return (a.code||"").localeCompare(b.code||"");
+  });
 
   // ข้อ 3: when subject selected, show rooms of that level only
   const selSub=S.subjects.find(s=>s.id===form.subjectId);
@@ -1763,8 +1780,16 @@ function Assigns({S,U,st,gc}){
   return <div style={{animation:"fadeIn 0.3s"}}>
     <div style={{display:"flex",gap:12,marginBottom:24,alignItems:"center",flexWrap:"wrap"}}>
       <SearchSelect value={selDept} onChange={v=>{setSelDept(v);setSel("")}} options={[{value:"",label:"-- เลือกกลุ่มสาระก่อน --"},...S.depts.map(d=>({value:d.id,label:d.name}))]} placeholder="-- เลือกกลุ่มสาระก่อน --" style={{maxWidth:280}}/>
-      {selDept&&<SearchSelect value={sel} onChange={v=>setSel(v)} options={[{value:"",label:"-- เลือกครู --"},...deptTeachers.map(t=>({value:t.id,label:`${t.prefix}${t.firstName} ${t.lastName}`}))]} placeholder="-- เลือกครู --" style={{maxWidth:350}}/>}
-      {sel&&<button onClick={()=>{setForm({subjectId:"",roomIds:[],totalPeriods:0});setModal(true)}} style={BS()}><Icon name="plus" size={16}/>เพิ่มวิชา</button>}
+      {selDept&&<SearchSelect value={sel} onChange={v=>setSel(v)}
+        options={[{value:"",label:"-- เลือกครู --"},
+          // แสดงครูกลุ่มสาระนั้นก่อน จากนั้นครูสาระอื่น
+          ...S.teachers.filter(t=>t.departmentId===selDept).map(t=>({value:t.id,label:`${t.prefix}${t.firstName} ${t.lastName}`})),
+          ...(S.teachers.filter(t=>t.departmentId!==selDept).length>0
+            ? [{value:"__sep__",label:"──── ครูกลุ่มสาระอื่น ────",disabled:true},...S.teachers.filter(t=>t.departmentId!==selDept).map(t=>{const d=S.depts.find(x=>x.id===t.departmentId);return{value:t.id,label:`${t.prefix}${t.firstName} ${t.lastName}${d?" ["+d.name+"]":""}`};})]
+            : [])
+        ]}
+        placeholder="-- เลือกครู --" style={{maxWidth:380}}/> }
+      {sel&&<button onClick={()=>{setForm({subjectId:"",roomIds:[],totalPeriods:0});setModalDeptFilter(teacher?.departmentId||"");setModal(true)}} style={BS()}><Icon name="plus" size={16}/>เพิ่มวิชา</button>}
       <div style={{marginLeft:"auto",display:"flex",gap:8}}>
         <button onClick={exportAssigns} style={BO("#059669")}><Icon name="download" size={16}/>Export ทั้งหมด</button>
         <button onClick={()=>fileRefA.current?.click()} style={BO("#2563EB")}><Icon name="upload" size={16}/>Import</button>
@@ -1843,7 +1868,73 @@ function Assigns({S,U,st,gc}){
     {teacher&&<PersonalLockPanel teacher={teacher} U={U} st={st} sel={sel}/>}
     <Modal open={modal} onClose={()=>setModal(false)} title="มอบหมายวิชา">
       <div style={{display:"flex",flexDirection:"column",gap:16}}>
-        <div><label style={LS}>วิชา (รหัส — ชื่อ) — เฉพาะกลุ่มสาระ{teacher?(" "+S.depts.find(d=>d.id===teacher.departmentId)?.name):""}</label><SearchSelect value={form.subjectId} onChange={v=>setForm(p=>({...p,subjectId:v,roomIds:[]}))} options={[{value:"",label:"--"},...teacherDeptSubs.map(s=>({value:s.id,label:`${s.code} — ${s.name} (${S.levels.find(l=>l.id===s.levelId)?.name||""})`}))]} placeholder="-- เลือกวิชา --"/></div>
+
+        {/* วิชา — default = สาระหลักของครู, ปุ่มด้านข้างเปิดสาระอื่น */}
+        <div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+            <label style={{...LS,marginBottom:0}}>
+              วิชา
+              <span style={{fontSize:11,color:"#6B7280",fontWeight:400,marginLeft:6}}>
+                {modalDeptFilter===teacher?.departmentId
+                  ? `— ${S.depts.find(d=>d.id===teacher?.departmentId)?.name||"สาระหลัก"}`
+                  : modalDeptFilter
+                    ? `— ${S.depts.find(d=>d.id===modalDeptFilter)?.name}`
+                    : "— ทุกกลุ่มสาระ"}
+              </span>
+            </label>
+            {/* ปุ่ม toggle: สาระหลัก ↔ สาระอื่น */}
+            {modalDeptFilter===teacher?.departmentId
+              ? <button
+                  onClick={()=>{setModalDeptFilter("");setForm(p=>({...p,subjectId:"",roomIds:[]}));}}
+                  style={{fontSize:11,padding:"4px 12px",borderRadius:20,border:"1.5px solid #7C3AED",background:"#F5F3FF",color:"#5B21B6",cursor:"pointer",fontFamily:"inherit",fontWeight:600,whiteSpace:"nowrap"}}>
+                  📚 เลือกสาระอื่น
+                </button>
+              : <button
+                  onClick={()=>{setModalDeptFilter(teacher?.departmentId||"");setForm(p=>({...p,subjectId:"",roomIds:[]}));}}
+                  style={{fontSize:11,padding:"4px 12px",borderRadius:20,border:"1.5px solid #DC2626",background:"#FEF2F2",color:"#991B1B",cursor:"pointer",fontFamily:"inherit",fontWeight:600,whiteSpace:"nowrap"}}>
+                  ⭐ กลับสาระหลัก
+                </button>
+            }
+          </div>
+
+          {/* ถ้าเลือก "สาระอื่น" → แสดง pill กลุ่มสาระที่เหลือ */}
+          {modalDeptFilter!==teacher?.departmentId&&(
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+              <button
+                onClick={()=>setModalDeptFilter("")}
+                style={{fontSize:10,padding:"3px 10px",borderRadius:20,border:`1.5px solid ${modalDeptFilter===""?"#7C3AED":"#E5E7EB"}`,background:modalDeptFilter===""?"#EDE9FE":"#fff",color:modalDeptFilter===""?"#5B21B6":"#6B7280",cursor:"pointer",fontWeight:modalDeptFilter===""?700:400}}>
+                ทั้งหมด
+              </button>
+              {S.depts.filter(d=>d.id!==teacher?.departmentId).map(d=>(
+                <button key={d.id}
+                  onClick={()=>{setModalDeptFilter(d.id);setForm(p=>({...p,subjectId:"",roomIds:[]}));}}
+                  style={{fontSize:10,padding:"3px 10px",borderRadius:20,border:`1.5px solid ${modalDeptFilter===d.id?"#2563EB":"#E5E7EB"}`,background:modalDeptFilter===d.id?"#EFF6FF":"#fff",color:modalDeptFilter===d.id?"#1E40AF":"#6B7280",cursor:"pointer",fontWeight:modalDeptFilter===d.id?700:400}}>
+                  {d.name}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <SearchSelect
+            value={form.subjectId}
+            onChange={v=>setForm(p=>({...p,subjectId:v,roomIds:[]}))}
+            options={[{value:"",label:"-- เลือกวิชา --"},...teacherDeptSubs
+              .filter(s=>{
+                if(modalDeptFilter===teacher?.departmentId) return s.departmentId===teacher?.departmentId;
+                if(modalDeptFilter==="") return s.departmentId!==teacher?.departmentId;
+                return s.departmentId===modalDeptFilter;
+              })
+              .map(s=>{
+                const dname=S.depts.find(d=>d.id===s.departmentId)?.name||"";
+                const lname=S.levels.find(l=>l.id===s.levelId)?.name||"";
+                const isSame=s.departmentId===teacher?.departmentId;
+                return{value:s.id,label:`${!isSame?"["+dname+"] ":""}${s.code} — ${s.name} (${lname})`};
+              })
+            ]}
+            placeholder="-- เลือกวิชา --"
+          />
+        </div>
+
         <div><label style={LS}>ห้อง (เฉพาะระดับของวิชา)</label><div style={{display:"flex",gap:8,flexWrap:"wrap",maxHeight:200,overflowY:"auto"}}>{filteredRooms.map(rm=><button key={rm.id} onClick={()=>setForm(p=>({...p,roomIds:p.roomIds.includes(rm.id)?p.roomIds.filter(r=>r!==rm.id):[...p.roomIds,rm.id]}))} style={{padding:"6px 14px",borderRadius:8,border:`2px solid ${form.roomIds.includes(rm.id)?"#DC2626":"#D1D5DB"}`,background:form.roomIds.includes(rm.id)?"#FEE2E2":"#fff",fontSize:13,fontWeight:600,cursor:"pointer"}}>{form.roomIds.includes(rm.id)?"✓ ":""}{rm.name}</button>)}</div></div>
         <div><label style={LS}>คาบรวม (0=อัตโนมัติ)</label><input type="number" min="0" style={IS} value={form.totalPeriods} onChange={e=>setForm(p=>({...p,totalPeriods:parseInt(e.target.value)||0}))}/></div>
         {remaining<=0&&<div style={{padding:12,background:"#FEE2E2",borderRadius:10,color:"#991B1B",fontSize:13,fontWeight:600}}>⚠️ คาบที่ได้รับหมดแล้ว!</div>}
@@ -2168,8 +2259,10 @@ function Scheduler({S,U,st,gc}){
     allowSR:     false,         // วิชาห้องพิเศษ
     spreadDay:   true,          // กระจายไม่ให้วิชาเดียวอยู่วันเดียวกัน 2 คาบ (default เปิด)
     noFirstLast: true,          // ไม่วางคาบ 1 + คาบ 7 วันเดียวกัน (วิชาเดิม)
-    maxConsecTeacher: 0,        // 0 = ไม่จำกัด, 2/3/4 = ห้ามครูสอนติดกันเกิน N คาบ
-    maxPerDayTeacher: false,    // true = ครูสอนไม่เกิน 1 คาบ/วัน (กระจายทั้งสัปดาห์)
+    maxConsecTeacher: 0,        // 0 = ไม่จำกัด, 1/2/3/4 = ห้ามครูสอนติดกันเกิน N คาบ
+    maxPerDayTeacher: false,    // true = ครูสอนไม่เกิน 1 คาบ/วัน
+    noConsecTeacher:  false,    // true = ห้ามครูสอนติดกัน 2 คาบขึ้นไปเลย (= maxConsec 1)
+    penalizeLunchGap: false,    // true = soft penalty: หลีกเลี่ยงครูว่างช่วงคาบ 4+5 > 2 วัน
     runs:        10,            // จำนวนรอบ (10 default)
   });
   const [autoProgress, setAutoProgress] = useState(null); // {run, total}
@@ -2536,6 +2629,18 @@ function Scheduler({S,U,st,gc}){
               if (violatesFirstLast(subId, rid, day, p.id)) continue;
               if (teacherConsecCount(tid, day, p.id)) continue;
               if (teacherAlreadyTaughtToday(tid, day)) continue;
+              // noConsecTeacher: ห้ามติดกันเลย — ตรวจคาบก่อนหน้าและถัดไป
+              if (opts.noConsecTeacher) {
+                const prevBusy = Object.entries(newSchedule).some(([k,en])=>{
+                  const pts=k.split("_"); if(pts[pts.length-2]!==day||parseInt(pts[pts.length-1])!==p.id-1)return false;
+                  return (en||[]).some(e=>{const c=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);return e.teacherId===tid||c.includes(tid);});
+                });
+                const nextBusy = Object.entries(newSchedule).some(([k,en])=>{
+                  const pts=k.split("_"); if(pts[pts.length-2]!==day||parseInt(pts[pts.length-1])!==p.id+1)return false;
+                  return (en||[]).some(e=>{const c=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);return e.teacherId===tid||c.includes(tid);});
+                });
+                if (prevBusy || nextBusy) continue;
+              }
 
               // consecutive ≥ 2
               if (ca >= 2) {
@@ -2578,10 +2683,30 @@ function Scheduler({S,U,st,gc}){
           }
         });
 
-        const result = { placed, skipped, details: skippedList, schedule: newSchedule };
+        // penalizeLunchGap: นับครูที่ว่างคาบ 4+5 พร้อมกันมากกว่า 2 วัน (soft penalty)
+        let lunchPenalty = 0;
+        if (opts.penalizeLunchGap) {
+          S.teachers.forEach(t => {
+            let freeCount = 0;
+            DAYS.forEach(day => {
+              const free4 = !Object.entries(newSchedule).some(([k,en]) => {
+                const pts=k.split("_"); if(pts[pts.length-2]!==day||parseInt(pts[pts.length-1])!==4)return false;
+                return (en||[]).some(e=>{const c=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);return e.teacherId===t.id||c.includes(t.id);});
+              });
+              const free5 = !Object.entries(newSchedule).some(([k,en]) => {
+                const pts=k.split("_"); if(pts[pts.length-2]!==day||parseInt(pts[pts.length-1])!==5)return false;
+                return (en||[]).some(e=>{const c=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);return e.teacherId===t.id||c.includes(t.id);});
+              });
+              if (free4 && free5) freeCount++;
+            });
+            if (freeCount > 2) lunchPenalty += (freeCount - 2);
+          });
+        }
 
-        // เลือกผลที่ดีที่สุด (placed มากสุด, skipped น้อยสุด)
-        if (!bestResult || placed > bestResult.placed || (placed === bestResult.placed && skipped < bestResult.skipped)) {
+        const resultScore = placed * 100 - skipped * 10 - lunchPenalty;
+        const result = { placed, skipped, details: skippedList, schedule: newSchedule, score: resultScore };
+
+        if (!bestResult || resultScore > bestResult.score) {
           bestResult = result;
         }
 
@@ -3264,9 +3389,11 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                 <div style={{fontSize:13,fontWeight:700,color:"#374151",marginBottom:10}}>🛡️ เงื่อนไขเพิ่มเติม</div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {[
-                    {key:"spreadDay",   label:"กระจายวิชา — ไม่ซ้ำวันเดิม",          sub:"วิชาเดียวกันในห้องเดิม จะไม่ถูกวาง 2 คาบในวันเดียว"},
-                    {key:"noFirstLast", label:"ไม่วางคาบ 1 + คาบ 7 วันเดิม (วิชาเดิม)", sub:"ป้องกันวิชาหนักอยู่หัว-ท้ายวันพร้อมกัน"},
-                    {key:"maxPerDayTeacher", label:"ครูสอน 1 คาบ/วัน (กระจายทั้งสัปดาห์)", sub:"ครูแต่ละคนจะไม่ถูกวางมากกว่า 1 คาบในวันเดียวกัน"},
+                    {key:"spreadDay",        label:"กระจายวิชา — ไม่ซ้ำวันเดิม",          sub:"วิชาเดียวกันในห้องเดิม จะไม่ถูกวาง 2 คาบในวันเดียว"},
+                    {key:"noFirstLast",      label:"ไม่วางคาบ 1 + คาบ 7 วันเดิม (วิชาเดิม)", sub:"ป้องกันวิชาหนักอยู่หัว-ท้ายวันพร้อมกัน"},
+                    {key:"maxPerDayTeacher", label:"ครูสอน 1 คาบ/วัน (กระจายทั้งสัปดาห์)",  sub:"ครูแต่ละคนจะไม่ถูกวางมากกว่า 1 คาบในวันเดียวกัน"},
+                    {key:"noConsecTeacher",  label:"ห้ามครูสอนติดกัน 2 คาบขึ้นไป",          sub:"ทุกคาบของครูต้องมีช่วงพักคั่น — เข้มงวดมาก ควรใช้กับ run มากๆ"},
+                    {key:"penalizeLunchGap", label:"หลีกเลี่ยงครูว่างช่วงพัก (คาบ 4+5) > 2 วัน", sub:"Soft constraint — run ที่ครูว่างพักกลางวันน้อยกว่าจะถูกเลือก"},
                   ].map(o=>(
                     <label key={o.key} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"10px 14px",borderRadius:12,border:`2px solid ${autoOpts[o.key]?"#7C3AED":"#E5E7EB"}`,background:autoOpts[o.key]?"#F5F3FF":"#F9FAFB",cursor:"pointer"}}>
                       <input type="checkbox" checked={!!autoOpts[o.key]} onChange={e=>setAutoOpts(p=>({...p,[o.key]:e.target.checked}))} style={{marginTop:2,accentColor:"#7C3AED",flexShrink:0}}/>
@@ -3284,6 +3411,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                       </div>
                       <select value={autoOpts.maxConsecTeacher} onChange={e=>setAutoOpts(p=>({...p,maxConsecTeacher:parseInt(e.target.value)}))} style={{padding:"6px 28px 6px 10px",border:"1.5px solid #D97706",borderRadius:8,fontSize:13,fontWeight:700,color:"#92400E",background:"#fff",cursor:"pointer",outline:"none",fontFamily:"inherit"}}>
                         <option value={0}>ไม่จำกัด</option>
+                        <option value={1}>สูงสุด 1 คาบ (ไม่ติดกันเลย)</option>
                         <option value={2}>สูงสุด 2 คาบติด</option>
                         <option value={3}>สูงสุด 3 คาบติด</option>
                         <option value={4}>สูงสุด 4 คาบติด</option>
@@ -3318,7 +3446,9 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                   <span>📚 จัดวิชา: {[autoOpts.allowNormal&&"ปกติ",autoOpts.allowConsec&&"คาบติด",autoOpts.allowNP&&"NP",autoOpts.allowSR&&"ห้องพิเศษ"].filter(Boolean).join(", ")||"— ยังไม่ได้เลือก"}</span>
                   <span>🔁 {autoOpts.runs} รอบ — ใช้ผลที่ดีที่สุด</span>
                   {autoOpts.maxConsecTeacher>0&&<span>⏱ ครูสอนติดกันไม่เกิน {autoOpts.maxConsecTeacher} คาบ</span>}
-                  {autoOpts.maxPerDayTeacher&&<span>📅 ครูสอน 1 คาบ/วัน (กระจายสัปดาห์)</span>}
+                  {autoOpts.maxPerDayTeacher&&<span>📅 ครูสอน 1 คาบ/วัน</span>}
+                  {autoOpts.noConsecTeacher&&<span>🚫 ห้ามครูสอนติดกันเลย</span>}
+                  {autoOpts.penalizeLunchGap&&<span>🍱 หลีกเลี่ยงว่างช่วงพักกลางวัน</span>}
                 </div>
               </div>
             </div>
@@ -3505,6 +3635,10 @@ function buildLevelTableHTML(S, ay, sh, filterLevelId) {
 /* ===== REPORTS ===== */
 function Reports({S,U,st,gc,ay,sh}){
   const fileRefSched=useRef(null);
+  const [selTeacherPDF,setSelTeacherPDF]=useState("");
+  const [selRoomPDF,setSelRoomPDF]=useState("");
+  const [selTeacherXL,setSelTeacherXL]=useState("");
+  const [selRoomXL,setSelRoomXL]=useState("");
   const roomSt=S.rooms.map(rm=>{let f=0;DAYS.forEach(d=>PERIODS.forEach(p=>{const k=`${rm.id}_${d}_${p.id}`;if(S.schedule[k]?.length)f++}));const total=DAYS.length*PERIODS.length;return{room:rm,filled:f,total,pct:Math.round(f/total*100)}});
   const teacherSt=S.teachers.map(t=>{
     const tot=t.totalPeriods||0;
@@ -3545,16 +3679,37 @@ function Reports({S,U,st,gc,ay,sh}){
     try{
       const txt=await f.text();
       const data=JSON.parse(txt);
-      if(!data.schedule){st("ไฟล์ไม่ถูกต้อง","error");return;}
-      if(!window.confirm("จะทับข้อมูลตารางสอนปัจจุบัน\nดำเนินการต่อ?"))return;
-      U.setSchedule(data.schedule||{});
-      U.setLocks(data.locks||{});
-      if(data.assigns?.length){
-        const keep=S.assigns.filter(a=>!data.assigns.find(x=>x.id===a.id));
-        U.setAssigns([...keep,...data.assigns]);
+      // ตรวจ format
+      if(typeof data !== "object"||(!data.schedule&&!data.assigns)){
+        st("ไฟล์ไม่ถูกต้อง — ต้องเป็น JSON ที่ backup จากระบบนี้","error");
+        e.target.value="";return;
       }
-      st("Import ตารางสอนสำเร็จ");
-    }catch(err){st("อ่านไฟล์ไม่ได้: "+err.message,"error");}
+      if(!window.confirm(`Restore ตารางสอน?\n\nไฟล์: ${f.name}\nบันทึกเมื่อ: ${data.exportedAt||"ไม่ทราบ"}\n\n⚠️ ข้อมูลตารางสอนปัจจุบันจะถูกทับ`))return;
+
+      // restore ทีละ field — ใช้ set functions โดยตรงเพื่อ trigger Firebase sync
+      if(data.schedule) U.setSchedule(data.schedule);
+      if(data.locks)    U.setLocks(data.locks);
+      if(data.assigns?.length){
+        // merge: เก็บ assigns ปัจจุบันที่ไม่มีใน backup ไว้ + เอา backup มาทับ
+        U.setAssigns(prev=>{
+          const kept=prev.filter(a=>!data.assigns.find(x=>x.id===a.id));
+          return [...kept,...data.assigns];
+        });
+      }
+      // restore ข้อมูลอื่นๆ ถ้ามี (full backup)
+      if(data.teachers?.length)     U.setTeachers(data.teachers);
+      if(data.subjects?.length)     U.setSubjects(data.subjects);
+      if(data.rooms?.length)        U.setRooms(data.rooms);
+      if(data.levels?.length)       U.setLevels(data.levels);
+      if(data.plans?.length)        U.setPlans(data.plans);
+      if(data.depts?.length)        U.setDepts(data.depts);
+      if(data.meetings?.length)     U.setMeetings(data.meetings);
+      if(data.specialRooms?.length) U.setSpecialRooms(data.specialRooms);
+
+      st(`✅ Restore สำเร็จ — ${f.name}`);
+    }catch(err){
+      st("อ่านไฟล์ไม่ได้: "+err.message,"error");
+    }
     e.target.value="";
   };
 
@@ -3718,59 +3873,137 @@ function Reports({S,U,st,gc,ay,sh}){
     st("กำลังพิมพ์ตารางรวมห้องระดับ "+lvName);
   };
 
-  return <div style={{animation:"fadeIn 0.3s"}}>
-    <div style={{display:"flex",gap:10,marginBottom:24,flexWrap:"wrap"}}>
-      <button onClick={exportAllRooms} style={BS("#2563EB")}><Icon name="download" size={16}/>ตารางทุกห้อง (.xlsx)</button>
-      <button onClick={exportAllTeachers} style={BS("#7C3AED")}><Icon name="download" size={16}/>ตารางสอนทุกคน (.xlsx)</button>
-      <button onClick={exportStatus} style={BS("#059669")}><Icon name="download" size={16}/>รายงานสถานะ (.xlsx)</button>
-      <div style={{width:"100%",height:0,borderTop:"1px solid #E5E7EB",margin:"4px 0"}}/>
-      <button onClick={printAllTeachersPDF} style={BS("#DC2626")}><Icon name="file" size={16}/>พิมพ์ตารางสอนทุกคน (PDF)</button>
-      <button onClick={printAllRoomsPDF} style={BS("#DB2777")}><Icon name="file" size={16}/>พิมพ์ตารางเรียนทุกห้อง (PDF)</button>
-      <div style={{width:"100%",height:0,borderTop:"1px solid #E5E7EB",margin:"4px 0"}}/>
-      <button onClick={exportScheduleJSON} style={BS("#0891B2")}><Icon name="download" size={16}/>💾 Backup ตารางสอน (.json)</button>
-      <button onClick={()=>fileRefSched.current?.click()} style={BO("#0891B2")}><Icon name="upload" size={16}/>📥 Restore ตารางสอน (.json)</button>
-      <input ref={fileRefSched} type="file" accept=".json" style={{display:"none"}} onChange={importScheduleJSON}/>
-      <div style={{width:"100%",height:0,borderTop:"1px solid #E5E7EB",margin:"4px 0"}}/>
-      <button onClick={printMasterByDept} style={BS("#374151")}><Icon name="file" size={16}/>📋 ตารางสอนครูรวมกลุ่มสาระ (PDF)</button>
-      <div style={{display:"flex",gap:8,alignItems:"center"}}>
-        <select style={{...IS,maxWidth:200}} value={masterLevel} onChange={e=>setMasterLevel(e.target.value)}>
-          <option value="">-- เลือกระดับชั้น --</option>
-          {S.levels.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}
-        </select>
-        <button onClick={printMasterByLevel} style={BS("#374151")}><Icon name="file" size={16}/>📋 ตารางเรียนรวมระดับชั้น (PDF)</button>
+  return <div style={{animation:"fadeIn 0.3s",display:"flex",flexDirection:"column",gap:20}}>
+
+    {/* ── PRINT CENTER ── */}
+    <div style={{background:"#fff",borderRadius:16,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,0.07)"}}>
+      <h3 style={{fontSize:17,fontWeight:800,marginBottom:20,display:"flex",alignItems:"center",gap:8}}>🖨️ Print / Export Center</h3>
+
+      {/* ─ Section 1: PDF ─ */}
+      <div style={{marginBottom:20}}>
+        <div style={{fontSize:13,fontWeight:700,color:"#DC2626",marginBottom:12,borderBottom:"2px solid #FEE2E2",paddingBottom:6}}>📄 PDF — พิมพ์ตาราง</div>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+
+          {/* ตารางสอนครู */}
+          <div style={{background:"#FFF5F5",borderRadius:12,padding:"12px 16px",border:"1px solid #FECDD3"}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#991B1B",marginBottom:8}}>👨‍🏫 ตารางสอนครู</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <button onClick={printAllTeachersPDF} style={{...BS("#DC2626"),fontSize:12,padding:"7px 16px"}}>พิมพ์ทุกคน</button>
+              <button onClick={printMasterByDept} style={{...BS("#991B1B"),fontSize:12,padding:"7px 16px"}}>รวมกลุ่มสาระ</button>
+            </div>
+            <div style={{marginTop:8,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+              <span style={{fontSize:12,color:"#6B7280"}}>รายคน:</span>
+              <div style={{flex:"1 1 200px",maxWidth:280}}>
+                <SearchSelect value={selTeacherPDF} onChange={v=>setSelTeacherPDF(v)}
+                  options={[{value:"",label:"-- เลือกครู --"},...S.teachers.map(t=>({value:t.id,label:`${t.prefix}${t.firstName} ${t.lastName}`}))]}
+                  placeholder="-- เลือกครู --"/>
+              </div>
+              <button onClick={()=>{const t=S.teachers.find(x=>x.id===selTeacherPDF);if(t)printTeacherPDF(t);else st("เลือกครูก่อน","error");}}
+                style={{...BS("#DC2626"),fontSize:12,padding:"7px 14px"}}>🖨️ พิมพ์</button>
+            </div>
+          </div>
+
+          {/* ตารางเรียนห้อง */}
+          <div style={{background:"#FFF5F5",borderRadius:12,padding:"12px 16px",border:"1px solid #FECDD3"}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#991B1B",marginBottom:8}}>🏫 ตารางเรียนห้อง</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <button onClick={printAllRoomsPDF} style={{...BS("#DB2777"),fontSize:12,padding:"7px 16px"}}>พิมพ์ทุกห้อง</button>
+            </div>
+            <div style={{marginTop:8,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+              <span style={{fontSize:12,color:"#6B7280"}}>รายระดับ:</span>
+              <div style={{flex:"0 1 160px"}}>
+                <select style={{...IS,fontSize:12}} value={masterLevel} onChange={e=>setMasterLevel(e.target.value)}>
+                  <option value="">-- ระดับชั้น --</option>
+                  {S.levels.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}
+                </select>
+              </div>
+              <button onClick={printMasterByLevel} style={{...BS("#7C3AED"),fontSize:12,padding:"7px 14px"}}>🖨️ พิมพ์</button>
+            </div>
+            <div style={{marginTop:8,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+              <span style={{fontSize:12,color:"#6B7280"}}>รายห้อง:</span>
+              <div style={{flex:"1 1 200px",maxWidth:280}}>
+                <SearchSelect value={selRoomPDF} onChange={v=>setSelRoomPDF(v)}
+                  options={[{value:"",label:"-- เลือกห้อง --"},...S.rooms.map(r=>({value:r.id,label:r.name}))]}
+                  placeholder="-- เลือกห้อง --"/>
+              </div>
+              <button onClick={()=>{const r=S.rooms.find(x=>x.id===selRoomPDF);if(r)printRoomPDF(r);else st("เลือกห้องก่อน","error");}}
+                style={{...BS("#DB2777"),fontSize:12,padding:"7px 14px"}}>🖨️ พิมพ์</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      {/* ─ Section 2: Excel ─ */}
+      <div style={{marginBottom:20}}>
+        <div style={{fontSize:13,fontWeight:700,color:"#2563EB",marginBottom:12,borderBottom:"2px solid #BFDBFE",paddingBottom:6}}>📊 Excel — ดาวน์โหลด</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <button onClick={exportAllRooms}    style={{...BS("#2563EB"),fontSize:12,padding:"7px 14px"}}><Icon name="download" size={13}/>ตารางทุกห้อง</button>
+          <button onClick={exportAllTeachers} style={{...BS("#7C3AED"),fontSize:12,padding:"7px 14px"}}><Icon name="download" size={13}/>ตารางสอนทุกคน</button>
+          <button onClick={exportStatus}      style={{...BS("#059669"),fontSize:12,padding:"7px 14px"}}><Icon name="download" size={13}/>รายงานสถานะ</button>
+        </div>
+        <div style={{marginTop:8,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+          <div style={{flex:"1 1 200px",maxWidth:260}}>
+            <SearchSelect value={selTeacherXL} onChange={v=>setSelTeacherXL(v)}
+              options={[{value:"",label:"-- ครูรายคน (Excel) --"},...S.teachers.map(t=>({value:t.id,label:`${t.prefix}${t.firstName} ${t.lastName}`}))]}
+              placeholder="-- ครูรายคน (Excel) --"/>
+          </div>
+          <button onClick={()=>{const t=S.teachers.find(x=>x.id===selTeacherXL);if(t)exportTeacherXL(t);else st("เลือกครูก่อน","error");}}
+            style={{...BS("#7C3AED"),fontSize:12,padding:"7px 14px"}}><Icon name="download" size={13}/>ดาวน์โหลด</button>
+          <div style={{flex:"1 1 180px",maxWidth:220}}>
+            <SearchSelect value={selRoomXL} onChange={v=>setSelRoomXL(v)}
+              options={[{value:"",label:"-- ห้องรายคน (Excel) --"},...S.rooms.map(r=>({value:r.id,label:r.name}))]}
+              placeholder="-- ห้องรายคน (Excel) --"/>
+          </div>
+          <button onClick={()=>{const r=S.rooms.find(x=>x.id===selRoomXL);if(r)exportRoomXL(r);else st("เลือกห้องก่อน","error");}}
+            style={{...BS("#2563EB"),fontSize:12,padding:"7px 14px"}}><Icon name="download" size={13}/>ดาวน์โหลด</button>
+        </div>
+      </div>
+
+      {/* ─ Section 3: Backup/Restore ─ */}
+      <div>
+        <div style={{fontSize:13,fontWeight:700,color:"#0891B2",marginBottom:12,borderBottom:"2px solid #BAE6FD",paddingBottom:6}}>💾 Backup / Restore</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+          <button onClick={exportScheduleJSON} style={{...BS("#0891B2"),fontSize:12,padding:"7px 14px"}}><Icon name="download" size={13}/>💾 Backup (.json)</button>
+          <button onClick={()=>fileRefSched.current?.click()} style={{...BO("#0891B2"),fontSize:12,padding:"7px 14px",display:"flex",alignItems:"center",gap:6}}><Icon name="upload" size={13}/>📥 Restore (.json)</button>
+          <input ref={fileRefSched} type="file" accept=".json" style={{display:"none"}} onChange={importScheduleJSON}/>
+          <span style={{fontSize:11,color:"#9CA3AF"}}>— รองรับทั้ง backup บางส่วน (ตารางสอน) และ full backup (ทุกข้อมูล)</span>
+        </div>
       </div>
     </div>
 
-    <h3 style={{fontSize:18,fontWeight:700,marginBottom:20}}>สถานะห้องเรียน</h3>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:12,marginBottom:24}}>
+    {/* ── สถานะห้องเรียน ── */}
+    <h3 style={{fontSize:18,fontWeight:700}}>สถานะห้องเรียน</h3>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:12}}>
       {roomSt.map(({room,filled,total,pct})=><div key={room.id} style={{padding:14,borderRadius:10,background:pct===100?"#F0FDF4":pct>0?"#FFFBEB":"#FEF2F2",border:`1px solid ${pct===100?"#BBF7D0":pct>0?"#FDE68A":"#FECACA"}`,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
-        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:700,fontSize:14}}>{room.name}</span><span style={{fontSize:12,fontWeight:700,color:pct===100?"#059669":pct>0?"#D97706":"#DC2626"}}>{pct}%</span></div>
-        <div style={{height:6,background:"rgba(0,0,0,0.08)",borderRadius:3,marginTop:8,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:pct===100?"#059669":pct>0?"#D97706":"#DC2626",borderRadius:3}}/></div>
-        <div style={{display:"flex",gap:6,marginTop:8}}>
-          <button onClick={()=>exportRoomXL(room)} style={{background:"none",border:"1.5px solid #2563EB",borderRadius:6,padding:"3px 10px",color:"#2563EB",fontSize:11,fontWeight:600,cursor:"pointer"}}>Excel</button>
-          <button onClick={()=>printRoomPDF(room)} style={{background:"none",border:"1.5px solid #DC2626",borderRadius:6,padding:"3px 10px",color:"#DC2626",fontSize:11,fontWeight:600,cursor:"pointer"}}>PDF</button>
+        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:700,fontSize:13}}>{room.name}</span><span style={{fontSize:12,fontWeight:700,color:pct===100?"#059669":pct>0?"#D97706":"#DC2626"}}>{pct}%</span></div>
+        <div style={{height:5,background:"rgba(0,0,0,0.08)",borderRadius:3,marginTop:6,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:pct===100?"#059669":pct>0?"#D97706":"#DC2626",borderRadius:3}}/></div>
+        <div style={{display:"flex",gap:5,marginTop:8}}>
+          <button onClick={()=>exportRoomXL(room)} style={{background:"none",border:"1.5px solid #2563EB",borderRadius:6,padding:"2px 8px",color:"#2563EB",fontSize:10,fontWeight:600,cursor:"pointer"}}>Excel</button>
+          <button onClick={()=>printRoomPDF(room)} style={{background:"none",border:"1.5px solid #DC2626",borderRadius:6,padding:"2px 8px",color:"#DC2626",fontSize:10,fontWeight:600,cursor:"pointer"}}>PDF</button>
         </div>
       </div>)}
       {!roomSt.length&&<div style={{padding:20,color:"#9CA3AF"}}>ยังไม่มีห้องเรียน</div>}
     </div>
 
-    <h3 style={{fontSize:18,fontWeight:700,marginBottom:16}}>สถานะครู</h3>
+    {/* ── สถานะครู ── */}
+    <h3 style={{fontSize:18,fontWeight:700,marginTop:4}}>สถานะครู</h3>
     <div style={{background:"#fff",borderRadius:14,padding:20,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-        <thead><tr style={{background:"#F9FAFB"}}>{["ชื่อ","คาบได้รับ","จัดแล้ว","เหลือ","สถานะ","Export"].map(h=><th key={h} style={{padding:"10px 14px",textAlign:"left",fontWeight:600,color:"#6B7280"}}>{h}</th>)}</tr></thead>
+        <thead><tr style={{background:"#F9FAFB"}}>{["ชื่อ","ได้รับ","จัดแล้ว","เหลือ","สถานะ","Export"].map(h=><th key={h} style={{padding:"8px 12px",textAlign:"left",fontWeight:600,color:"#6B7280",fontSize:12}}>{h}</th>)}</tr></thead>
         <tbody>
           {teacherSt.filter(t=>t.tot>0).map(ts=><tr key={ts.teacher.id} style={{borderTop:"1px solid #F3F4F6"}}>
-            <td style={{padding:"10px 14px",fontWeight:600}}>{ts.teacher.prefix}{ts.teacher.firstName} {ts.teacher.lastName}</td>
-            <td style={{padding:"10px 14px"}}>{ts.tot}</td>
-            <td style={{padding:"10px 14px"}}>{ts.used}</td>
-            <td style={{padding:"10px 14px",fontWeight:700,color:ts.rem>0?"#D97706":"#059669"}}>{ts.rem}</td>
-            <td style={{padding:"10px 14px"}}>{ts.rem===0?<span style={{background:"#D1FAE5",color:"#065F46",padding:"3px 12px",borderRadius:20,fontSize:11,fontWeight:700}}>ครบ</span>:<span style={{background:"#FEF3C7",color:"#92400E",padding:"3px 12px",borderRadius:20,fontSize:11,fontWeight:700}}>เหลือ {ts.rem}</span>}</td>
-            <td style={{padding:"10px 14px"}}><div style={{display:"flex",gap:4}}>
-              <button onClick={()=>exportTeacherXL(ts.teacher)} style={{background:"none",border:"1.5px solid #2563EB",borderRadius:6,padding:"3px 10px",color:"#2563EB",fontSize:11,fontWeight:600,cursor:"pointer"}}>Excel</button>
-              <button onClick={()=>printTeacherPDF(ts.teacher)} style={{background:"none",border:"1.5px solid #DC2626",borderRadius:6,padding:"3px 10px",color:"#DC2626",fontSize:11,fontWeight:600,cursor:"pointer"}}>PDF</button>
+            <td style={{padding:"8px 12px",fontWeight:600,fontSize:12}}>{ts.teacher.prefix}{ts.teacher.firstName} {ts.teacher.lastName}</td>
+            <td style={{padding:"8px 12px",fontSize:12}}>{ts.tot}</td>
+            <td style={{padding:"8px 12px",fontSize:12}}>{ts.used}</td>
+            <td style={{padding:"8px 12px",fontWeight:700,color:ts.rem>0?"#D97706":"#059669",fontSize:12}}>{ts.rem}</td>
+            <td style={{padding:"8px 12px"}}>{ts.rem===0?<span style={{background:"#D1FAE5",color:"#065F46",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>ครบ</span>:<span style={{background:"#FEF3C7",color:"#92400E",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>เหลือ {ts.rem}</span>}</td>
+            <td style={{padding:"8px 12px"}}><div style={{display:"flex",gap:4}}>
+              <button onClick={()=>exportTeacherXL(ts.teacher)} style={{background:"none",border:"1.5px solid #2563EB",borderRadius:5,padding:"2px 8px",color:"#2563EB",fontSize:10,fontWeight:600,cursor:"pointer"}}>Excel</button>
+              <button onClick={()=>printTeacherPDF(ts.teacher)} style={{background:"none",border:"1.5px solid #DC2626",borderRadius:5,padding:"2px 8px",color:"#DC2626",fontSize:10,fontWeight:600,cursor:"pointer"}}>PDF</button>
             </div></td>
           </tr>)}
-          {!teacherSt.filter(t=>t.tot>0).length&&<tr><td colSpan={6} style={{padding:30,textAlign:"center",color:"#9CA3AF"}}>ยังไม่มีครูที่กำหนดคาบ</td></tr>}
+          {!teacherSt.filter(t=>t.tot>0).length&&<tr><td colSpan={6} style={{padding:24,textAlign:"center",color:"#9CA3AF"}}>ยังไม่มีครูที่กำหนดคาบ</td></tr>}
         </tbody>
       </table>
     </div>
