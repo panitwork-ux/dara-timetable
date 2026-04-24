@@ -1613,7 +1613,8 @@ function Assigns({S,U,st,gc}){
   const [sel,setSel]=useState("");
   const [modal,setModal]=useState(false);
   const [form,setForm]=useState({subjectId:"",roomIds:[],totalPeriods:0});
-  const [modalDeptFilter,setModalDeptFilter]=useState(""); // filter กลุ่มสาระใน modal วิชา
+  const [modalDeptFilter,setModalDeptFilter]=useState("");
+  const [basket,setBasket]=useState([]); // [{subjectId, roomIds, totalPeriods}] รอบันทึก
   const fileRefA=useRef(null);
   const deptTeachers=selDept?S.teachers.filter(t=>t.departmentId===selDept):[];
   const teacher=S.teachers.find(t=>t.id===sel);
@@ -1789,7 +1790,7 @@ function Assigns({S,U,st,gc}){
             : [])
         ]}
         placeholder="-- เลือกครู --" style={{maxWidth:380}}/> }
-      {sel&&<button onClick={()=>{setForm({subjectId:"",roomIds:[],totalPeriods:0});setModalDeptFilter(teacher?.departmentId||"");setModal(true)}} style={BS()}><Icon name="plus" size={16}/>เพิ่มวิชา</button>}
+      {sel&&<button onClick={()=>{setForm({subjectId:"",roomIds:[],totalPeriods:0});setBasket([]);setModalDeptFilter(teacher?.departmentId||"");setModal(true)}} style={BS()}><Icon name="plus" size={16}/>เพิ่มวิชา</button>}
       <div style={{marginLeft:"auto",display:"flex",gap:8}}>
         <button onClick={exportAssigns} style={BO("#059669")}><Icon name="download" size={16}/>Export ทั้งหมด</button>
         <button onClick={()=>fileRefA.current?.click()} style={BO("#2563EB")}><Icon name="upload" size={16}/>Import</button>
@@ -1866,49 +1867,69 @@ function Assigns({S,U,st,gc}){
       </div>
     </div>}
     {teacher&&<PersonalLockPanel teacher={teacher} U={U} st={st} sel={sel}/>}
-    <Modal open={modal} onClose={()=>setModal(false)} title="มอบหมายวิชา">
-      <div style={{display:"flex",flexDirection:"column",gap:16}}>
+    <Modal open={modal} onClose={()=>{setModal(false);setBasket([]);}} title={`มอบหมายวิชา — ${teacher?.prefix||""}${teacher?.firstName||""}`}>
+      <div style={{display:"flex",flexDirection:"column",gap:14}}>
 
-        {/* วิชา — default = สาระหลักของครู, ปุ่มด้านข้างเปิดสาระอื่น */}
-        <div>
+        {/* ── ตะกร้าวิชาที่เพิ่มแล้ว ── */}
+        {basket.length>0&&(
+          <div style={{background:"#F0FDF4",border:"1.5px solid #BBF7D0",borderRadius:12,padding:"10px 14px"}}>
+            <div style={{fontSize:12,fontWeight:700,color:"#065F46",marginBottom:8}}>
+              🛒 วิชาที่รอบันทึก ({basket.length} รายการ)
+            </div>
+            {basket.map((b,bi)=>{
+              const bs=S.subjects.find(s=>s.id===b.subjectId);
+              return(
+                <div key={bi} style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,background:"#fff",borderRadius:8,padding:"5px 10px",border:"1px solid #D1FAE5"}}>
+                  <div style={{flex:1,fontSize:12}}>
+                    <span style={{fontWeight:700,color:"#065F46"}}>{bs?.code}</span>
+                    <span style={{color:"#374151",marginLeft:6}}>{bs?.name}</span>
+                    <span style={{color:"#9CA3AF",marginLeft:6,fontSize:11}}>
+                      {b.roomIds.map(rid=>S.rooms.find(r=>r.id===rid)?.name).join(", ")}
+                      {b.totalPeriods>0?` · ${b.totalPeriods} คาบ`:""}
+                    </span>
+                  </div>
+                  <button onClick={()=>setBasket(p=>p.filter((_,i)=>i!==bi))}
+                    style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",fontSize:14,padding:0,flexShrink:0}}>✕</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── ฟอร์มเพิ่มวิชาใหม่ ── */}
+        <div style={{background:"#F9FAFB",borderRadius:12,padding:"14px 16px",border:"1px solid #E5E7EB"}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#374151",marginBottom:10}}>➕ เพิ่มวิชา</div>
+
+          {/* เลือกสาระ */}
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-            <label style={{...LS,marginBottom:0}}>
+            <label style={{...LS,marginBottom:0,fontSize:12}}>
               วิชา
-              <span style={{fontSize:11,color:"#6B7280",fontWeight:400,marginLeft:6}}>
+              <span style={{fontSize:10,color:"#6B7280",fontWeight:400,marginLeft:5}}>
                 {modalDeptFilter===teacher?.departmentId
-                  ? `— ${S.depts.find(d=>d.id===teacher?.departmentId)?.name||"สาระหลัก"}`
-                  : modalDeptFilter
-                    ? `— ${S.depts.find(d=>d.id===modalDeptFilter)?.name}`
-                    : "— ทุกกลุ่มสาระ"}
+                  ? `(${S.depts.find(d=>d.id===teacher?.departmentId)?.name||"สาระหลัก"})`
+                  : modalDeptFilter ? `(${S.depts.find(d=>d.id===modalDeptFilter)?.name})`
+                  : "(ทุกสาระ)"}
               </span>
             </label>
-            {/* ปุ่ม toggle: สาระหลัก ↔ สาระอื่น */}
             {modalDeptFilter===teacher?.departmentId
-              ? <button
-                  onClick={()=>{setModalDeptFilter("");setForm(p=>({...p,subjectId:"",roomIds:[]}));}}
-                  style={{fontSize:11,padding:"4px 12px",borderRadius:20,border:"1.5px solid #7C3AED",background:"#F5F3FF",color:"#5B21B6",cursor:"pointer",fontFamily:"inherit",fontWeight:600,whiteSpace:"nowrap"}}>
-                  📚 เลือกสาระอื่น
+              ? <button onClick={()=>{setModalDeptFilter("");setForm(p=>({...p,subjectId:"",roomIds:[]}));}}
+                  style={{fontSize:10,padding:"2px 10px",borderRadius:20,border:"1.5px solid #7C3AED",background:"#F5F3FF",color:"#5B21B6",cursor:"pointer",fontWeight:600}}>
+                  📚 สาระอื่น
                 </button>
-              : <button
-                  onClick={()=>{setModalDeptFilter(teacher?.departmentId||"");setForm(p=>({...p,subjectId:"",roomIds:[]}));}}
-                  style={{fontSize:11,padding:"4px 12px",borderRadius:20,border:"1.5px solid #DC2626",background:"#FEF2F2",color:"#991B1B",cursor:"pointer",fontFamily:"inherit",fontWeight:600,whiteSpace:"nowrap"}}>
-                  ⭐ กลับสาระหลัก
+              : <button onClick={()=>{setModalDeptFilter(teacher?.departmentId||"");setForm(p=>({...p,subjectId:"",roomIds:[]}));}}
+                  style={{fontSize:10,padding:"2px 10px",borderRadius:20,border:"1.5px solid #DC2626",background:"#FEF2F2",color:"#991B1B",cursor:"pointer",fontWeight:600}}>
+                  ⭐ สาระหลัก
                 </button>
             }
           </div>
 
-          {/* ถ้าเลือก "สาระอื่น" → แสดง pill กลุ่มสาระที่เหลือ */}
+          {/* pills กลุ่มสาระอื่น */}
           {modalDeptFilter!==teacher?.departmentId&&(
-            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
-              <button
-                onClick={()=>setModalDeptFilter("")}
-                style={{fontSize:10,padding:"3px 10px",borderRadius:20,border:`1.5px solid ${modalDeptFilter===""?"#7C3AED":"#E5E7EB"}`,background:modalDeptFilter===""?"#EDE9FE":"#fff",color:modalDeptFilter===""?"#5B21B6":"#6B7280",cursor:"pointer",fontWeight:modalDeptFilter===""?700:400}}>
-                ทั้งหมด
-              </button>
-              {S.depts.filter(d=>d.id!==teacher?.departmentId).map(d=>(
+            <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:8}}>
+              {[{id:"",name:"ทั้งหมด"},...S.depts.filter(d=>d.id!==teacher?.departmentId)].map(d=>(
                 <button key={d.id}
                   onClick={()=>{setModalDeptFilter(d.id);setForm(p=>({...p,subjectId:"",roomIds:[]}));}}
-                  style={{fontSize:10,padding:"3px 10px",borderRadius:20,border:`1.5px solid ${modalDeptFilter===d.id?"#2563EB":"#E5E7EB"}`,background:modalDeptFilter===d.id?"#EFF6FF":"#fff",color:modalDeptFilter===d.id?"#1E40AF":"#6B7280",cursor:"pointer",fontWeight:modalDeptFilter===d.id?700:400}}>
+                  style={{fontSize:10,padding:"2px 9px",borderRadius:20,border:`1.5px solid ${modalDeptFilter===d.id?"#2563EB":"#E5E7EB"}`,background:modalDeptFilter===d.id?"#EFF6FF":"#fff",color:modalDeptFilter===d.id?"#1E40AF":"#6B7280",cursor:"pointer",fontWeight:modalDeptFilter===d.id?700:400}}>
                   {d.name}
                 </button>
               ))}
@@ -1917,9 +1938,11 @@ function Assigns({S,U,st,gc}){
 
           <SearchSelect
             value={form.subjectId}
-            onChange={v=>setForm(p=>({...p,subjectId:v,roomIds:[]}))}
+            onChange={v=>setForm(p=>({...p,subjectId:v,roomIds:[],totalPeriods:0}))}
             options={[{value:"",label:"-- เลือกวิชา --"},...teacherDeptSubs
               .filter(s=>{
+                // ข้ามวิชาที่อยู่ใน basket แล้ว
+                if(basket.some(b=>b.subjectId===s.id)) return false;
                 if(modalDeptFilter===teacher?.departmentId) return s.departmentId===teacher?.departmentId;
                 if(modalDeptFilter==="") return s.departmentId!==teacher?.departmentId;
                 return s.departmentId===modalDeptFilter;
@@ -1933,12 +1956,68 @@ function Assigns({S,U,st,gc}){
             ]}
             placeholder="-- เลือกวิชา --"
           />
+
+          {/* ห้องเรียน */}
+          {form.subjectId&&(
+            <div style={{marginTop:10}}>
+              <label style={{...LS,fontSize:12}}>ห้อง</label>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",maxHeight:160,overflowY:"auto"}}>
+                {filteredRooms.map(rm=>(
+                  <button key={rm.id}
+                    onClick={()=>setForm(p=>({...p,roomIds:p.roomIds.includes(rm.id)?p.roomIds.filter(r=>r!==rm.id):[...p.roomIds,rm.id]}))}
+                    style={{padding:"5px 12px",borderRadius:8,border:`2px solid ${form.roomIds.includes(rm.id)?"#DC2626":"#D1D5DB"}`,background:form.roomIds.includes(rm.id)?"#FEE2E2":"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                    {form.roomIds.includes(rm.id)?"✓ ":""}{rm.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* คาบรวม (optional) */}
+          {form.subjectId&&form.roomIds.length>0&&(
+            <div style={{marginTop:8,display:"flex",alignItems:"center",gap:8}}>
+              <label style={{...LS,marginBottom:0,fontSize:12,flexShrink:0}}>คาบรวม (0=อัตโนมัติ)</label>
+              <input type="number" min="0" style={{...IS,width:90}} value={form.totalPeriods}
+                onChange={e=>setForm(p=>({...p,totalPeriods:parseInt(e.target.value)||0}))}/>
+            </div>
+          )}
+
+          {/* ปุ่ม + เพิ่มใส่ตะกร้า */}
+          <button
+            disabled={!form.subjectId||!form.roomIds.length}
+            onClick={()=>{
+              if(!form.subjectId||!form.roomIds.length) return;
+              setBasket(p=>[...p,{subjectId:form.subjectId,roomIds:form.roomIds,totalPeriods:form.totalPeriods}]);
+              setForm({subjectId:"",roomIds:[],totalPeriods:0});
+            }}
+            style={{...BS("#059669"),marginTop:10,opacity:(!form.subjectId||!form.roomIds.length)?0.4:1,fontSize:13}}>
+            + เพิ่มใส่รายการ
+          </button>
         </div>
 
-        <div><label style={LS}>ห้อง (เฉพาะระดับของวิชา)</label><div style={{display:"flex",gap:8,flexWrap:"wrap",maxHeight:200,overflowY:"auto"}}>{filteredRooms.map(rm=><button key={rm.id} onClick={()=>setForm(p=>({...p,roomIds:p.roomIds.includes(rm.id)?p.roomIds.filter(r=>r!==rm.id):[...p.roomIds,rm.id]}))} style={{padding:"6px 14px",borderRadius:8,border:`2px solid ${form.roomIds.includes(rm.id)?"#DC2626":"#D1D5DB"}`,background:form.roomIds.includes(rm.id)?"#FEE2E2":"#fff",fontSize:13,fontWeight:600,cursor:"pointer"}}>{form.roomIds.includes(rm.id)?"✓ ":""}{rm.name}</button>)}</div></div>
-        <div><label style={LS}>คาบรวม (0=อัตโนมัติ)</label><input type="number" min="0" style={IS} value={form.totalPeriods} onChange={e=>setForm(p=>({...p,totalPeriods:parseInt(e.target.value)||0}))}/></div>
-        {remaining<=0&&<div style={{padding:12,background:"#FEE2E2",borderRadius:10,color:"#991B1B",fontSize:13,fontWeight:600}}>⚠️ คาบที่ได้รับหมดแล้ว!</div>}
-        <button onClick={()=>{if(!form.subjectId||!form.roomIds.length){st("เลือกวิชาและห้อง","error");return}const sub=S.subjects.find(s=>s.id===form.subjectId);const tp=form.totalPeriods||(sub?.periodsPerWeek||1)*form.roomIds.length;U.setAssigns(p=>[...p,{id:gid(),teacherId:sel,subjectId:form.subjectId,roomIds:form.roomIds,totalPeriods:tp}]);setForm({subjectId:"",roomIds:[],totalPeriods:0});setModal(false);st("มอบหมายสำเร็จ")}} style={BS()}>บันทึก</button>
+        {/* ── ปุ่มบันทึกทั้งหมด ── */}
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={()=>{setModal(false);setBasket([]);}} style={{...BO(),flex:1}}>ยกเลิก</button>
+          <button
+            disabled={basket.length===0}
+            onClick={()=>{
+              if(!basket.length){st("ยังไม่มีวิชาในรายการ","error");return;}
+              const newAssigns=basket.map(b=>{
+                const sub=S.subjects.find(s=>s.id===b.subjectId);
+                const tp=b.totalPeriods||(sub?.periodsPerWeek||1)*b.roomIds.length;
+                return{id:gid(),teacherId:sel,subjectId:b.subjectId,roomIds:b.roomIds,totalPeriods:tp};
+              });
+              U.setAssigns(p=>[...p,...newAssigns]);
+              setBasket([]);
+              setForm({subjectId:"",roomIds:[],totalPeriods:0});
+              setModal(false);
+              st(`มอบหมาย ${newAssigns.length} วิชาสำเร็จ`);
+            }}
+            style={{...BS(),flex:2,opacity:basket.length===0?0.4:1}}>
+            💾 บันทึก {basket.length>0?`(${basket.length} วิชา)`:""}
+          </button>
+        </div>
+
       </div>
     </Modal>
   </div>;
