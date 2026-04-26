@@ -3143,25 +3143,44 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
               validTeacherSubs.get(a.teacherId).push(a.subjectId);
             });
 
-            // หา entries ที่แสดงเป็น ?
-            const orphanSamples=[];
+            let removed=0;
+            const next={};
             Object.entries(S.schedule).forEach(([k,en])=>{
-              (en||[]).forEach(e=>{
-                const subExists=!!e.subjectId&&validSubjectIds.has(e.subjectId);
-                const asgExists=!e.assignmentId||validAssignIds.has(e.assignmentId);
-                const tchOk=!e.teacherId||validTeacherIds.has(e.teacherId);
-                const comboOk=!e.teacherId||!e.subjectId||(validTeacherSubs.get(e.teacherId)||[]).includes(e.subjectId);
-                if(!subExists||!asgExists||!tchOk||!comboOk){
-                  if(orphanSamples.length<3) orphanSamples.push({
-                    key:k,subjectId:e.subjectId,teacherId:e.teacherId,
-                    assignmentId:e.assignmentId,subExists,asgExists,tchOk,comboOk
-                  });
+              const filtered=(en||[]).filter(e=>{
+                // มี assignmentId → ตรวจว่ายังมี assign อยู่ไหม
+                if(e.assignmentId) return validAssignIds.has(e.assignmentId);
+                // subjectId ถูกลบ → กำพร้า
+                if(e.subjectId&&!validSubjectIds.has(e.subjectId)) return false;
+                // teacherId ถูกลบ → กำพร้า
+                if(e.teacherId&&!validTeacherIds.has(e.teacherId)) return false;
+                // ไม่มี assignmentId → ตรวจ teacher+subject combo
+                if(e.teacherId&&e.subjectId){
+                  return (validTeacherSubs.get(e.teacherId)||[]).includes(e.subjectId);
                 }
+                return false;
               });
+              removed+=(en||[]).length-filtered.length;
+              if(filtered.length) next[k]=filtered;
             });
-            alert("DEBUG orphan:\n"+JSON.stringify(orphanSamples,null,2));
+
+            if(removed===0){st("ไม่มีคาบกำพร้า ✓");return;}
+            if(!window.confirm(`พบ ${removed} คาบกำพร้า\nลบออกทั้งหมดไหม?`))return;
+
+            if(isSavingRef) isSavingRef.current=true;
+            if(fsReadyRef)  fsReadyRef.current=false;
+            U.setSchedule(next);
+            try{
+              if(fsSave) await fsSave(next);
+              st(`ลบ ${removed} คาบกำพร้าแล้ว ✅`,"warning");
+            }catch(e){
+              st("ลบ local แล้ว แต่ save cloud ล้มเหลว","error");
+            }
+            setTimeout(()=>{
+              if(fsReadyRef)  fsReadyRef.current=true;
+              if(isSavingRef) isSavingRef.current=false;
+            },2000);
           }} style={{...BO("#DC2626"),fontSize:12,padding:"7px 12px",whiteSpace:"nowrap",flexShrink:0}}>
-            🔍 Debug กำพร้า
+            🧹 ล้างคาบกำพร้า
           </button>
           <button onClick={runAutoSchedule} disabled={autoRunning}
             style={{...BS("#059669"),opacity:autoRunning?0.6:1,position:"relative",minWidth:160}}>
