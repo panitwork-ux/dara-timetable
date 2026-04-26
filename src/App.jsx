@@ -3134,14 +3134,45 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
             let removed=0;
             const next={};
             Object.entries(S.schedule).forEach(([k,en])=>{
-              const filtered=(en||[]).filter(e=>e.assignmentId&&validIds.has(e.assignmentId)||!e.assignmentId);
+              const filtered=(en||[]).filter(e=>{
+                if(!e.assignmentId) return true;
+                return validIds.has(e.assignmentId);
+              });
               removed+=(en||[]).length-filtered.length;
               if(filtered.length) next[k]=filtered;
             });
-            if(removed===0){st("ไม่มีคาบกำพร้า ✓");return;}
-            if(!window.confirm(`พบ ${removed} คาบที่ไม่มี assignment แล้ว\nลบออกทั้งหมดไหม?`))return;
+            if(removed===0){
+              // entries อาจไม่มี assignmentId — ลบโดย teacherId แทน
+              let total=0;
+              const teacherIds=new Set(S.assigns.map(a=>a.teacherId));
+              Object.values(S.schedule).forEach(en=>{
+                (en||[]).forEach(e=>{
+                  // นับ entries ของครูที่ไม่มี assign เหลืออยู่เลย
+                  if(e.teacherId&&!teacherIds.has(e.teacherId)) total++;
+                  else if(e.assignmentId&&!validIds.has(e.assignmentId)) total++;
+                });
+              });
+              if(total>0){
+                if(!window.confirm(`พบ ${total} คาบที่ไม่มี assignment แล้ว (format เก่า)\nลบออกไหม?`))return;
+                const next2={};
+                Object.entries(S.schedule).forEach(([k,en])=>{
+                  const f=(en||[]).filter(e=>{
+                    if(e.assignmentId) return validIds.has(e.assignmentId);
+                    if(e.teacherId) return teacherIds.has(e.teacherId);
+                    return true;
+                  });
+                  if(f.length) next2[k]=f;
+                });
+                U.setSchedule(next2);
+                st(`ลบ ${total} คาบกำพร้าแล้ว`,"warning");
+              } else {
+                st("ไม่มีคาบกำพร้า ✓");
+              }
+              return;
+            }
+            if(!window.confirm(`พบ ${removed} คาบกำพร้า\nลบออกไหม?`))return;
             U.setSchedule(next);
-            st(`ลบคาบกำพร้า ${removed} คาบแล้ว`,"warning");
+            st(`ลบ ${removed} คาบกำพร้าแล้ว`,"warning");
           }} style={{...BO("#DC2626"),fontSize:12,padding:"7px 12px",whiteSpace:"nowrap"}}>
             🧹 ล้างคาบกำพร้า
           </button>
