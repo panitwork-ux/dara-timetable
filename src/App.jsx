@@ -3127,16 +3127,35 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
           </select>
         )}
         {/* Auto Schedule button */}
-        <button onClick={runAutoSchedule} disabled={autoRunning}
-          style={{...BS("#059669"),opacity:autoRunning?0.6:1,marginLeft:"auto",position:"relative",minWidth:160}}>
-          {autoRunning
-            ? <span style={{display:"flex",alignItems:"center",gap:8}}>
-                <span style={{display:"inline-block",width:14,height:14,border:"2px solid rgba(255,255,255,0.4)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
-                รอบ {autoProgress?.run||0}/{autoProgress?.total||10}...
-              </span>
-            : "⚡ Auto จัดตาราง"
-          }
-        </button>
+        <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
+          {/* ล้างคาบกำพร้า — entries ที่ไม่มี assignment แล้ว */}
+          <button onClick={()=>{
+            const validIds=new Set(S.assigns.map(a=>a.id));
+            let removed=0;
+            const next={};
+            Object.entries(S.schedule).forEach(([k,en])=>{
+              const filtered=(en||[]).filter(e=>e.assignmentId&&validIds.has(e.assignmentId)||!e.assignmentId);
+              removed+=(en||[]).length-filtered.length;
+              if(filtered.length) next[k]=filtered;
+            });
+            if(removed===0){st("ไม่มีคาบกำพร้า ✓");return;}
+            if(!window.confirm(`พบ ${removed} คาบที่ไม่มี assignment แล้ว\nลบออกทั้งหมดไหม?`))return;
+            U.setSchedule(next);
+            st(`ลบคาบกำพร้า ${removed} คาบแล้ว`,"warning");
+          }} style={{...BO("#DC2626"),fontSize:12,padding:"7px 12px",whiteSpace:"nowrap"}}>
+            🧹 ล้างคาบกำพร้า
+          </button>
+          <button onClick={runAutoSchedule} disabled={autoRunning}
+            style={{...BS("#059669"),opacity:autoRunning?0.6:1,position:"relative",minWidth:160}}>
+            {autoRunning
+              ? <span style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{display:"inline-block",width:14,height:14,border:"2px solid rgba(255,255,255,0.4)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+                  รอบ {autoProgress?.run||0}/{autoProgress?.total||10}...
+                </span>
+              : "⚡ Auto จัดตาราง"
+            }
+          </button>
+        </div>
       </div>
 
       {/* Auto result panel */}
