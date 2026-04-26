@@ -3134,7 +3134,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
         {/* Auto Schedule button */}
         <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
           {/* ล้างคาบกำพร้า — entries ที่ไม่มี assignment แล้ว */}
-          <button onClick={()=>{
+          <button onClick={async()=>{
             const validAssignIds=new Set(S.assigns.map(a=>a.id));
             const validSubjectIds=new Set(S.subjects.map(s=>s.id));
             const validTeacherIds=new Set(S.teachers.map(t=>t.id));
@@ -3144,29 +3144,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
               validTeacherSubs.get(a.teacherId).push(a.subjectId);
             });
 
-            // DEBUG: นับและแสดงว่า entry แต่ละแบบมีกี่อัน
-            let cntNoSub=0,cntNoTeacher=0,cntBadAssign=0,cntNoAssignBadCombo=0,cntOk=0;
-            Object.values(S.schedule).forEach(en=>(en||[]).forEach(e=>{
-              if(e.subjectId&&!validSubjectIds.has(e.subjectId)){cntNoSub++;return;}
-              if(e.teacherId&&!validTeacherIds.has(e.teacherId)){cntNoTeacher++;return;}
-              if(e.assignmentId){
-                if(!validAssignIds.has(e.assignmentId)) cntBadAssign++;
-                else cntOk++;
-                return;
-              }
-              if(e.teacherId&&e.subjectId){
-                const subs=validTeacherSubs.get(e.teacherId)||[];
-                if(!subs.includes(e.subjectId)) cntNoAssignBadCombo++;
-                else cntOk++;
-              } else cntNoAssignBadCombo++;
-            }));
-
-            const removed=cntNoSub+cntNoTeacher+cntBadAssign+cntNoAssignBadCombo;
-            alert(`DEBUG:\n✅ ปกติ: ${cntOk}\n❌ subjectId หาย: ${cntNoSub}\n❌ teacherId หาย: ${cntNoTeacher}\n❌ assignmentId ไม่มีแล้ว: ${cntBadAssign}\n❌ ไม่มี assign ตรง: ${cntNoAssignBadCombo}\n\nจะลบ: ${removed} entries`);
-
-            if(removed===0){st("ไม่มีคาบกำพร้า ✓");return;}
-            if(!window.confirm(`ยืนยันลบ ${removed} คาบกำพร้า?`))return;
-
+            let removed=0;
             const next={};
             Object.entries(S.schedule).forEach(([k,en])=>{
               const filtered=(en||[]).filter(e=>{
@@ -3174,17 +3152,43 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                 if(e.teacherId&&!validTeacherIds.has(e.teacherId)) return false;
                 if(e.assignmentId) return validAssignIds.has(e.assignmentId);
                 if(e.teacherId&&e.subjectId){
-                  const subs=validTeacherSubs.get(e.teacherId)||[];
-                  return subs.includes(e.subjectId);
+                  return (validTeacherSubs.get(e.teacherId)||[]).includes(e.subjectId);
                 }
                 return false;
               });
+              removed+=(en||[]).length-filtered.length;
               if(filtered.length) next[k]=filtered;
             });
+
+            if(removed===0){st("ไม่มีคาบกำพร้า ✓");return;}
+            if(!window.confirm(`พบ ${removed} คาบกำพร้า\nลบออกทั้งหมดไหม?`))return;
+
+            // ล็อก onSnapshot ไว้ก่อน แล้ว save ตรงไป Firestore
             isSavingRef.current=true;
+            fsReadyRef.current=false; // ปิด realtime listener ชั่วคราว
+
+            // อัพเดท local state ก่อน
             U.setSchedule(next);
-            setTimeout(()=>{isSavingRef.current=false;},3000);
-            st(`ลบ ${removed} คาบกำพร้าแล้ว`,"warning");
+
+            // Save ตรงไป Firestore โดยไม่รอ debounce
+            const {db}=getFB();
+            if(db){
+              try{
+                const {setDoc:sd,doc:dc}=await import("https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js");
+                await sd(dc(db,FS_COLLECTION,divId),{schedule:next},{merge:true});
+                st(`ลบ ${removed} คาบกำพร้าแล้ว ✓`,"warning");
+              }catch(e){
+                // fallback: ใช้ syncToFirestore เดิม
+                syncToFirestore(true);
+                st(`ลบ ${removed} คาบกำพร้าแล้ว`,"warning");
+              }
+            }
+
+            // เปิด realtime กลับหลัง save เสร็จ
+            setTimeout(()=>{
+              fsReadyRef.current=true;
+              isSavingRef.current=false;
+            },2000);
           }} style={{...BO("#DC2626"),fontSize:12,padding:"7px 12px",whiteSpace:"nowrap"}}>
             🧹 ล้างคาบกำพร้า
           </button>
