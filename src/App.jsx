@@ -1845,7 +1845,21 @@ function Assigns({S,U,st,gc}){
           </div>
             <div style={{display:"flex",gap:6}}>
               <button onClick={()=>{const n=prompt("แก้ไขจำนวนคาบ:",a.totalPeriods);if(n!==null){U.setAssigns(p=>p.map(x=>x.id===a.id?{...x,totalPeriods:parseInt(n)||1}:x));st("แก้ไขสำเร็จ")}}} style={{background:"none",border:"none",cursor:"pointer",color:"#2563EB"}}><Icon name="edit" size={14}/></button>
-              <button onClick={()=>{U.setAssigns(p=>p.filter(x=>x.id!==a.id));st("ลบแล้ว","warning")}} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444"}}><Icon name="trash" size={14}/></button>
+              <button onClick={()=>{
+                if(!window.confirm("ลบวิชานี้?\n\n⚠️ คาบที่ลงตารางไว้จะถูกลบออกด้วย"))return;
+                // ลบ assignment
+                U.setAssigns(p=>p.filter(x=>x.id!==a.id));
+                // ลบ schedule entries ที่ผูกกับ assignment นี้ด้วย
+                U.setSchedule(prev=>{
+                  const next={};
+                  Object.entries(prev).forEach(([k,en])=>{
+                    const filtered=(en||[]).filter(e=>e.assignmentId!==a.id);
+                    if(filtered.length) next[k]=filtered;
+                  });
+                  return next;
+                });
+                st("ลบแล้ว (รวมคาบในตาราง)","warning");
+              }} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444"}}><Icon name="trash" size={14}/></button>
             </div>
           </div>;})()}
           <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>{a.roomIds.map(rid=><span key={rid} style={{background:"#DBEAFE",color:"#1E40AF",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>{S.rooms.find(r=>r.id===rid)?.name}</span>)}</div>
