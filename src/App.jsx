@@ -765,18 +765,22 @@ export default function App() {
   // ===== FIRESTORE REALTIME SYNC =====
   const saveTimer=useRef(null);
   const fsReadyRef=useRef(false); // กัน loop: onSnapshot trigger → setState → save → onSnapshot
+  const isSavingRef=useRef(false); // กัน onSnapshot overwrite ขณะ save
 
   // debounced save ไป Firestore (500ms หลังจากมีการเปลี่ยนแปลง)
-  const syncToFirestore=useCallback(()=>{
+  const syncToFirestore=useCallback((immediate=false)=>{
     const {db}=getFB(); if(!db) return;
     clearTimeout(saveTimer.current);
+    const delay=immediate?0:500;
     saveTimer.current=setTimeout(async()=>{
+      isSavingRef.current=true;
       setSyncing(true);
       try{
         await fsSaveTimetable(divId,{...stateRef.current,schoolHeader:shRef.current?.schoolHeader,academicYear:shRef.current?.academicYear});
       }catch(e){console.warn("Firestore save error:",e);}
       setSyncing(false);
-    },500);
+      setTimeout(()=>{isSavingRef.current=false;},300); // รอ onSnapshot ผ่านไปก่อน
+    },delay);
   },[divId]);
 
   // Subscribe realtime onSnapshot เมื่อ login และเมื่อ switch division
@@ -809,7 +813,8 @@ export default function App() {
         setSyncing(false);
         setGasReady(true);
       } else {
-        // Realtime update จากเครื่องอื่น — อัพเดท state ทันที
+        // Realtime update จากเครื่องอื่น — skip ถ้ากำลัง save อยู่ (กัน overwrite)
+        if(isSavingRef.current) return;
         if(d.levels)       setLevels(d.levels);
         if(d.plans)        setPlans(d.plans);
         if(d.depts)        setDepts(d.depts);
@@ -984,7 +989,7 @@ export default function App() {
             {page==="specialrooms"&&<SpecialRooms S={S} U={U} st={st}/>}
             {page==="assignments"&&<Assigns S={S} U={U} st={st} gc={gc}/>}
             {page==="meetings"&&<Meetings S={S} U={U} st={st} gc={gc}/>}
-            {page==="scheduler"&&<Scheduler S={S} U={U} st={st} gc={gc}/>}
+            {page==="scheduler"&&<Scheduler S={S} U={U} st={st} gc={gc} isSavingRef={isSavingRef} fsReadyRef={fsReadyRef}/>}
             {page==="reports"&&<Reports S={S} st={st} gc={gc} ay={academicYear} sh={schoolHeader}/>}
             {page==="settings"&&<Settings S={S} U={U} st={st} ay={academicYear} setAY={setAcademicYear} sh={schoolHeader} setSH={setSchoolHeader} div={div}/>}
           </>
@@ -2320,7 +2325,7 @@ function SchedulerEntryCard({entry,cellKey,lk,cellCount,selT,mode,S,U,gc,setDrag
 }
 
 /* ===== SCHEDULER ===== */
-function Scheduler({S,U,st,gc}){
+function Scheduler({S,U,st,gc,isSavingRef,fsReadyRef}){
   const [mode,setMode]=useState("teacher");
   const [selDept,setSelDept]=useState("");
   const [selT,setSelT]=useState("");
@@ -3100,7 +3105,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
     <div style={{animation:"fadeIn 0.3s"}}>
 
       {/* Mode + selector bar */}
-      <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
+      <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center",flexWrap:"nowrap",overflowX:"auto"}}>
         <div style={{display:"flex",borderRadius:10,overflow:"hidden",border:"1.5px solid "+CRED,boxShadow:"0 2px 8px rgba(185,28,28,0.15)"}}>
           <button onClick={()=>{setMode("teacher");setSelRoom("");}} style={{padding:"8px 20px",background:mode==="teacher"?CRED:"#fff",color:mode==="teacher"?"#fff":CRED,border:"none",fontWeight:700,fontSize:13,cursor:"pointer",transition:"background 0.15s"}}>จัดรายครู</button>
           <button onClick={()=>{setMode("room");setSelT("");setSelDept("");}} style={{padding:"8px 20px",background:mode==="room"?CRED:"#fff",color:mode==="room"?"#fff":CRED,border:"none",fontWeight:700,fontSize:13,cursor:"pointer",transition:"background 0.15s"}}>จัดรายห้อง</button>
@@ -3126,17 +3131,64 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
             })}
           </select>
         )}
-        {/* Auto Schedule button */}
-        <button onClick={runAutoSchedule} disabled={autoRunning}
-          style={{...BS("#059669"),opacity:autoRunning?0.6:1,marginLeft:"auto",position:"relative",minWidth:160}}>
-          {autoRunning
-            ? <span style={{display:"flex",alignItems:"center",gap:8}}>
-                <span style={{display:"inline-block",width:14,height:14,border:"2px solid rgba(255,255,255,0.4)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
-                รอบ {autoProgress?.run||0}/{autoProgress?.total||10}...
-              </span>
-            : "⚡ Auto จัดตาราง"
-          }
-        </button>
+        {/* Auto Schedule + ล้างคาบกำพร้า */}
+        <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center",flexShrink:0}}>
+          <button onClick={async()=>{
+            const validAssignIds=new Set(S.assigns.map(a=>a.id));
+            const validSubjectIds=new Set(S.subjects.map(s=>s.id));
+            const validTeacherIds=new Set(S.teachers.map(t=>t.id));
+            const validTeacherSubs=new Map();
+            S.assigns.forEach(a=>{
+              if(!validTeacherSubs.has(a.teacherId)) validTeacherSubs.set(a.teacherId,[]);
+              validTeacherSubs.get(a.teacherId).push(a.subjectId);
+            });
+
+            let removed=0;
+            const next={};
+            Object.entries(S.schedule).forEach(([k,en])=>{
+              const filtered=(en||[]).filter(e=>{
+                if(e.subjectId&&!validSubjectIds.has(e.subjectId)) return false;
+                if(e.teacherId&&!validTeacherIds.has(e.teacherId)) return false;
+                if(e.assignmentId) return validAssignIds.has(e.assignmentId);
+                if(e.teacherId&&e.subjectId){
+                  return (validTeacherSubs.get(e.teacherId)||[]).includes(e.subjectId);
+                }
+                return false;
+              });
+              removed+=(en||[]).length-filtered.length;
+              if(filtered.length) next[k]=filtered;
+            });
+
+            if(removed===0){st("ไม่มีคาบกำพร้า ✓");return;}
+            if(!window.confirm(`พบ ${removed} คาบกำพร้า\nลบออกทั้งหมดไหม?`))return;
+
+            // ปิด onSnapshot ชั่วคราวก่อน save
+            if(isSavingRef) isSavingRef.current=true;
+            if(fsReadyRef) fsReadyRef.current=false;
+
+            U.setSchedule(next);
+
+            // เปิด onSnapshot กลับหลัง 3 วินาที (หลัง Firestore write เสร็จ)
+            setTimeout(()=>{
+              if(fsReadyRef) fsReadyRef.current=true;
+              if(isSavingRef) isSavingRef.current=false;
+            },3000);
+
+            st(`ลบ ${removed} คาบกำพร้าแล้ว`,"warning");
+          }} style={{...BO("#DC2626"),fontSize:12,padding:"7px 12px",whiteSpace:"nowrap"}}>
+            🧹 ล้างคาบกำพร้า
+          </button>
+          <button onClick={runAutoSchedule} disabled={autoRunning}
+            style={{...BS("#059669"),opacity:autoRunning?0.6:1,position:"relative",minWidth:160}}>
+            {autoRunning
+              ? <span style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{display:"inline-block",width:14,height:14,border:"2px solid rgba(255,255,255,0.4)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+                  รอบ {autoProgress?.run||0}/{autoProgress?.total||10}...
+                </span>
+              : "⚡ Auto จัดตาราง"
+            }
+          </button>
+        </div>
       </div>
 
       {/* Auto result panel */}
