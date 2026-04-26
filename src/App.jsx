@@ -3174,11 +3174,13 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
               st(`ลบ ${removed} คาบกำพร้าแล้ว ✅`,"warning");
             }catch(e){
               st("ลบ local แล้ว แต่ save cloud ล้มเหลว","error");
+            }finally{
+              // unlock หลัง save เสร็จแน่ๆ + รอ onSnapshot ผ่านไป 1 รอบ
+              setTimeout(()=>{
+                if(fsReadyRef)  fsReadyRef.current=true;
+                if(isSavingRef) isSavingRef.current=false;
+              },1500);
             }
-            setTimeout(()=>{
-              if(fsReadyRef)  fsReadyRef.current=true;
-              if(isSavingRef) isSavingRef.current=false;
-            },2000);
           }} style={{...BO("#DC2626"),fontSize:12,padding:"7px 12px",whiteSpace:"nowrap",flexShrink:0}}>
             🧹 ล้างคาบกำพร้า
           </button>
