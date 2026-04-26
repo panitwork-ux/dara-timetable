@@ -3143,48 +3143,25 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
               validTeacherSubs.get(a.teacherId).push(a.subjectId);
             });
 
-            let removed=0;
-            const next={};
+            // หา entries ที่แสดงเป็น ?
+            const orphanSamples=[];
             Object.entries(S.schedule).forEach(([k,en])=>{
-              const filtered=(en||[]).filter(e=>{
-                if(e.subjectId&&!validSubjectIds.has(e.subjectId)) return false;
-                if(e.teacherId&&!validTeacherIds.has(e.teacherId)) return false;
-                if(e.assignmentId) return validAssignIds.has(e.assignmentId);
-                if(e.teacherId&&e.subjectId){
-                  return (validTeacherSubs.get(e.teacherId)||[]).includes(e.subjectId);
+              (en||[]).forEach(e=>{
+                const subExists=!!e.subjectId&&validSubjectIds.has(e.subjectId);
+                const asgExists=!e.assignmentId||validAssignIds.has(e.assignmentId);
+                const tchOk=!e.teacherId||validTeacherIds.has(e.teacherId);
+                const comboOk=!e.teacherId||!e.subjectId||(validTeacherSubs.get(e.teacherId)||[]).includes(e.subjectId);
+                if(!subExists||!asgExists||!tchOk||!comboOk){
+                  if(orphanSamples.length<3) orphanSamples.push({
+                    key:k,subjectId:e.subjectId,teacherId:e.teacherId,
+                    assignmentId:e.assignmentId,subExists,asgExists,tchOk,comboOk
+                  });
                 }
-                return false;
               });
-              removed+=(en||[]).length-filtered.length;
-              if(filtered.length) next[k]=filtered;
             });
-
-            if(removed===0){st("ไม่มีคาบกำพร้า ✓");return;}
-            if(!window.confirm(`พบ ${removed} คาบกำพร้า\nลบออกทั้งหมดไหม?`))return;
-
-            // 1. ปิด onSnapshot ก่อน
-            if(isSavingRef) isSavingRef.current=true;
-            if(fsReadyRef)  fsReadyRef.current=false;
-
-            // 2. อัพเดท local state
-            U.setSchedule(next);
-
-            // 3. Save ตรงไป Firestore ไม่ผ่าน debounce
-            try{
-              if(fsSave) await fsSave(next);
-              st(`ลบ ${removed} คาบกำพร้าแล้ว ✅`,"warning");
-            }catch(e){
-              st(`ลบ local แล้ว แต่ save cloud ล้มเหลว: ${e.message}`,"error");
-            }
-
-            // 4. เปิด onSnapshot กลับ หลัง 2 วินาที
-            setTimeout(()=>{
-              if(fsReadyRef)  fsReadyRef.current=true;
-              if(isSavingRef) isSavingRef.current=false;
-            },2000);
-
+            alert("DEBUG orphan:\n"+JSON.stringify(orphanSamples,null,2));
           }} style={{...BO("#DC2626"),fontSize:12,padding:"7px 12px",whiteSpace:"nowrap",flexShrink:0}}>
-            🧹 ล้างคาบกำพร้า
+            🔍 Debug กำพร้า
           </button>
           <button onClick={runAutoSchedule} disabled={autoRunning}
             style={{...BS("#059669"),opacity:autoRunning?0.6:1,position:"relative",minWidth:160}}>
