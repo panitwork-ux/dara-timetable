@@ -3138,36 +3138,49 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
             const validAssignIds=new Set(S.assigns.map(a=>a.id));
             const validSubjectIds=new Set(S.subjects.map(s=>s.id));
             const validTeacherIds=new Set(S.teachers.map(t=>t.id));
-            // map: teacherId → [subjectId] ที่ยังมี assign อยู่
             const validTeacherSubs=new Map();
             S.assigns.forEach(a=>{
               if(!validTeacherSubs.has(a.teacherId)) validTeacherSubs.set(a.teacherId,[]);
               validTeacherSubs.get(a.teacherId).push(a.subjectId);
             });
 
-            let removed=0;
+            // DEBUG: นับและแสดงว่า entry แต่ละแบบมีกี่อัน
+            let cntNoSub=0,cntNoTeacher=0,cntBadAssign=0,cntNoAssignBadCombo=0,cntOk=0;
+            Object.values(S.schedule).forEach(en=>(en||[]).forEach(e=>{
+              if(e.subjectId&&!validSubjectIds.has(e.subjectId)){cntNoSub++;return;}
+              if(e.teacherId&&!validTeacherIds.has(e.teacherId)){cntNoTeacher++;return;}
+              if(e.assignmentId){
+                if(!validAssignIds.has(e.assignmentId)) cntBadAssign++;
+                else cntOk++;
+                return;
+              }
+              if(e.teacherId&&e.subjectId){
+                const subs=validTeacherSubs.get(e.teacherId)||[];
+                if(!subs.includes(e.subjectId)) cntNoAssignBadCombo++;
+                else cntOk++;
+              } else cntNoAssignBadCombo++;
+            }));
+
+            const removed=cntNoSub+cntNoTeacher+cntBadAssign+cntNoAssignBadCombo;
+            alert(`DEBUG:\n✅ ปกติ: ${cntOk}\n❌ subjectId หาย: ${cntNoSub}\n❌ teacherId หาย: ${cntNoTeacher}\n❌ assignmentId ไม่มีแล้ว: ${cntBadAssign}\n❌ ไม่มี assign ตรง: ${cntNoAssignBadCombo}\n\nจะลบ: ${removed} entries`);
+
+            if(removed===0){st("ไม่มีคาบกำพร้า ✓");return;}
+            if(!window.confirm(`ยืนยันลบ ${removed} คาบกำพร้า?`))return;
+
             const next={};
             Object.entries(S.schedule).forEach(([k,en])=>{
               const filtered=(en||[]).filter(e=>{
-                // subjectId ถูกลบไปแล้ว → กำพร้า (แสดงเป็น ?)
                 if(e.subjectId&&!validSubjectIds.has(e.subjectId)) return false;
-                // teacherId ถูกลบไปแล้ว → กำพร้า
                 if(e.teacherId&&!validTeacherIds.has(e.teacherId)) return false;
-                // มี assignmentId → ตรวจตรงๆ
                 if(e.assignmentId) return validAssignIds.has(e.assignmentId);
-                // ไม่มี assignmentId → ตรวจ teacher+subject
                 if(e.teacherId&&e.subjectId){
                   const subs=validTeacherSubs.get(e.teacherId)||[];
                   return subs.includes(e.subjectId);
                 }
                 return false;
               });
-              removed+=(en||[]).length-filtered.length;
               if(filtered.length) next[k]=filtered;
             });
-
-            if(removed===0){st("ไม่มีคาบกำพร้า ✓");return;}
-            if(!window.confirm(`พบ ${removed} คาบกำพร้า\nลบออกทั้งหมดไหม?`))return;
             isSavingRef.current=true;
             U.setSchedule(next);
             setTimeout(()=>{isSavingRef.current=false;},3000);
