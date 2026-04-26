@@ -989,7 +989,7 @@ export default function App() {
             {page==="specialrooms"&&<SpecialRooms S={S} U={U} st={st}/>}
             {page==="assignments"&&<Assigns S={S} U={U} st={st} gc={gc}/>}
             {page==="meetings"&&<Meetings S={S} U={U} st={st} gc={gc}/>}
-            {page==="scheduler"&&<Scheduler S={S} U={U} st={st} gc={gc} isSavingRef={isSavingRef} fsReadyRef={fsReadyRef}/>}
+            {page==="scheduler"&&<Scheduler S={S} U={U} st={st} gc={gc} isSavingRef={isSavingRef} fsReadyRef={fsReadyRef} fsSave={(s)=>fsSaveTimetable(divId,{...stateRef.current,schedule:s})}/>}
             {page==="reports"&&<Reports S={S} st={st} gc={gc} ay={academicYear} sh={schoolHeader}/>}
             {page==="settings"&&<Settings S={S} U={U} st={st} ay={academicYear} setAY={setAcademicYear} sh={schoolHeader} setSH={setSchoolHeader} div={div}/>}
           </>
@@ -2325,7 +2325,7 @@ function SchedulerEntryCard({entry,cellKey,lk,cellCount,selT,mode,S,U,gc,setDrag
 }
 
 /* ===== SCHEDULER ===== */
-function Scheduler({S,U,st,gc,isSavingRef,fsReadyRef}){
+function Scheduler({S,U,st,gc,isSavingRef,fsReadyRef,fsSave}){
   const [mode,setMode]=useState("teacher");
   const [selDept,setSelDept]=useState("");
   const [selT,setSelT]=useState("");
@@ -3105,7 +3105,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
     <div style={{animation:"fadeIn 0.3s"}}>
 
       {/* Mode + selector bar */}
-      <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center",flexWrap:"nowrap",overflowX:"auto"}}>
+      <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
         <div style={{display:"flex",borderRadius:10,overflow:"hidden",border:"1.5px solid "+CRED,boxShadow:"0 2px 8px rgba(185,28,28,0.15)"}}>
           <button onClick={()=>{setMode("teacher");setSelRoom("");}} style={{padding:"8px 20px",background:mode==="teacher"?CRED:"#fff",color:mode==="teacher"?"#fff":CRED,border:"none",fontWeight:700,fontSize:13,cursor:"pointer",transition:"background 0.15s"}}>จัดรายครู</button>
           <button onClick={()=>{setMode("room");setSelT("");setSelDept("");}} style={{padding:"8px 20px",background:mode==="room"?CRED:"#fff",color:mode==="room"?"#fff":CRED,border:"none",fontWeight:700,fontSize:13,cursor:"pointer",transition:"background 0.15s"}}>จัดรายห้อง</button>
@@ -3162,20 +3162,28 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
             if(removed===0){st("ไม่มีคาบกำพร้า ✓");return;}
             if(!window.confirm(`พบ ${removed} คาบกำพร้า\nลบออกทั้งหมดไหม?`))return;
 
-            // ปิด onSnapshot ชั่วคราวก่อน save
+            // 1. ปิด onSnapshot ก่อน
             if(isSavingRef) isSavingRef.current=true;
-            if(fsReadyRef) fsReadyRef.current=false;
+            if(fsReadyRef)  fsReadyRef.current=false;
 
+            // 2. อัพเดท local state
             U.setSchedule(next);
 
-            // เปิด onSnapshot กลับหลัง 3 วินาที (หลัง Firestore write เสร็จ)
-            setTimeout(()=>{
-              if(fsReadyRef) fsReadyRef.current=true;
-              if(isSavingRef) isSavingRef.current=false;
-            },3000);
+            // 3. Save ตรงไป Firestore ไม่ผ่าน debounce
+            try{
+              if(fsSave) await fsSave(next);
+              st(`ลบ ${removed} คาบกำพร้าแล้ว ✅`,"warning");
+            }catch(e){
+              st(`ลบ local แล้ว แต่ save cloud ล้มเหลว: ${e.message}`,"error");
+            }
 
-            st(`ลบ ${removed} คาบกำพร้าแล้ว`,"warning");
-          }} style={{...BO("#DC2626"),fontSize:12,padding:"7px 12px",whiteSpace:"nowrap"}}>
+            // 4. เปิด onSnapshot กลับ หลัง 2 วินาที
+            setTimeout(()=>{
+              if(fsReadyRef)  fsReadyRef.current=true;
+              if(isSavingRef) isSavingRef.current=false;
+            },2000);
+
+          }} style={{...BO("#DC2626"),fontSize:12,padding:"7px 12px",whiteSpace:"nowrap",flexShrink:0}}>
             🧹 ล้างคาบกำพร้า
           </button>
           <button onClick={runAutoSchedule} disabled={autoRunning}
