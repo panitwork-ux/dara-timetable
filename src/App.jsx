@@ -765,22 +765,18 @@ export default function App() {
   // ===== FIRESTORE REALTIME SYNC =====
   const saveTimer=useRef(null);
   const fsReadyRef=useRef(false); // กัน loop: onSnapshot trigger → setState → save → onSnapshot
-  const isSavingRef=useRef(false); // กัน onSnapshot overwrite ขณะ save
 
   // debounced save ไป Firestore (500ms หลังจากมีการเปลี่ยนแปลง)
-  const syncToFirestore=useCallback((immediate=false)=>{
+  const syncToFirestore=useCallback(()=>{
     const {db}=getFB(); if(!db) return;
     clearTimeout(saveTimer.current);
-    const delay=immediate?0:500;
     saveTimer.current=setTimeout(async()=>{
-      isSavingRef.current=true;
       setSyncing(true);
       try{
         await fsSaveTimetable(divId,{...stateRef.current,schoolHeader:shRef.current?.schoolHeader,academicYear:shRef.current?.academicYear});
       }catch(e){console.warn("Firestore save error:",e);}
       setSyncing(false);
-      setTimeout(()=>{isSavingRef.current=false;},300); // รอ onSnapshot ผ่านไปก่อน
-    },delay);
+    },500);
   },[divId]);
 
   // Subscribe realtime onSnapshot เมื่อ login และเมื่อ switch division
@@ -813,8 +809,7 @@ export default function App() {
         setSyncing(false);
         setGasReady(true);
       } else {
-        // Realtime update จากเครื่องอื่น — skip ถ้ากำลัง save อยู่ (กัน overwrite)
-        if(isSavingRef.current) return;
+        // Realtime update จากเครื่องอื่น — อัพเดท state ทันที
         if(d.levels)       setLevels(d.levels);
         if(d.plans)        setPlans(d.plans);
         if(d.depts)        setDepts(d.depts);
@@ -3132,77 +3127,16 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
           </select>
         )}
         {/* Auto Schedule button */}
-        <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
-          {/* ล้างคาบกำพร้า — entries ที่ไม่มี assignment แล้ว */}
-          <button onClick={async()=>{
-            const validAssignIds=new Set(S.assigns.map(a=>a.id));
-            const validSubjectIds=new Set(S.subjects.map(s=>s.id));
-            const validTeacherIds=new Set(S.teachers.map(t=>t.id));
-            const validTeacherSubs=new Map();
-            S.assigns.forEach(a=>{
-              if(!validTeacherSubs.has(a.teacherId)) validTeacherSubs.set(a.teacherId,[]);
-              validTeacherSubs.get(a.teacherId).push(a.subjectId);
-            });
-
-            let removed=0;
-            const next={};
-            Object.entries(S.schedule).forEach(([k,en])=>{
-              const filtered=(en||[]).filter(e=>{
-                if(e.subjectId&&!validSubjectIds.has(e.subjectId)) return false;
-                if(e.teacherId&&!validTeacherIds.has(e.teacherId)) return false;
-                if(e.assignmentId) return validAssignIds.has(e.assignmentId);
-                if(e.teacherId&&e.subjectId){
-                  return (validTeacherSubs.get(e.teacherId)||[]).includes(e.subjectId);
-                }
-                return false;
-              });
-              removed+=(en||[]).length-filtered.length;
-              if(filtered.length) next[k]=filtered;
-            });
-
-            if(removed===0){st("ไม่มีคาบกำพร้า ✓");return;}
-            if(!window.confirm(`พบ ${removed} คาบกำพร้า\nลบออกทั้งหมดไหม?`))return;
-
-            // ล็อก onSnapshot ไว้ก่อน แล้ว save ตรงไป Firestore
-            isSavingRef.current=true;
-            fsReadyRef.current=false; // ปิด realtime listener ชั่วคราว
-
-            // อัพเดท local state ก่อน
-            U.setSchedule(next);
-
-            // Save ตรงไป Firestore โดยไม่รอ debounce
-            const {db}=getFB();
-            if(db){
-              try{
-                const {setDoc:sd,doc:dc}=await import("https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js");
-                await sd(dc(db,FS_COLLECTION,divId),{schedule:next},{merge:true});
-                st(`ลบ ${removed} คาบกำพร้าแล้ว ✓`,"warning");
-              }catch(e){
-                // fallback: ใช้ syncToFirestore เดิม
-                syncToFirestore(true);
-                st(`ลบ ${removed} คาบกำพร้าแล้ว`,"warning");
-              }
-            }
-
-            // เปิด realtime กลับหลัง save เสร็จ
-            setTimeout(()=>{
-              fsReadyRef.current=true;
-              isSavingRef.current=false;
-            },2000);
-          }} style={{...BO("#DC2626"),fontSize:12,padding:"7px 12px",whiteSpace:"nowrap"}}>
-            🧹 ล้างคาบกำพร้า
-          </button>
-          <button onClick={runAutoSchedule} disabled={autoRunning}
-            style={{...BS("#059669"),opacity:autoRunning?0.6:1,position:"relative",minWidth:160}}>
-            {autoRunning
-              ? <span style={{display:"flex",alignItems:"center",gap:8}}>
-                  <span style={{display:"inline-block",width:14,height:14,border:"2px solid rgba(255,255,255,0.4)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
-                  รอบ {autoProgress?.run||0}/{autoProgress?.total||10}...
-                </span>
-              : "⚡ Auto จัดตาราง"
-            }
-          </button>
-        </div>
+        <button onClick={runAutoSchedule} disabled={autoRunning}
+          style={{...BS("#059669"),opacity:autoRunning?0.6:1,marginLeft:"auto",position:"relative",minWidth:160}}>
+          {autoRunning
+            ? <span style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{display:"inline-block",width:14,height:14,border:"2px solid rgba(255,255,255,0.4)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+                รอบ {autoProgress?.run||0}/{autoProgress?.total||10}...
+              </span>
+            : "⚡ Auto จัดตาราง"
+          }
+        </button>
       </div>
 
       {/* Auto result panel */}
