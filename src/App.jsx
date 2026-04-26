@@ -765,18 +765,22 @@ export default function App() {
   // ===== FIRESTORE REALTIME SYNC =====
   const saveTimer=useRef(null);
   const fsReadyRef=useRef(false); // กัน loop: onSnapshot trigger → setState → save → onSnapshot
+  const isSavingRef=useRef(false); // กัน onSnapshot overwrite ขณะ save
 
   // debounced save ไป Firestore (500ms หลังจากมีการเปลี่ยนแปลง)
-  const syncToFirestore=useCallback(()=>{
+  const syncToFirestore=useCallback((immediate=false)=>{
     const {db}=getFB(); if(!db) return;
     clearTimeout(saveTimer.current);
+    const delay=immediate?0:500;
     saveTimer.current=setTimeout(async()=>{
+      isSavingRef.current=true;
       setSyncing(true);
       try{
         await fsSaveTimetable(divId,{...stateRef.current,schoolHeader:shRef.current?.schoolHeader,academicYear:shRef.current?.academicYear});
       }catch(e){console.warn("Firestore save error:",e);}
       setSyncing(false);
-    },500);
+      setTimeout(()=>{isSavingRef.current=false;},300); // รอ onSnapshot ผ่านไปก่อน
+    },delay);
   },[divId]);
 
   // Subscribe realtime onSnapshot เมื่อ login และเมื่อ switch division
@@ -809,7 +813,8 @@ export default function App() {
         setSyncing(false);
         setGasReady(true);
       } else {
-        // Realtime update จากเครื่องอื่น — อัพเดท state ทันที
+        // Realtime update จากเครื่องอื่น — skip ถ้ากำลัง save อยู่ (กัน overwrite)
+        if(isSavingRef.current) return;
         if(d.levels)       setLevels(d.levels);
         if(d.plans)        setPlans(d.plans);
         if(d.depts)        setDepts(d.depts);
