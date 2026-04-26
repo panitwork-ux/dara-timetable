@@ -48,12 +48,12 @@ const FS_COLLECTION = IS_DEV ? "timetable_dev" : "timetable";
 // Save ข้อมูลทั้งหมดไป Firestore (merge เพื่อไม่ทับ _init)
 const fsSaveTimetable = async (divId, data) => {
   const {db} = getFB(); if(!db) return;
-  // Firestore document มีขนาดจำกัด 1MB — แยก schedule ออกเป็น subcollection ถ้าใหญ่
   const payload = {};
   DATA_FIELDS.forEach(f => { if(data[f] !== undefined) payload[f] = data[f]; });
   if(data.schoolHeader) payload.schoolHeader = data.schoolHeader;
   if(data.academicYear) payload.academicYear = data.academicYear;
-  await setDoc(doc(db,FS_COLLECTION,divId), payload, {merge:true});
+  // ใช้ setDoc ไม่ merge เพื่อให้ schedule ถูก replace ทั้งก้อน (กัน entries เก่าค้าง)
+  await setDoc(doc(db,FS_COLLECTION,divId), payload);
 };
 
 // Subscribe realtime — returns unsubscribe function
