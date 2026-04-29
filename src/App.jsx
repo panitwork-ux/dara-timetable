@@ -1205,7 +1205,8 @@ function Depts({S,U,st,gc}){
 function Teachers({S,U,st,gc}){
   const [modal,setModal]=useState(false);
   const [editId,setEditId]=useState(null);
-  const [form,setForm]=useState({prefix:"",firstName:"",lastName:"",departmentId:"",specialRoles:[],totalPeriods:0});
+  const [form,setForm]=useState({prefix:"",firstName:"",lastName:"",teacherCode:"",departmentId:"",specialRoles:[],totalPeriods:0});
+  const resetForm=()=>setForm({prefix:"",firstName:"",lastName:"",teacherCode:"",departmentId:"",specialRoles:[],totalPeriods:0});
   const [search,setSearch]=useState("");
   const fileRef=useRef(null);
 
@@ -1216,27 +1217,83 @@ function Teachers({S,U,st,gc}){
     } else {
       U.setTeachers(p=>[...p,{id:gid(),...form}]);st("เพิ่มครูสำเร็จ");
     }
-    setForm({prefix:"",firstName:"",lastName:"",departmentId:"",specialRoles:[],totalPeriods:0});setModal(false);setEditId(null);
+    setForm({prefix:"",firstName:"",lastName:"",teacherCode:"",departmentId:"",specialRoles:[],totalPeriods:0});setModal(false);setEditId(null);
   };
 
-  const openEdit=(t)=>{setEditId(t.id);setForm({prefix:t.prefix,firstName:t.firstName,lastName:t.lastName,departmentId:t.departmentId,specialRoles:t.specialRoles||[],totalPeriods:t.totalPeriods||0});setModal(true)};
+  const openEdit=(t)=>{setEditId(t.id);setForm({prefix:t.prefix,firstName:t.firstName,lastName:t.lastName,teacherCode:t.teacherCode||"",departmentId:t.departmentId,specialRoles:t.specialRoles||[],totalPeriods:t.totalPeriods||0});setModal(true)};
   const toggleRole=(rid)=>setForm(p=>({...p,specialRoles:p.specialRoles.includes(rid)?p.specialRoles.filter(r=>r!==rid):[...p.specialRoles,rid]}));
 
-  // Import Excel/CSV
-  const handleFile=async(e)=>{const f=e.target.files?.[0];if(!f)return;
+  // Import Excel/CSV — อัพเดทครูที่มีชื่อซ้ำ แทนที่จะเพิ่มใหม่
+  const handleFile=async(e)=>{
+    const f=e.target.files?.[0]; if(!f)return;
     let rows;
-    if(f.name.endsWith('.csv')){const txt=await f.text();rows=parseCSV(txt)}
-    else{rows=await readExcelFile(f)}
-    if(!rows||!rows.length){st("ไม่พบข้อมูล","error");return}
-    const newT=rows.map(r=>{const dept=S.depts.find(d=>d.name===String(r["กลุ่มสาระ"]||"").trim());const roles=[];const rs=String(r["หน้าที่พิเศษ"]||"");if(rs.includes("วิชาการ"))roles.push("academic");if(rs.includes("วินัย"))roles.push("discipline");
-      return{id:gid(),prefix:String(r["คำนำหน้า"]||"").trim(),firstName:String(r["ชื่อ"]||"").trim(),lastName:String(r["นามสกุล"]||"").trim(),departmentId:dept?.id||"",specialRoles:roles,totalPeriods:parseInt(r["คาบที่ได้รับ"])||0}
-    }).filter(t=>t.firstName);
-    U.setTeachers(p=>[...p,...newT]);st(`นำเข้า ${newT.length} คน`);e.target.value="";
+    if(f.name.endsWith('.csv')){const txt=await f.text();rows=parseCSV(txt);}
+    else{rows=await readExcelFile(f);}
+    if(!rows?.length){st("ไม่พบข้อมูล","error");return;}
+
+    let added=0, updated=0;
+    const newTeachers=[...S.teachers];
+    rows.forEach(r=>{
+      const prefix=String(r["คำนำหน้า"]||"").trim();
+      const firstName=String(r["ชื่อ"]||"").trim();
+      const lastName=String(r["นามสกุล"]||"").trim();
+      const teacherCode=String(r["รหัสครู"]||"").trim();
+      if(!firstName) return;
+
+      const dept=S.depts.find(d=>d.name===String(r["กลุ่มสาระ"]||"").trim());
+      const roles=[];
+      const rs=String(r["หน้าที่พิเศษ"]||"");
+      if(rs.includes("วิชาการ"))roles.push("academic");
+      if(rs.includes("วินัย"))roles.push("discipline");
+
+      // ตรวจว่ามีชื่อซ้ำหรือไม่ (firstName + lastName)
+      const existIdx=newTeachers.findIndex(t=>
+        t.firstName===firstName && t.lastName===lastName
+      );
+      if(existIdx>=0){
+        // อัพเดทข้อมูลที่มีอยู่ — เพิ่มรหัสครูเป็นหลัก
+        newTeachers[existIdx]={
+          ...newTeachers[existIdx],
+          ...(teacherCode?{teacherCode}:{}),
+          ...(dept?{departmentId:dept.id}:{}),
+          ...(roles.length?{specialRoles:roles}:{}),
+          ...(r["คาบที่ได้รับ"]?{totalPeriods:parseInt(r["คาบที่ได้รับ"])||newTeachers[existIdx].totalPeriods}:{}),
+        };
+        updated++;
+      } else {
+        newTeachers.push({id:gid(),prefix,firstName,lastName,teacherCode,departmentId:dept?.id||"",specialRoles:roles,totalPeriods:parseInt(r["คาบที่ได้รับ"])||0});
+        added++;
+      }
+    });
+    U.setTeachers(newTeachers);
+    st(`นำเข้าสำเร็จ: เพิ่มใหม่ ${added} คน, อัพเดท ${updated} คน`);
+    e.target.value="";
   };
 
-  const exportT=()=>{exportExcel(["คำนำหน้า","ชื่อ","นามสกุล","กลุ่มสาระ","หน้าที่พิเศษ","คาบที่ได้รับ"],S.teachers.map(t=>[t.prefix,t.firstName,t.lastName,S.depts.find(d=>d.id===t.departmentId)?.name||"",(t.specialRoles||[]).map(r=>SROLES.find(sr=>sr.id===r)?.name).filter(Boolean).join("/")||"ครูทั่วไป",t.totalPeriods||0]),"รายชื่อครู_ดาราวิทยาลัย.xlsx","ครู");st("Export สำเร็จ")};
+  const exportT=()=>{
+    exportExcel(
+      ["รหัสครู","คำนำหน้า","ชื่อ","นามสกุล","กลุ่มสาระ","หน้าที่พิเศษ","คาบที่ได้รับ"],
+      S.teachers.map(t=>[
+        t.teacherCode||"",
+        t.prefix,t.firstName,t.lastName,
+        S.depts.find(d=>d.id===t.departmentId)?.name||"",
+        (t.specialRoles||[]).map(r=>SROLES.find(sr=>sr.id===r)?.name).filter(Boolean).join("/")||"ครูทั่วไป",
+        t.totalPeriods||0
+      ]),
+      "รายชื่อครู_ดาราวิทยาลัย.xlsx","ครู"
+    );
+    st("Export สำเร็จ");
+  };
 
-  const downloadTemplate=()=>{exportExcel(["คำนำหน้า","ชื่อ","นามสกุล","กลุ่มสาระ","หน้าที่พิเศษ","คาบที่ได้รับ"],[["นาย","สมชาย","ใจดี","วิทยาศาสตร์","ฝ่ายวิชาการ",18],["นางสาว","สมหญิง","รักเรียน","คณิตศาสตร์","ครูทั่วไป",20]],"Template_ครู.xlsx","Template");st("ดาวน์โหลด Template")};
+  const downloadTemplate=()=>{
+    exportExcel(
+      ["รหัสครู","คำนำหน้า","ชื่อ","นามสกุล","กลุ่มสาระ","หน้าที่พิเศษ","คาบที่ได้รับ"],
+      [["T001","นาย","สมชาย","ใจดี","วิทยาศาสตร์","ฝ่ายวิชาการ",18],
+       ["T002","นางสาว","สมหญิง","รักเรียน","คณิตศาสตร์","ครูทั่วไป",20]],
+      "Template_ครู.xlsx","Template"
+    );
+    st("ดาวน์โหลด Template");
+  };
 
   // นับคาบจากตารางจริง (รองรับ coTeacherIds array) เหมือน teacherScheduledTotal ใน Scheduler
   const usedPeriods=(tid)=>{
@@ -1262,7 +1319,7 @@ function Teachers({S,U,st,gc}){
 
   return <div style={{animation:"fadeIn 0.3s"}}>
     <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
-      <button onClick={()=>{setEditId(null);setForm({prefix:"",firstName:"",lastName:"",departmentId:"",specialRoles:[],totalPeriods:0});setModal(true)}} style={BS()}><Icon name="plus" size={16}/>เพิ่มครู</button>
+      <button onClick={()=>{setEditId(null);resetForm();setModal(true)}} style={BS()}><Icon name="plus" size={16}/>เพิ่มครู</button>
       <button onClick={()=>fileRef.current?.click()} style={BS("#2563EB")}><Icon name="upload" size={16}/>Import Excel</button>
       <button onClick={downloadTemplate} style={BO("#2563EB")}><Icon name="file" size={16}/>Template</button>
       <button onClick={exportT} style={BO("#059669")}><Icon name="download" size={16}/>Export Excel</button>
@@ -1297,6 +1354,7 @@ function Teachers({S,U,st,gc}){
           <div><label style={LS}>ชื่อ</label><input style={IS} value={form.firstName} onChange={e=>setForm(p=>({...p,firstName:e.target.value}))}/></div>
           <div><label style={LS}>นามสกุล</label><input style={IS} value={form.lastName} onChange={e=>setForm(p=>({...p,lastName:e.target.value}))}/></div>
         </div>
+        <div><label style={LS}>รหัสครู (Username)</label><input style={IS} value={form.teacherCode||""} onChange={e=>setForm(p=>({...p,teacherCode:e.target.value}))} placeholder="เช่น T001, prachya@dara.ac.th"/></div>
         <div><label style={LS}>กลุ่มสาระ</label><SearchSelect value={form.departmentId} onChange={v=>setForm(p=>({...p,departmentId:v}))} options={[{value:"",label:"--"},...S.depts.map(d=>({value:d.id,label:d.name}))]} placeholder="-- เลือกกลุ่มสาระ --"/></div>
         <div><label style={LS}>คาบที่ได้รับ (ต่อสัปดาห์)</label><input type="number" min="0" style={IS} value={form.totalPeriods} onChange={e=>setForm(p=>({...p,totalPeriods:parseInt(e.target.value)||0}))}/></div>
         <div><label style={LS}>หน้าที่พิเศษ</label><div style={{display:"flex",gap:8}}>{SROLES.map(r=><button key={r.id} onClick={()=>toggleRole(r.id)} style={{padding:"8px 16px",borderRadius:10,border:`2px solid ${form.specialRoles.includes(r.id)?"#DC2626":"#D1D5DB"}`,background:form.specialRoles.includes(r.id)?"#FEE2E2":"#fff",fontSize:13,fontWeight:600,cursor:"pointer"}}>{form.specialRoles.includes(r.id)?"✓ ":""}{r.name}</button>)}</div></div>
@@ -1385,15 +1443,39 @@ function Subjects({S,U,st,gc}){
     setModal(true);
   };
 
-  const handleFile=async(e)=>{const f=e.target.files?.[0];if(!f)return;
+  const handleFile=async(e)=>{
+    const f=e.target.files?.[0]; if(!f)return;
     let rows;
-    if(f.name.endsWith('.csv')){const txt=await f.text();rows=parseCSV(txt)}
-    else{rows=await readExcelFile(f)}
-    if(!rows||!rows.length){st("ไม่พบข้อมูล","error");return}
-    const ns=rows.map(r=>{const dept=S.depts.find(d=>d.name===String(r["กลุ่มสาระ"]||"").trim());const lv=S.levels.find(l=>l.name===String(r["ระดับชั้น"]||"").trim());
-      return{id:gid(),code:String(r["รหัสวิชา"]||"").trim(),name:String(r["ชื่อวิชา"]||"").trim(),shortName:String(r["ชื่อย่อ"]||"").trim(),credits:parseFloat(r["หน่วยกิต"])||1,periodsPerWeek:parseInt(r["คาบ/สัปดาห์"])||1,departmentId:dept?.id||"",levelId:lv?.id||"",specialRoomId:"",consecutiveAllowed:0}
-    }).filter(s=>s.name);
-    U.setSubjects(p=>[...p,...ns]);st(`นำเข้า ${ns.length} วิชา`);e.target.value=""};
+    if(f.name.endsWith('.csv')){const txt=await f.text();rows=parseCSV(txt);}
+    else{rows=await readExcelFile(f);}
+    if(!rows?.length){st("ไม่พบข้อมูล","error");return;}
+
+    let added=0, updated=0;
+    const newSubs=[...S.subjects];
+    rows.forEach(r=>{
+      const code=String(r["รหัสวิชา"]||"").trim();
+      const name=String(r["ชื่อวิชา"]||"").trim();
+      if(!name) return;
+      const dept=S.depts.find(d=>d.name===String(r["กลุ่มสาระ"]||"").trim());
+      const lv=S.levels.find(l=>l.name===String(r["ระดับชั้น"]||"").trim());
+      const subData={code,name,shortName:String(r["ชื่อย่อ"]||"").trim(),credits:parseFloat(r["หน่วยกิต"])||1,periodsPerWeek:parseInt(r["คาบ/สัปดาห์"])||1,departmentId:dept?.id||"",levelId:lv?.id||"",specialRoomId:"",consecutiveAllowed:0};
+
+      // ตรวจซ้ำด้วยชื่อ หรือรหัสวิชา
+      const existIdx=newSubs.findIndex(s=>
+        (code&&s.code===code)||(s.name===name&&s.levelId===(lv?.id||""))
+      );
+      if(existIdx>=0){
+        newSubs[existIdx]={...newSubs[existIdx],...subData};
+        updated++;
+      } else {
+        newSubs.push({id:gid(),...subData});
+        added++;
+      }
+    });
+    U.setSubjects(newSubs);
+    st(`นำเข้าสำเร็จ: เพิ่มใหม่ ${added} วิชา, อัพเดท ${updated} วิชา`);
+    e.target.value="";
+  };
 
   const exportS=()=>{exportExcel(["รหัสวิชา","ชื่อวิชา","ชื่อย่อ","หน่วยกิต","คาบ/สัปดาห์","กลุ่มสาระ","ระดับชั้น"],S.subjects.map(s=>[s.code,s.name,s.shortName||"",s.credits,s.periodsPerWeek,S.depts.find(d=>d.id===s.departmentId)?.name||"",S.levels.find(l=>l.id===s.levelId)?.name||""]),"รายวิชา_ดาราวิทยาลัย.xlsx","วิชา");st("Export สำเร็จ")};
   const downloadTemplate=()=>{exportExcel(["รหัสวิชา","ชื่อวิชา","ชื่อย่อ","หน่วยกิต","คาบ/สัปดาห์","กลุ่มสาระ","ระดับชั้น"],[["ว33201","ฟิสิกส์ 3","ฟิสิกส์",1.5,3,"วิทยาศาสตร์","ม.6"],["ค33101","คณิตศาสตร์พื้นฐาน","คณิต",1,2,"คณิตศาสตร์","ม.6"]],"Template_วิชา.xlsx","Template");st("ดาวน์โหลด Template")};
@@ -3921,6 +4003,8 @@ function Reports({S,U,st,gc,ay,sh}){
   const [selRoomXL,setSelRoomXL]=useState("");
   const [showNewRoomPDF,setShowNewRoomPDF]=useState(false);
   const [newRoomPDFOpts,setNewRoomPDFOpts]=useState({selectedRooms:[],assemblyDays:[]});
+  const [showNewTeacherPDF,setShowNewTeacherPDF]=useState(false);
+  const [selectedTeachersPDF,setSelectedTeachersPDF]=useState([]);
   const roomSt=S.rooms.map(rm=>{let f=0;DAYS.forEach(d=>PERIODS.forEach(p=>{const k=`${rm.id}_${d}_${p.id}`;if(S.schedule[k]?.length)f++}));const total=DAYS.length*PERIODS.length;return{room:rm,filled:f,total,pct:Math.round(f/total*100)}});
   const teacherSt=S.teachers.map(t=>{
     const tot=t.totalPeriods||0;
@@ -3940,19 +4024,85 @@ function Reports({S,U,st,gc,ay,sh}){
   });
 
   // Export schedule → JSON file (เก็บทุก entry ครบถ้วน)
+  // พิมพ์ตารางสอนครูแบบใหม่ (เหมือน room format, 2 คน/หน้า A4 แนวตั้ง)
+  const printTeacherPDFNew=(teachers)=>{
+    const list=Array.isArray(teachers)?teachers:[teachers];
+    if(!list.length){st("ไม่มีครูที่เลือก","error");return;}
+    const w=window.open('','_blank');
+    if(!w){st("Browser บล็อก popup","error");return;}
+    const pages=[];
+    for(let i=0;i<list.length;i+=2) pages.push(list.slice(i,i+2));
+    const pagesHTML=pages.map((pair,pi)=>`
+      <div style="page-break-after:${pi<pages.length-1?"always":"avoid"};padding:6mm 8mm;box-sizing:border-box;">
+        ${pair.map(t=>buildTeacherTableHTML(t,S,ay,sh)).join(`<div style="border-top:1px dashed #ccc;margin:8px 0;"></div>`)}
+      </div>`).join("");
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"/>
+      <style>
+        @page{size:A4 portrait;margin:0}
+        body{font-family:'TH SarabunNew','Sarabun','Arial',sans-serif;margin:0;padding:0;}
+        td,th{word-wrap:break-word;overflow:hidden;line-height:1.2;}
+        @media print{body{margin:0;}}
+      </style></head><body>${pagesHTML}</body></html>`;
+    w.document.write(html);
+    w.document.close();
+    setTimeout(()=>w.print(),700);
+  };
+
+  // Export ตารางห้องเรียน ตาม format import_Schedule.xlsx
   const exportScheduleJSON=()=>{
-    const data={
-      version:1,
-      exportedAt:new Date().toISOString(),
-      schedule:S.schedule,
-      locks:S.locks,
-      assigns:S.assigns,
-    };
+    const data={version:1,exportedAt:new Date().toISOString(),schedule:S.schedule,locks:S.locks,assigns:S.assigns,teachers:S.teachers,subjects:S.subjects,rooms:S.rooms,levels:S.levels,plans:S.plans,depts:S.depts,meetings:S.meetings,specialRooms:S.specialRooms};
     const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");a.href=url;a.download="ตารางสอน_backup.json";a.click();
-    URL.revokeObjectURL(url);
-    st("Export ตารางสอนสำเร็จ");
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`backup_timetable_${new Date().toISOString().slice(0,10)}.json`;a.click();
+    st("Backup สำเร็จ");
+  };
+
+  const exportRoomScheduleXLSX=async(rooms)=>{
+    const roomList=rooms||S.rooms;
+    if(!roomList.length){st("ไม่มีห้องเรียน","error");return;}
+
+    // โหลด SheetJS ถ้ายังไม่มี
+    let XLib=window.XLSX;
+    if(!XLib){
+      await new Promise((res,rej)=>{
+        const s=document.createElement("script");
+        s.src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+        s.onload=res; s.onerror=rej;
+        document.head.appendChild(s);
+      });
+      XLib=window.XLSX;
+    }
+
+    const DAYS_TH=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
+    const PERIOD_TIMES=[
+      {id:1,start:"08.30",end:"09.20"},{id:2,start:"09.20",end:"10.10"},
+      {id:3,start:"10.25",end:"11.15"},{id:4,start:"11.15",end:"12.05"},
+      {id:5,start:"13.00",end:"13.50"},{id:6,start:"13.50",end:"14.40"},
+      {id:7,start:"14.50",end:"15.40"},
+    ];
+
+    const wb=XLib.utils.book_new();
+    roomList.forEach(room=>{
+      const rows=[["วัน","รหัสวิชา","เริ่มเวลา","หมดเวลา","รหัสผู้ใช้งาน(ครูผู้สอน)"]];
+      DAYS_TH.forEach(day=>{
+        PERIOD_TIMES.forEach(p=>{
+          const entries=S.schedule[room.id+"_"+day+"_"+p.id]||[];
+          if(!entries.length){
+            rows.push([day,"",p.start,p.end,""]);
+          } else {
+            entries.forEach(e=>{
+              const sub=S.subjects.find(s=>s.id===e.subjectId);
+              const tch=S.teachers.find(t=>t.id===e.teacherId);
+              rows.push([day,sub?.code||"",p.start,p.end,tch?.teacherCode||""]);
+            });
+          }
+        });
+      });
+      const ws=XLib.utils.aoa_to_sheet(rows);
+      ws["!cols"]=[{wch:12},{wch:15},{wch:10},{wch:10},{wch:25}];
+      XLib.utils.book_append_sheet(wb,ws,room.name.slice(0,31));
+    });
+    XLib.writeFile(wb,`ตารางสอนห้องเรียน_${ay?.year||"2568"}.xlsx`);
+    st(`Export ${roomList.length} ห้อง สำเร็จ`);
   };
 
   // Import schedule จาก JSON
@@ -4103,110 +4253,130 @@ function Reports({S,U,st,gc,ay,sh}){
       });
     };
 
-    const CW={day:"5%",hm:"2.5%",p:"12%",bk:"2.5%"};
+    // colgroup — % based
     const colgroup=`<colgroup>
-      <col width="${CW.day}"><col width="${CW.hm}">
-      <col width="${CW.p}"><col width="${CW.p}">
-      <col width="${CW.bk}">
-      <col width="${CW.p}"><col width="${CW.p}">
-      <col width="${CW.bk}">
-      <col width="${CW.p}"><col width="${CW.p}">
-      <col width="${CW.bk}">
-      <col width="${CW.p}">
+      <col style="width:5%;"><col style="width:2.5%;">
+      <col style="width:12%;"><col style="width:12%;">
+      <col style="width:2.5%;">
+      <col style="width:12%;"><col style="width:12%;">
+      <col style="width:2.5%;">
+      <col style="width:12%;"><col style="width:12%;">
+      <col style="width:2.5%;">
+      <col style="width:12%;">
     </colgroup>`;
 
-    const HDR=[
-      {label:"คาบ 1",time:"08.30–09.20"},
-      {label:"คาบ 2",time:"09.20–10.10"},
-      {label:"คาบ 3",time:"10.25–11.15"},
-      {label:"คาบ 4",time:"11.15–12.05"},
-      {label:"คาบ 5",time:"13.00–13.50"},
-      {label:"คาบ 6",time:"13.50–14.40"},
-      {label:"คาบ 7",time:"14.50–15.40"},
-    ];
-    const BKT=["08.00–08.30","10.10–10.25","12.05–13.00","14.40–14.50"];
+    // vert cell: ข้อความแนวตั้ง ใช้กับทุก break column
+    const vert=(txt,bg="#fffde7",fw="normal",fs="7pt")=>
+      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};font-weight:${fw};padding:2px 0;text-align:center;">${txt}</div>`;
 
-    const hdrRow1=`<tr style="background:#f0f0f0;">
-      <th rowspan="2" style="border:1px solid #888;font-size:7pt;vertical-align:bottom;padding:2px;text-align:center;">
-        <div style="font-size:6pt;text-align:right;">เวลา</div>
-        <hr style="margin:1px;border-color:#888;"/><div style="font-size:6pt;">วัน</div>
+    const HDR=[
+      {label:"คาบ 1",time:"08.30 - 09.20"},
+      {label:"คาบ 2",time:"09.20 - 10.10"},
+      {label:"คาบ 3",time:"10.25 - 11.15"},
+      {label:"คาบ 4",time:"11.15 - 12.05"},
+      {label:"คาบ 5",time:"13.00 - 13.50"},
+      {label:"คาบ 6",time:"13.50 - 14.40"},
+      {label:"คาบ 7",time:"14.50 - 15.40"},
+    ];
+
+    // Header — แถว 1: ชื่อคาบ, แถว 2: เวลา
+    // col: วัน | 08.00-08.30 | คาบ1 | คาบ2 | 10.10-10.25 | คาบ3 | คาบ4 | 12.05-13.00 | คาบ5 | คาบ6 | 14.40-14.50 | คาบ7
+    const BRK=["08.00-08.30","10.10-10.25","12.05-13.00","14.40-14.50"];
+    const BRKV=["08.00-08.30","Morning Break","Lunch Time","Afternoon Break"];
+
+    // Header row1 — ชื่อคาบ (break columns มี rowspan=2)
+    const h1row=`<tr style="background:#f0f0f0;height:22px;max-height:22px;">
+      <th rowspan="2" style="border:1px solid #666;padding:0;position:relative;vertical-align:middle;font-size:7pt;height:38px;max-height:38px;overflow:hidden;">
+        <div style="position:absolute;top:0;left:0;width:100%;height:100%;">
+          <svg style="position:absolute;top:0;left:0;width:100%;height:100%;" preserveAspectRatio="none">
+            <line x1="0" y1="0" x2="100%" y2="100%" stroke="#888" stroke-width="0.8"/>
+          </svg>
+          <div style="position:absolute;top:2px;right:2px;font-size:5.5pt;color:#555;">เวลา</div>
+          <div style="position:absolute;bottom:2px;left:2px;font-size:5.5pt;color:#555;">วัน</div>
+        </div>
       </th>
-      <th rowspan="2" style="border:1px solid #888;background:#fffde7;padding:0;vertical-align:middle;">
-        <div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:6.5pt;white-space:nowrap;padding:2px 0;">${BKT[0]}</div>
-      </th>
-      <th style="border:1px solid #888;font-size:8pt;font-weight:bold;text-align:center;padding:2px;">${HDR[0].label}</th>
-      <th style="border:1px solid #888;font-size:8pt;font-weight:bold;text-align:center;padding:2px;">${HDR[1].label}</th>
-      <th rowspan="2" style="border:1px solid #888;background:#fffde7;padding:0;vertical-align:middle;">
-        <div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:6.5pt;white-space:nowrap;padding:2px 0;">${BKT[1]}</div>
-      </th>
-      <th style="border:1px solid #888;font-size:8pt;font-weight:bold;text-align:center;padding:2px;">${HDR[2].label}</th>
-      <th style="border:1px solid #888;font-size:8pt;font-weight:bold;text-align:center;padding:2px;">${HDR[3].label}</th>
-      <th rowspan="2" style="border:1px solid #888;background:#fffde7;padding:0;vertical-align:middle;">
-        <div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:6.5pt;white-space:nowrap;padding:2px 0;">${BKT[2]}</div>
-      </th>
-      <th style="border:1px solid #888;font-size:8pt;font-weight:bold;text-align:center;padding:2px;">${HDR[4].label}</th>
-      <th style="border:1px solid #888;font-size:8pt;font-weight:bold;text-align:center;padding:2px;">${HDR[5].label}</th>
-      <th rowspan="2" style="border:1px solid #888;background:#fffde7;padding:0;vertical-align:middle;">
-        <div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:6.5pt;white-space:nowrap;padding:2px 0;">${BKT[3]}</div>
-      </th>
-      <th style="border:1px solid #888;font-size:8pt;font-weight:bold;text-align:center;padding:2px;">${HDR[6].label}</th>
+      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;max-height:38px;overflow:hidden;">${vert(BRK[0],"#fffde7","normal","6.5pt")}</th>
+      <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[0].label}</th>
+      <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[1].label}</th>
+      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;max-height:38px;overflow:hidden;">${vert(BRK[1],"#fffde7","normal","6.5pt")}</th>
+      <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[2].label}</th>
+      <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[3].label}</th>
+      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;max-height:38px;overflow:hidden;">${vert(BRK[2],"#fffde7","normal","6.5pt")}</th>
+      <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[4].label}</th>
+      <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[5].label}</th>
+      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;max-height:38px;overflow:hidden;">${vert(BRK[3],"#fffde7","normal","6.5pt")}</th>
+      <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[6].label}</th>
     </tr>
-    <tr style="background:#f0f0f0;">
-      ${HDR.map(h=>`<td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;">${h.time}</td>`).join("")}
+    <tr style="background:#f0f0f0;height:16px;max-height:16px;">
+      ${[0,1,2,3,4,5,6].map(i=>`<td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;height:16px;">${HDR[i].time}</td>`).join("")}
     </tr>`;
 
     const DAYS_TH=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
-    const H="height:20px;";
     let body="";
+
     DAYS_TH.forEach((day,di)=>{
       const isAsm=asmDay===day;
-      const hmT=isAsm?"หอประชุม Assembly":"Homeroom";
-      const D=([1,2,3,4,5,6,7]).map(pid=>getCells(day,pid));
+      // Homeroom: คำเดียว "Homeroom" หรือ 2 คำ "หอประชุม Assembly"
+      const hmTxt=isAsm?"หอประชุม Assembly":"Homeroom";
+      const hmBg=isAsm?"#e8f5e9":"#fafff7";
+      const D=[1,2,3,4,5,6,7].map(pid=>getCells(day,pid));
+
       const cell=(arr,type)=>{
         const v=arr.map(c=>c[type]).filter(Boolean).join("<br>");
-        const s=type==="th"?"font-weight:bold;font-size:8pt;"
-                :type==="en"?"font-size:7pt;color:#444;"
-                :"font-size:7pt;color:#1a237e;";
-        return`<td style="border:1px solid #ddd;text-align:center;vertical-align:middle;padding:1px;${s}">${v}</td>`;
+        const s=type==="th"
+          ?"font-size:8.5pt;font-weight:bold;"
+          :type==="en"
+          ?"font-size:7.5pt;color:#444;"
+          :"font-size:7.5pt;color:#1a237e;";
+        return`<td style="border:1px solid #ddd;border-top:none;border-bottom:none;text-align:center;vertical-align:middle;padding:1px;${s}">${v}</td>`;
       };
-      const bgRow=di%2===0?"":"background:#fafafa;";
+      // แถวแรกของวัน — border-top ชัด
+      const cellTop=(arr,type)=>cell(arr,type).replace("border-top:none;","border-top:1px solid #888;");
+      // แถวสุดท้ายของวัน — border-bottom ชัด
+      const cellBot=(arr,type)=>cell(arr,type).replace("border-bottom:none;","border-bottom:1px solid #888;");
+
+      const BKcell=(rows,vtext,bg="#fffde7")=>
+        `<td rowspan="${rows}" style="border:1px solid #888;background:${bg};padding:0;vertical-align:middle;">${vert(vtext,bg,"normal","6.5pt")}</td>`;
+
       body+=`
-        <tr style="${H}${bgRow}">
-          <td rowspan="3" style="border:1px solid #888;text-align:center;font-weight:bold;font-size:8pt;vertical-align:middle;background:#f5f5f5;">${day}</td>
-          <td rowspan="3" style="border:1px solid #888;background:${isAsm?"#e8f5e9":"#fafff7"};padding:0;vertical-align:middle;text-align:center;">
-            <div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:7pt;font-weight:bold;white-space:nowrap;">${hmT}</div>
-          </td>
-          ${cell(D[0],"th")}${cell(D[1],"th")}
-          <td rowspan="3" style="border:1px solid #888;background:#fffde7;padding:0;vertical-align:middle;">
-            <div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:6pt;white-space:nowrap;text-align:center;">พักน้อย 15 นาที</div>
-          </td>
-          ${cell(D[2],"th")}${cell(D[3],"th")}
-          <td rowspan="3" style="border:1px solid #888;background:#fffde7;padding:0;vertical-align:middle;">
-            <div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:6pt;white-space:nowrap;text-align:center;">พักกลางวัน 55 นาที</div>
-          </td>
-          ${cell(D[4],"th")}${cell(D[5],"th")}
-          <td rowspan="3" style="border:1px solid #888;background:#fffde7;padding:0;vertical-align:middle;">
-            <div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:6pt;white-space:nowrap;text-align:center;">พักน้อย 10 นาที</div>
-          </td>
-          ${cell(D[6],"th")}
+        <tr style="height:20px;">
+          <td rowspan="3" style="border:1px solid #888;text-align:center;font-weight:bold;font-size:8.5pt;vertical-align:middle;background:#f5f5f5;">${day}</td>
+          <td rowspan="3" style="border:1px solid #888;background:${hmBg};padding:0;vertical-align:middle;">${vert(hmTxt,hmBg,"bold","7pt")}</td>
+          ${cellTop(D[0],"th")}${cellTop(D[1],"th")}
+          ${BKcell(3,"พักน้อย  15  นาที")}
+          ${cellTop(D[2],"th")}${cellTop(D[3],"th")}
+          ${BKcell(3,"พักกลางวัน  55  นาที")}
+          ${cellTop(D[4],"th")}${cellTop(D[5],"th")}
+          ${BKcell(3,"พักน้อย  10  นาที")}
+          ${cellTop(D[6],"th")}
         </tr>
-        <tr style="${H}${bgRow}">${cell(D[0],"en")}${cell(D[1],"en")}${cell(D[2],"en")}${cell(D[3],"en")}${cell(D[4],"en")}${cell(D[5],"en")}${cell(D[6],"en")}</tr>
-        <tr style="${H}${bgRow}">${cell(D[0],"tch")}${cell(D[1],"tch")}${cell(D[2],"tch")}${cell(D[3],"tch")}${cell(D[4],"tch")}${cell(D[5],"tch")}${cell(D[6],"tch")}</tr>`;
+        <tr style="height:17px;">
+          ${cell(D[0],"en")}${cell(D[1],"en")}
+          ${cell(D[2],"en")}${cell(D[3],"en")}
+          ${cell(D[4],"en")}${cell(D[5],"en")}
+          ${cell(D[6],"en")}
+        </tr>
+        <tr style="height:17px;">
+          ${cellBot(D[0],"tch")}${cellBot(D[1],"tch")}
+          ${cellBot(D[2],"tch")}${cellBot(D[3],"tch")}
+          ${cellBot(D[4],"tch")}${cellBot(D[5],"tch")}
+          ${cellBot(D[6],"tch")}
+        </tr>`;
     });
 
     const footer=(h1||h2||hco)?`
-      <div style="margin-top:5px;font-size:9pt;font-family:'TH SarabunNew','Sarabun',sans-serif;text-align:right;line-height:1.8;">
-        ${h1||h2?`<div><b>ครูประจำชั้นหลัก</b>&emsp;${h1}${h2?"&emsp;&emsp;&emsp;"+h2:""}</div>`:""}
-        ${hco?`<div><b>ครูประจำชั้นร่วม</b>&emsp;${hco}</div>`:""}
+      <div style="margin-top:6px;font-size:10pt;font-family:'TH SarabunNew','Sarabun',sans-serif;text-align:right;line-height:2;">
+        ${h1||h2?`<div><b>ครูประจำชั้นหลัก</b>&emsp;&emsp;${h1}${h2?"&emsp;&emsp;&emsp;&emsp;&emsp;"+h2:""}</div>`:""}
+        ${hco?`<div><b>ครูประจำชั้นร่วม</b>&emsp;&emsp;${hco}</div>`:""}
       </div>`:"";
 
     return`
       <div style="text-align:center;margin-bottom:5px;font-family:'TH SarabunNew','Sarabun',sans-serif;">
-        ${logoImg}<b style="font-size:12pt;">${title}&emsp;ปีการศึกษา ${yr}</b>
+        ${logoImg}<b style="font-size:13pt;">${title}&emsp;&emsp;ปีการศึกษา ${yr}</b>
       </div>
       <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
         ${colgroup}
-        <thead>${hdrRow1}</thead>
+        <thead>${h1row}</thead>
         <tbody>${body}</tbody>
       </table>
       ${footer}`;
@@ -4328,8 +4498,9 @@ function Reports({S,U,st,gc,ay,sh}){
           <div style={{background:"#FFF5F5",borderRadius:12,padding:"12px 16px",border:"1px solid #FECDD3"}}>
             <div style={{fontSize:13,fontWeight:700,color:"#991B1B",marginBottom:8}}>👨‍🏫 ตารางสอนครู</div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-              <button onClick={printAllTeachersPDF} style={{...BS("#DC2626"),fontSize:12,padding:"7px 16px"}}>พิมพ์ทุกคน</button>
+              <button onClick={printAllTeachersPDF} style={{...BS("#DC2626"),fontSize:12,padding:"7px 16px"}}>พิมพ์ทุกคน (แบบเดิม)</button>
               <button onClick={printMasterByDept} style={{...BS("#991B1B"),fontSize:12,padding:"7px 16px"}}>รวมกลุ่มสาระ</button>
+              <button onClick={()=>{setSelectedTeachersPDF([]);setShowNewTeacherPDF(true);}} style={{...BS("#7C3AED"),fontSize:12,padding:"7px 16px"}}>🆕 พิมพ์แบบใหม่ (2คน/หน้า)</button>
             </div>
             <div style={{marginTop:8,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
               <span style={{fontSize:12,color:"#6B7280"}}>รายคน:</span>
@@ -4348,7 +4519,8 @@ function Reports({S,U,st,gc,ay,sh}){
             <div style={{fontSize:13,fontWeight:700,color:"#991B1B",marginBottom:8}}>🏫 ตารางเรียนห้อง</div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
               <button onClick={printAllRoomsPDF} style={{...BS("#DB2777"),fontSize:12,padding:"7px 16px"}}>พิมพ์ทุกห้อง (แบบเดิม)</button>
-              <button onClick={()=>{setNewRoomPDFOpts({selectedRooms:[],assemblyDays:[]});setShowNewRoomPDF(true);}} style={{...BS("#7C3AED"),fontSize:12,padding:"7px 16px"}}>🆕 พิมพ์แบบใหม่ (2ห้อง/หน้า)</button>
+              <button onClick={()=>{setNewRoomPDFOpts({selectedRooms:[],assemblyDays:[]});setShowNewRoomPDF(true);}} style={{...BS("#7C3AED"),fontSize:12,padding:"7px 16px"}}>🆕 PDF แบบใหม่ (2ห้อง/หน้า)</button>
+              <button onClick={()=>exportRoomScheduleXLSX()} style={{...BS("#059669"),fontSize:12,padding:"7px 16px"}}><Icon name="download" size={13}/>📊 Excel ตารางห้อง (import format)</button>
             </div>
             <div style={{marginTop:8,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
               <span style={{fontSize:12,color:"#6B7280"}}>รายระดับ:</span>
@@ -4455,6 +4627,64 @@ function Reports({S,U,st,gc,ay,sh}){
                 }}
                 style={{...BS("#7C3AED"),flex:2,opacity:newRoomPDFOpts.selectedRooms?.length?1:0.4}}>
                 🖨️ พิมพ์ ({Math.ceil((newRoomPDFOpts.selectedRooms?.length||0)/2)} หน้า)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: พิมพ์ตารางสอนครูแบบใหม่ */}
+      {showNewTeacherPDF&&(
+        <div style={{position:"fixed",inset:0,zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.5)"}}>
+          <div style={{background:"#fff",borderRadius:16,boxShadow:"0 20px 60px rgba(0,0,0,0.3)",width:"min(560px,94%)",maxHeight:"90vh",overflowY:"auto",padding:24,fontFamily:"inherit"}}>
+            <div style={{fontSize:16,fontWeight:800,marginBottom:4}}>🆕 พิมพ์ตารางสอนครูแบบใหม่</div>
+            <div style={{fontSize:11,color:"#6B7280",marginBottom:16}}>A4 แนวตั้ง — 2 คนต่อหน้า · แสดงวิชา+ห้อง+ชื่ออังกฤษ</div>
+            <div>
+              <label style={LS}>เลือกครู (กดหลายคนได้)</label>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",maxHeight:220,overflowY:"auto",padding:6,border:"1px solid #E5E7EB",borderRadius:8}}>
+                {[...S.teachers].sort((a,b)=>{
+                  const da=S.depts.find(d=>d.id===a.departmentId)?.name||"";
+                  const db=S.depts.find(d=>d.id===b.departmentId)?.name||"";
+                  if(da!==db)return da.localeCompare(db,"th");
+                  return a.firstName.localeCompare(b.firstName,"th");
+                }).map(t=>{
+                  const sel=selectedTeachersPDF.includes(t.id);
+                  const dept=S.depts.find(d=>d.id===t.departmentId)?.name||"";
+                  return<button key={t.id}
+                    onClick={()=>setSelectedTeachersPDF(p=>sel?p.filter(id=>id!==t.id):[...p,t.id])}
+                    style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${sel?"#7C3AED":"#E5E7EB"}`,background:sel?"#7C3AED":"#fff",color:sel?"#fff":"#374151",fontSize:12,fontWeight:sel?700:400,cursor:"pointer"}}>
+                    {t.prefix}{t.firstName} {t.lastName}
+                    {dept&&<span style={{fontSize:10,opacity:0.7,marginLeft:4}}>[{dept}]</span>}
+                  </button>;
+                })}
+              </div>
+              <div style={{display:"flex",gap:6,marginTop:6}}>
+                <button onClick={()=>setSelectedTeachersPDF(S.teachers.map(t=>t.id))} style={{fontSize:11,color:"#7C3AED",background:"none",border:"1px solid #E5E7EB",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>เลือกทั้งหมด</button>
+                <button onClick={()=>setSelectedTeachersPDF([])} style={{fontSize:11,color:"#6B7280",background:"none",border:"1px solid #E5E7EB",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>ล้าง</button>
+                <span style={{fontSize:11,color:"#6B7280",alignSelf:"center"}}>เลือก {selectedTeachersPDF.length} คน → {Math.ceil(selectedTeachersPDF.length/2)} หน้า</span>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:10,marginTop:20}}>
+              <button onClick={()=>setShowNewTeacherPDF(false)} style={{...BO(),flex:1}}>ยกเลิก</button>
+              <button disabled={!selectedTeachersPDF.length}
+                onClick={()=>{
+                  const teachers=S.teachers.filter(t=>selectedTeachersPDF.includes(t.id));
+                  const w=window.open('','_blank');
+                  if(!w){st("Browser บล็อก popup","error");return;}
+                  const saved=w.setTimeout;w.setTimeout=()=>{};
+                  printTeacherPDFNew(teachers);
+                  setTimeout(()=>{if(w.setTimeout)w.setTimeout=saved;},100);
+                }}
+                style={{...BO("#7C3AED"),flex:1,opacity:selectedTeachersPDF.length?1:0.4,fontSize:12}}>
+                👁️ ดูตัวอย่าง
+              </button>
+              <button disabled={!selectedTeachersPDF.length}
+                onClick={()=>{
+                  printTeacherPDFNew(S.teachers.filter(t=>selectedTeachersPDF.includes(t.id)));
+                  setShowNewTeacherPDF(false);
+                }}
+                style={{...BS("#7C3AED"),flex:2,opacity:selectedTeachersPDF.length?1:0.4}}>
+                🖨️ พิมพ์ ({Math.ceil(selectedTeachersPDF.length/2)} หน้า)
               </button>
             </div>
           </div>
@@ -4687,6 +4917,144 @@ function groupEntries(entries) {
     var roomHtml = g.rooms.map(function(r){ return '<div class="ent-room">' + r + '</div>'; }).join('');
     return { sub: g.sub, roomHtml: roomHtml, room2: '', double: g.double, roomCount: g.rooms.length };
   });
+}
+
+function buildTeacherTableHTML(teacher, S, ay, sh) {
+  const yr=ay?.year||"2568";
+  const logoImg=sh?.logo?`<img src="${sh.logo}" style="height:40px;vertical-align:middle;margin-right:8px;"/>` :"";
+  const title=`ตารางสอน ${teacher.prefix||""}${teacher.firstName} ${teacher.lastName}`;
+  const dept=S.depts.find(d=>d.id===teacher.departmentId)?.name||"";
+
+  const getCells=(day,pid)=>{
+    const results=[];
+    S.rooms.forEach(room=>{
+      const key=room.id+"_"+day+"_"+pid;
+      (S.schedule[key]||[]).forEach(e=>{
+        if(e.teacherId!==teacher.id&&!(e.coTeacherIds||[]).includes(teacher.id)) return;
+        const sub=S.subjects.find(s=>s.id===e.subjectId);
+        results.push({th:sub?.name||sub?.code||"",en:sub?.shortName||"",room:room.name});
+      });
+    });
+    return results;
+  };
+
+  const colgroup=`<colgroup>
+    <col style="width:5%;"><col style="width:2.5%;">
+    <col style="width:12%;"><col style="width:12%;">
+    <col style="width:2.5%;">
+    <col style="width:12%;"><col style="width:12%;">
+    <col style="width:2.5%;">
+    <col style="width:12%;"><col style="width:12%;">
+    <col style="width:2.5%;">
+    <col style="width:12%;">
+  </colgroup>`;
+
+  const vert=(txt,bg="#fffde7",fw="normal",fs="6.5pt")=>
+    `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};font-weight:${fw};padding:2px 0;text-align:center;">${txt}</div>`;
+
+  const HDR=[
+    {label:"คาบ 1",time:"08.30 - 09.20"},
+    {label:"คาบ 2",time:"09.20 - 10.10"},
+    {label:"คาบ 3",time:"10.25 - 11.15"},
+    {label:"คาบ 4",time:"11.15 - 12.05"},
+    {label:"คาบ 5",time:"13.00 - 13.50"},
+    {label:"คาบ 6",time:"13.50 - 14.40"},
+    {label:"คาบ 7",time:"14.50 - 15.40"},
+  ];
+  const BRK=["08.00-08.30","10.10-10.25","12.05-13.00","14.40-14.50"];
+
+  const hdrRow=`<tr style="background:#f0f0f0;height:22px;max-height:22px;">
+    <th rowspan="2" style="border:1px solid #666;padding:0;position:relative;vertical-align:middle;font-size:7pt;height:38px;max-height:38px;overflow:hidden;">
+      <div style="position:absolute;top:0;left:0;width:100%;height:100%;">
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%;" preserveAspectRatio="none">
+          <line x1="0" y1="0" x2="100%" y2="100%" stroke="#888" stroke-width="0.8"/>
+        </svg>
+        <div style="position:absolute;top:2px;right:2px;font-size:5.5pt;color:#555;">เวลา</div>
+        <div style="position:absolute;bottom:2px;left:2px;font-size:5.5pt;color:#555;">วัน</div>
+      </div>
+    </th>
+    <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;max-height:38px;overflow:hidden;">${vert(BRK[0])}</th>
+    <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[0].label}</th>
+    <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[1].label}</th>
+    <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;max-height:38px;overflow:hidden;">${vert(BRK[1])}</th>
+    <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[2].label}</th>
+    <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[3].label}</th>
+    <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;max-height:38px;overflow:hidden;">${vert(BRK[2])}</th>
+    <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[4].label}</th>
+    <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[5].label}</th>
+    <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;max-height:38px;overflow:hidden;">${vert(BRK[3])}</th>
+    <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[6].label}</th>
+  </tr>
+  <tr style="background:#f0f0f0;height:16px;max-height:16px;">
+    ${HDR.map(h=>`<td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;height:16px;">${h.time}</td>`).join("")}
+  </tr>`;
+
+  // หา assemblyDay จากห้องที่ครูสอน (ใช้ level ของห้องแรก)
+  const teacherRooms=[...new Set(
+    Object.keys(S.schedule).flatMap(k=>
+      (S.schedule[k]||[]).filter(e=>e.teacherId===teacher.id||(e.coTeacherIds||[]).includes(teacher.id))
+        .map(()=>k.split("_")[0])
+    )
+  )].map(id=>S.rooms.find(r=>r.id===id)).filter(Boolean);
+
+  const DAYS_TH=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
+  let body="";
+
+  DAYS_TH.forEach((day,di)=>{
+    const D=[1,2,3,4,5,6,7].map(pid=>getCells(day,pid));
+    const bgRow=di%2===0?"":"background:#fafafa;";
+
+    // หา assemblyDay ของห้องที่ครูสอนในวันนี้ (ถ้ามี)
+    const roomsThisDay=teacherRooms.filter(rm=>{
+      const lvl=S.levels.find(l=>l.id===rm.levelId);
+      return lvl?.assemblyDay===day;
+    });
+    const isAsm=roomsThisDay.length>0;
+    const hmTxt=isAsm?"หอประชุม Assembly":"Homeroom";
+    const hmBg=isAsm?"#e8f5e9":"#fafff7";
+
+    // teacher PDF: แต่ละ cell มี 2 แถว — ชื่อวิชา / ห้อง+ชื่ออังกฤษ
+    const cell1=(arr)=>{ // แถวบน: ชื่อวิชาไทย
+      const v=arr.map(c=>c.th).filter(Boolean).join("<br>");
+      return`<td style="border:1px solid #ddd;border-bottom:none;text-align:center;vertical-align:middle;padding:1px;font-size:8.5pt;font-weight:bold;">${v}</td>`;
+    };
+    const cell2=(arr)=>{ // แถวล่าง: ห้อง + ชื่ออังกฤษ
+      const v=arr.map(c=>`${c.room}${c.en?" — "+c.en:""}`).filter(Boolean).join("<br>");
+      return`<td style="border:1px solid #ddd;border-top:none;text-align:center;vertical-align:middle;padding:1px;font-size:7.5pt;color:#1a237e;">${v}</td>`;
+    };
+    const BKcell=(rows,txt)=>
+      `<td rowspan="${rows}" style="border:1px solid #888;background:#fffde7;padding:0;vertical-align:middle;">${vert(txt)}</td>`;
+
+    body+=`
+      <tr style="height:22px;${bgRow}">
+        <td rowspan="2" style="border:1px solid #888;text-align:center;font-weight:bold;font-size:8.5pt;vertical-align:middle;background:#f5f5f5;">${day}</td>
+        <td rowspan="2" style="border:1px solid #888;background:${hmBg};padding:0;vertical-align:middle;">${vert(hmTxt,hmBg,"bold","7pt")}</td>
+        ${cell1(D[0])}${cell1(D[1])}
+        ${BKcell(2,"พักน้อย  15  นาที")}
+        ${cell1(D[2])}${cell1(D[3])}
+        ${BKcell(2,"พักกลางวัน  55  นาที")}
+        ${cell1(D[4])}${cell1(D[5])}
+        ${BKcell(2,"พักน้อย  10  นาที")}
+        ${cell1(D[6])}
+      </tr>
+      <tr style="height:18px;${bgRow}">
+        ${cell2(D[0])}${cell2(D[1])}
+        ${cell2(D[2])}${cell2(D[3])}
+        ${cell2(D[4])}${cell2(D[5])}
+        ${cell2(D[6])}
+      </tr>`;
+  });
+
+  return`
+    <div style="text-align:center;margin-bottom:5px;font-family:'TH SarabunNew','Sarabun',sans-serif;">
+      ${logoImg}<b style="font-size:13pt;">${title}&emsp;&emsp;ปีการศึกษา ${yr}</b>
+      ${dept?`<div style="font-size:9pt;color:#555;">${dept}</div>`:""}
+    </div>
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-family:'TH SarabunNew','Sarabun',sans-serif;">
+      ${colgroup}
+      <thead>${hdrRow}</thead>
+      <tbody>${body}</tbody>
+    </table>`;
 }
 
 function pdfPage(title, subtitle, dayRows, footerText, logoBase64) {
