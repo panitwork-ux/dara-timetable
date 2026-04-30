@@ -4005,6 +4005,8 @@ function Reports({S,U,st,gc,ay,sh}){
   const [newRoomPDFOpts,setNewRoomPDFOpts]=useState({selectedRooms:[],layout:"2portrait"});
   const [showNewTeacherPDF,setShowNewTeacherPDF]=useState(false);
   const [selectedTeachersPDF,setSelectedTeachersPDF]=useState([]);
+  const [showExcelModal,setShowExcelModal]=useState(false);
+  const [excelSelectedRooms,setExcelSelectedRooms]=useState([]);
   const roomSt=S.rooms.map(rm=>{let f=0;DAYS.forEach(d=>PERIODS.forEach(p=>{const k=`${rm.id}_${d}_${p.id}`;if(S.schedule[k]?.length)f++}));const total=DAYS.length*PERIODS.length;return{room:rm,filled:f,total,pct:Math.round(f/total*100)}});
   const teacherSt=S.teachers.map(t=>{
     const tot=t.totalPeriods||0;
@@ -4057,20 +4059,30 @@ function Reports({S,U,st,gc,ay,sh}){
   };
 
   const exportRoomScheduleXLSX=async(rooms)=>{
-    const roomList=rooms||S.rooms;
+    const roomList=Array.isArray(rooms)?rooms:(rooms?[rooms]:S.rooms);
     if(!roomList.length){st("ไม่มีห้องเรียน","error");return;}
+    st("กำลังโหลด library...","warning");
 
-    // โหลด SheetJS ถ้ายังไม่มี
+    // โหลด SheetJS — ลอง unpkg ถ้า cdnjs ไม่ผ่าน
     let XLib=window.XLSX;
     if(!XLib){
-      await new Promise((res,rej)=>{
-        const s=document.createElement("script");
-        s.src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-        s.onload=res; s.onerror=rej;
-        document.head.appendChild(s);
-      });
-      XLib=window.XLSX;
+      for(const src of[
+        "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
+        "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js",
+      ]){
+        try{
+          await new Promise((res,rej)=>{
+            const s=document.createElement("script");
+            s.src=src; s.onload=res;
+            s.onerror=()=>rej(new Error("fail"));
+            document.head.appendChild(s);
+          });
+          XLib=window.XLSX;
+          if(XLib) break;
+        }catch(e){continue;}
+      }
     }
+    if(!XLib){st("โหลด library ไม่สำเร็จ กรุณาตรวจสอบ internet","error");return;}
 
     const DAYS_TH=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
     const PERIOD_TIMES=[
@@ -4088,7 +4100,7 @@ function Reports({S,U,st,gc,ay,sh}){
           const entries=S.schedule[room.id+"_"+day+"_"+p.id]||[];
           if(!entries.length){
             rows.push([day,"",p.start,p.end,""]);
-          } else {
+          }else{
             entries.forEach(e=>{
               const sub=S.subjects.find(s=>s.id===e.subjectId);
               const tch=S.teachers.find(t=>t.id===e.teacherId);
@@ -4101,8 +4113,11 @@ function Reports({S,U,st,gc,ay,sh}){
       ws["!cols"]=[{wch:12},{wch:15},{wch:10},{wch:10},{wch:25}];
       XLib.utils.book_append_sheet(wb,ws,room.name.slice(0,31));
     });
-    XLib.writeFile(wb,`ตารางสอนห้องเรียน_${ay?.year||"2568"}.xlsx`);
-    st(`Export ${roomList.length} ห้อง สำเร็จ`);
+    const fname=roomList.length===1
+      ?`ตารางสอน_${roomList[0].name}_${ay?.year||"2568"}.xlsx`
+      :`ตารางสอนห้องเรียน_${ay?.year||"2568"}.xlsx`;
+    XLib.writeFile(wb,fname);
+    st(`✅ Export ${roomList.length} ห้อง สำเร็จ`);
   };
 
   // Import schedule จาก JSON
@@ -4530,7 +4545,7 @@ function Reports({S,U,st,gc,ay,sh}){
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
               <button onClick={printAllRoomsPDF} style={{...BS("#DB2777"),fontSize:12,padding:"7px 16px"}}>พิมพ์ทุกห้อง (แบบเดิม)</button>
               <button onClick={()=>{setNewRoomPDFOpts({selectedRooms:[],layout:"2portrait"});setShowNewRoomPDF(true);}} style={{...BS("#7C3AED"),fontSize:12,padding:"7px 16px"}}>🆕 PDF แบบใหม่</button>
-              <button onClick={()=>exportRoomScheduleXLSX()} style={{...BS("#059669"),fontSize:12,padding:"7px 16px"}}><Icon name="download" size={13}/>📊 Excel ตารางห้อง (import format)</button>
+              <button onClick={()=>{setExcelSelectedRooms([]);setShowExcelModal(true);}} style={{...BS("#059669"),fontSize:12,padding:"7px 16px"}}><Icon name="download" size={13}/>📊 Excel ตารางห้อง</button>
             </div>
             <div style={{marginTop:8,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
               <span style={{fontSize:12,color:"#6B7280"}}>รายระดับ:</span>
@@ -4661,7 +4676,53 @@ function Reports({S,U,st,gc,ay,sh}){
         </div>
       )}
 
-      {/* Modal: พิมพ์ตารางสอนครูแบบใหม่ */}
+      {/* Modal: Export Excel ตารางห้อง */}
+      {showExcelModal&&(
+        <div style={{position:"fixed",inset:0,zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.5)"}}>
+          <div style={{background:"#fff",borderRadius:16,boxShadow:"0 20px 60px rgba(0,0,0,0.3)",width:"min(520px,94%)",maxHeight:"90vh",overflowY:"auto",padding:24,fontFamily:"inherit"}}>
+            <div style={{fontSize:16,fontWeight:800,marginBottom:4}}>📊 Export Excel ตารางห้องเรียน</div>
+            <div style={{fontSize:11,color:"#6B7280",marginBottom:16}}>แต่ละห้อง = 1 sheet · format: วัน/รหัสวิชา/เวลา/รหัสครู</div>
+
+            <div>
+              <label style={LS}>เลือกห้องที่ต้องการ export</label>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",maxHeight:200,overflowY:"auto",padding:6,border:"1px solid #E5E7EB",borderRadius:8}}>
+                {[...S.rooms].sort((a,b)=>{
+                  const la=S.levels.find(l=>l.id===a.levelId)?.name||"";
+                  const lb=S.levels.find(l=>l.id===b.levelId)?.name||"";
+                  if(la!==lb)return la.localeCompare(lb,"th");
+                  return a.name.localeCompare(b.name,"th");
+                }).map(r=>{
+                  const sel=excelSelectedRooms.includes(r.id);
+                  return<button key={r.id}
+                    onClick={()=>setExcelSelectedRooms(p=>sel?p.filter(id=>id!==r.id):[...p,r.id])}
+                    style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${sel?"#059669":"#E5E7EB"}`,background:sel?"#059669":"#fff",color:sel?"#fff":"#374151",fontSize:12,fontWeight:sel?700:400,cursor:"pointer"}}>
+                    {r.name}
+                  </button>;
+                })}
+              </div>
+              <div style={{display:"flex",gap:6,marginTop:6,alignItems:"center"}}>
+                <button onClick={()=>setExcelSelectedRooms(S.rooms.map(r=>r.id))} style={{fontSize:11,color:"#059669",background:"none",border:"1px solid #D1FAE5",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>เลือกทั้งหมด</button>
+                <button onClick={()=>setExcelSelectedRooms([])} style={{fontSize:11,color:"#6B7280",background:"none",border:"1px solid #E5E7EB",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>ล้าง</button>
+                <span style={{fontSize:11,color:"#6B7280"}}>เลือกแล้ว {excelSelectedRooms.length} ห้อง → {excelSelectedRooms.length} sheets</span>
+              </div>
+            </div>
+
+            <div style={{display:"flex",gap:10,marginTop:20}}>
+              <button onClick={()=>setShowExcelModal(false)} style={{...BO(),flex:1}}>ยกเลิก</button>
+              <button
+                disabled={!excelSelectedRooms.length}
+                onClick={async()=>{
+                  const rooms=S.rooms.filter(r=>excelSelectedRooms.includes(r.id));
+                  setShowExcelModal(false);
+                  await exportRoomScheduleXLSX(rooms);
+                }}
+                style={{...BS("#059669"),flex:2,opacity:excelSelectedRooms.length?1:0.4}}>
+                <Icon name="download" size={14}/>📊 Export ({excelSelectedRooms.length} ห้อง)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {showNewTeacherPDF&&(
         <div style={{position:"fixed",inset:0,zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.5)"}}>
           <div style={{background:"#fff",borderRadius:16,boxShadow:"0 20px 60px rgba(0,0,0,0.3)",width:"min(560px,94%)",maxHeight:"90vh",overflowY:"auto",padding:24,fontFamily:"inherit"}}>
