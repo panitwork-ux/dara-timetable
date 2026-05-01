@@ -4111,7 +4111,8 @@ function Reports({S,U,st,gc,ay,sh}){
       });
       const ws=XLib.utils.aoa_to_sheet(rows);
       ws["!cols"]=[{wch:12},{wch:15},{wch:10},{wch:10},{wch:25}];
-      XLib.utils.book_append_sheet(wb,ws,room.name.slice(0,31));
+      const sheetName=room.name.replace(/[:\\\/\?\*\[\]]/g,"").trim().slice(0,31)||"Room"+i;
+      XLib.utils.book_append_sheet(wb,ws,sheetName);
     });
     const fname=roomList.length===1
       ?`ตารางสอน_${roomList[0].name}_${ay?.year||"2568"}.xlsx`
