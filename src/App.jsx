@@ -2499,8 +2499,10 @@ function SchedulerEntryCard({entry,cellKey,lk,cellCount,selT,mode,S,U,gc,setDrag
             <div style={{fontWeight:700,color:dimmed?"#9CA3AF":c.tx,fontSize:10,lineHeight:1.3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
               {subDisplayName(sub)||sub?.code}
             </div>
-            {/* ชื่อครู ใน compact */}
-            {et&&<div style={{fontSize:9,color:dimmed?"#9CA3AF":c.tx,opacity:0.75,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{et.firstName}</div>}
+            {/* ชื่อครู + ครูร่วม ใน compact */}
+            {et&&<div style={{fontSize:9,color:dimmed?"#9CA3AF":c.tx,opacity:0.75,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+              {et.firstName}{coTeachers.length>0&&<span style={{color:"#7C3AED",fontWeight:700}}>{" +"+coTeachers.map(t=>t.firstName).join(",")}</span>}
+            </div>}
             {/* action buttons สำหรับ compact — แสดงเมื่อ hover */}
             {!lk&&(
               <div style={{position:"absolute",top:1,right:1,display:"flex",gap:1,opacity:showActions?1:0,transition:"opacity 0.15s"}}>
@@ -3470,7 +3472,17 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                   : a.totalPeriods;
                 const rem=totalForCard-u;
                 const coIds2=Array.isArray(cardCoMap[a.id])?cardCoMap[a.id]:(cardCoMap[a.id]?[cardCoMap[a.id]]:[]);
-                const coTeachers2=coIds2.map(id=>S.teachers.find(t=>t.id===id)).filter(Boolean);
+                // รวม co-teacher จาก schedule entries จริง
+                const coIdsFromSchedule=new Set();
+                Object.values(S.schedule).forEach(en=>(en||[]).forEach(e=>{
+                  if(e.assignmentId===a.id){
+                    const ids=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
+                    ids.forEach(id=>coIdsFromSchedule.add(id));
+                  }
+                }));
+                // merge: cardCoMap (UI) + schedule entries
+                const allCoIds=[...new Set([...coIds2,...coIdsFromSchedule])];
+                const coTeachers2=allCoIds.map(id=>S.teachers.find(t=>t.id===id)).filter(Boolean);
                 const buns=bundleMap[a.id]||[];
                 return (
                   <div key={a.id} style={{background:rem<=0?"#F3F4F6":lc.bg,border:`1.5px solid ${rem<=0?"#D1D5DB":lc.border}`,borderRadius:12,padding:"10px 12px",marginBottom:10,boxShadow:rem<=0?"none":`0 2px 8px ${lc.head}22`,transition:"all 0.2s",position:"relative"}}>
@@ -3527,12 +3539,16 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                       <div style={{marginTop:8,padding:"8px 10px",background:"rgba(0,0,0,0.04)",borderRadius:8,border:`1px solid ${lc.border}`}}>
                         {/* ครูร่วม */}
                         <div style={{fontSize:10,fontWeight:700,color:lc.tx,marginBottom:5}}>👥 ครูร่วม</div>
-                        {coTeachers2.map((ct2)=>(
-                          <div key={ct2.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
-                            <span style={{fontSize:10,color:lc.tx}}>{ct2.firstName} {ct2.lastName}</span>
-                            <button onClick={()=>setCardCoMap(p=>({...p,[a.id]:coIds2.filter(id=>id!==ct2.id)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,fontSize:12}}>✕</button>
-                          </div>
-                        ))}
+                        {coTeachers2.map((ct2)=>{
+                          const isFromSchedule=coIdsFromSchedule.has(ct2.id);
+                          return<div key={ct2.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
+                            <span style={{fontSize:10,color:lc.tx}}>
+                              {ct2.firstName} {ct2.lastName}
+                              {isFromSchedule&&<span style={{fontSize:8,color:"#059669",marginLeft:3}}>📅ลงตารางแล้ว</span>}
+                            </span>
+                            {!isFromSchedule&&<button onClick={()=>setCardCoMap(p=>({...p,[a.id]:coIds2.filter(id=>id!==ct2.id)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,fontSize:12}}>✕</button>}
+                          </div>;
+                        })}
                         {coTeachers2.length<4&&(
                           <button onClick={()=>{ setShowGearId(null); setCardCoM(a.id); }} style={{fontSize:10,color:lc.head,background:"rgba(0,0,0,0.06)",border:`1px solid ${lc.border}`,borderRadius:6,padding:"3px 8px",cursor:"pointer",width:"100%",textAlign:"left",marginBottom:6}}>
                             + เพิ่มครูร่วม ({coTeachers2.length}/4)
