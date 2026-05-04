@@ -4021,6 +4021,7 @@ function Reports({S,U,st,gc,ay,sh}){
   const [newRoomPDFOpts,setNewRoomPDFOpts]=useState({selectedRooms:[],layout:"2portrait"});
   const [showNewTeacherPDF,setShowNewTeacherPDF]=useState(false);
   const [selectedTeachersPDF,setSelectedTeachersPDF]=useState([]);
+  const [teacherSearchQ,setTeacherSearchQ]=useState("");
   const [showExcelModal,setShowExcelModal]=useState(false);
   const [excelSelectedRooms,setExcelSelectedRooms]=useState([]);
   const roomSt=S.rooms.map(rm=>{let f=0;DAYS.forEach(d=>PERIODS.forEach(p=>{const k=`${rm.id}_${d}_${p.id}`;if(S.schedule[k]?.length)f++}));const total=DAYS.length*PERIODS.length;return{room:rm,filled:f,total,pct:Math.round(f/total*100)}});
@@ -4377,7 +4378,7 @@ function Reports({S,U,st,gc,ay,sh}){
       body+=`
         <tr style="height:20px;max-height:20px;">
           <td rowspan="3" style="border:1px solid #888;text-align:center;font-weight:bold;font-size:8.5pt;vertical-align:middle;background:#f5f5f5;">${day}</td>
-          <td rowspan="3" style="border:1px solid #888;background:${hmBg};padding:0;vertical-align:middle;text-align:center;">${vert(hmTxt,hmBg,"bold","7pt")}</td>
+          <td rowspan="3" style="border:1px solid #888;background:${hmBg};padding:0;vertical-align:middle;text-align:center;overflow:hidden;max-width:20px;">${vert(hmTxt,hmBg,"bold","7pt")}</td>
           ${cellTop(D[0],"th")}${cellTop(D[1],"th")}
           ${bk?BKcell(TOTAL_ROWS,"พักน้อย 15 นาที"):""}
           ${cellTop(D[2],"th")}${cellTop(D[3],"th")}
@@ -4546,7 +4547,7 @@ function Reports({S,U,st,gc,ay,sh}){
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
               <button onClick={printAllTeachersPDF} style={{...BS("#DC2626"),fontSize:12,padding:"7px 16px"}}>พิมพ์ทุกคน (แบบเดิม)</button>
               <button onClick={printMasterByDept} style={{...BS("#991B1B"),fontSize:12,padding:"7px 16px"}}>รวมกลุ่มสาระ</button>
-              <button onClick={()=>{setSelectedTeachersPDF([]);setShowNewTeacherPDF(true);}} style={{...BS("#7C3AED"),fontSize:12,padding:"7px 16px"}}>🆕 พิมพ์แบบใหม่ (2คน/หน้า)</button>
+              <button onClick={()=>{setSelectedTeachersPDF([]);setTeacherSearchQ("");setShowNewTeacherPDF(true);}} style={{...BS("#7C3AED"),fontSize:12,padding:"7px 16px"}}>🆕 พิมพ์แบบใหม่ (2คน/หน้า)</button>
             </div>
             <div style={{marginTop:8,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
               <span style={{fontSize:12,color:"#6B7280"}}>รายคน:</span>
@@ -4751,12 +4752,24 @@ function Reports({S,U,st,gc,ay,sh}){
             <div style={{fontSize:11,color:"#6B7280",marginBottom:16}}>A4 แนวตั้ง — 2 คนต่อหน้า · แสดงวิชา+ห้อง+ชื่ออังกฤษ</div>
             <div>
               <label style={LS}>เลือกครู (กดหลายคนได้)</label>
+              <input
+                style={{...IS,marginBottom:8,fontSize:12}}
+                placeholder="🔍 ค้นหาชื่อครู..."
+                value={teacherSearchQ||""}
+                onChange={e=>setTeacherSearchQ(e.target.value)}
+              />
               <div style={{display:"flex",gap:6,flexWrap:"wrap",maxHeight:220,overflowY:"auto",padding:6,border:"1px solid #E5E7EB",borderRadius:8}}>
                 {[...S.teachers].sort((a,b)=>{
                   const da=S.depts.find(d=>d.id===a.departmentId)?.name||"";
                   const db=S.depts.find(d=>d.id===b.departmentId)?.name||"";
                   if(da!==db)return da.localeCompare(db,"th");
                   return a.firstName.localeCompare(b.firstName,"th");
+                }).filter(t=>{
+                  const q=(teacherSearchQ||"").trim().toLowerCase();
+                  if(!q) return true;
+                  const full=(t.prefix+t.firstName+" "+t.lastName).toLowerCase();
+                  const dept=(S.depts.find(d=>d.id===t.departmentId)?.name||"").toLowerCase();
+                  return full.includes(q)||dept.includes(q);
                 }).map(t=>{
                   const sel=selectedTeachersPDF.includes(t.id);
                   const dept=S.depts.find(d=>d.id===t.departmentId)?.name||"";
@@ -5114,14 +5127,9 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
     const D=[1,2,3,4,5,6,7].map(pid=>getCells(day,pid));
     const bgRow=di%2===0?"":"background:#fafafa;";
 
-    // หา assemblyDay ของห้องที่ครูสอนในวันนี้ (ถ้ามี)
-    const roomsThisDay=teacherRooms.filter(rm=>{
-      const lvl=S.levels.find(l=>l.id===rm.levelId);
-      return lvl?.assemblyDay===day;
-    });
-    const isAsm=roomsThisDay.length>0;
-    const hmTxt=isAsm?"หอประชุม Assembly":"Homeroom";
-    const hmBg=isAsm?"#e8f5e9":"#fafff7";
+    // ตารางสอนครู: homeroom column แสดง "Homeroom" เสมอ ไม่มี assembly
+    const hmTxt="Homeroom";
+    const hmBg="#fafff7";
 
     // teacher PDF: แต่ละ cell มี 2 แถว — ชื่อวิชา / ห้อง (ครูชื่อ)
     const cell1=(arr)=>{ // แถวบน: ชื่อวิชาไทย กึ่งกลาง
