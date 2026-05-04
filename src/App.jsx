@@ -4300,7 +4300,10 @@ function Reports({S,U,st,gc,ay,sh}){
 
     // vert cell: ข้อความแนวตั้ง
     const vert=(txt,bg="#fffde7",fw="normal",fs="7.5pt")=>
-      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:${fs};font-weight:${fw};letter-spacing:3px;text-align:center;word-break:keep-all;">${txt}</div>`;
+      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};font-weight:${fw};letter-spacing:3px;text-align:center;">${txt}</div>`;
+    // homeroom cell: ไม่มี letter-spacing, รองรับ 2 บรรทัด
+    const vertHM=(txt,fw="normal",fs="7pt")=>
+      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:${fs};font-weight:${fw};text-align:center;word-break:keep-all;">${txt}</div>`;
 
     const HDR=[
       {label:"คาบ 1",time:"08.30 - 09.20"},
@@ -4378,7 +4381,7 @@ function Reports({S,U,st,gc,ay,sh}){
       body+=`
         <tr style="height:20px;max-height:20px;">
           <td rowspan="3" style="border:1px solid #888;text-align:center;font-weight:bold;font-size:8.5pt;vertical-align:middle;background:#f5f5f5;">${day}</td>
-          <td rowspan="3" style="border:1px solid #888;background:${hmBg};padding:0;vertical-align:middle;text-align:center;overflow:hidden;max-width:20px;">${vert(hmTxt,hmBg,"bold","7pt")}</td>
+          <td rowspan="3" style="border:1px solid #888;background:${hmBg};padding:0;vertical-align:middle;text-align:center;overflow:hidden;max-width:20px;">${vertHM(hmTxt,"bold","7pt")}</td>
           ${cellTop(D[0],"th")}${cellTop(D[1],"th")}
           ${bk?BKcell(TOTAL_ROWS,"พักน้อย 15 นาที"):""}
           ${cellTop(D[2],"th")}${cellTop(D[3],"th")}
