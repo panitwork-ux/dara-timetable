@@ -4300,7 +4300,7 @@ function Reports({S,U,st,gc,ay,sh}){
 
     // vert cell: ข้อความแนวตั้ง
     const vert=(txt,bg="#fffde7",fw="normal",fs="7.5pt")=>
-      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};font-weight:${fw};letter-spacing:3px;text-align:center;">${txt}</div>`;
+      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:${fs};font-weight:${fw};letter-spacing:3px;text-align:center;word-break:keep-all;">${txt}</div>`;
 
     const HDR=[
       {label:"คาบ 1",time:"08.30 - 09.20"},
@@ -4349,8 +4349,8 @@ function Reports({S,U,st,gc,ay,sh}){
 
     DAYS_TH.forEach((day,di)=>{
       const isAsm=asmDay===day;
-      // Homeroom: คำเดียว "Homeroom" หรือ 2 คำ "หอประชุม Assembly"
-      const hmTxt=isAsm?"หอประชุม Assembly":"Homeroom";
+      // Homeroom: "Homeroom" หรือ "หอประชุม↵Assembly" (2 บรรทัด เพื่อไม่ให้ cell กว้าง)
+      const hmTxt=isAsm?"หอประชุม<br>Assembly":"Homeroom";
       const hmBg=isAsm?"#e8f5e9":"#fafff7";
       const D=[1,2,3,4,5,6,7].map(pid=>getCells(day,pid));
 
