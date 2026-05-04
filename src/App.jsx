@@ -4298,8 +4298,8 @@ function Reports({S,U,st,gc,ay,sh}){
     </colgroup>`;
 
     // vert cell: ข้อความแนวตั้ง
-    const vert=(txt,bg="#fffde7",fw="normal",fs="7pt")=>
-      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};font-weight:${fw};padding:2px 0;text-align:center;">${txt}</div>`;
+    const vert=(txt,bg="#fffde7",fw="normal",fs="7.5pt")=>
+      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};font-weight:${fw};letter-spacing:3px;width:100%;height:100%;display:flex;align-items:center;justify-content:center;">${txt}</div>`;
 
     const HDR=[
       {label:"คาบ 1",time:"08.30 - 09.20"},
@@ -4318,7 +4318,7 @@ function Reports({S,U,st,gc,ay,sh}){
 
     // Header row1 — ชื่อคาบ (break columns มี rowspan=2)
     const h1row=`<tr style="background:#f0f0f0;height:22px;max-height:22px;">
-      <th rowspan="2" style="border:1px solid #666;padding:0;position:relative;vertical-align:middle;font-size:7pt;height:38px;max-height:38px;overflow:hidden;">
+      <th rowspan="2" style="border:1px solid #666;padding:0;position:relative;vertical-align:middle;font-size:7pt;height:38px;">
         <div style="position:absolute;top:0;left:0;width:100%;height:100%;">
           <svg style="position:absolute;top:0;left:0;width:100%;height:100%;" preserveAspectRatio="none">
             <line x1="0" y1="0" x2="100%" y2="100%" stroke="#888" stroke-width="0.8"/>
@@ -4327,16 +4327,16 @@ function Reports({S,U,st,gc,ay,sh}){
           <div style="position:absolute;bottom:2px;left:2px;font-size:5.5pt;color:#555;">วัน</div>
         </div>
       </th>
-      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;max-height:38px;overflow:hidden;">${vert(BRK[0],"#fffde7","normal","6.5pt")}</th>
+      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;display:table-cell;vertical-align:middle;text-align:center;">${vert(BRK[0],"#fffde7","normal","7pt")}</th>
       <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[0].label}</th>
       <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[1].label}</th>
-      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;max-height:38px;overflow:hidden;">${vert(BRK[1],"#fffde7","normal","6.5pt")}</th>
+      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;display:table-cell;vertical-align:middle;text-align:center;">${vert(BRK[1],"#fffde7","normal","7pt")}</th>
       <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[2].label}</th>
       <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[3].label}</th>
-      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;max-height:38px;overflow:hidden;">${vert(BRK[2],"#fffde7","normal","6.5pt")}</th>
+      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;display:table-cell;vertical-align:middle;text-align:center;">${vert(BRK[2],"#fffde7","normal","7pt")}</th>
       <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[4].label}</th>
       <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[5].label}</th>
-      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;max-height:38px;overflow:hidden;">${vert(BRK[3],"#fffde7","normal","6.5pt")}</th>
+      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;display:table-cell;vertical-align:middle;text-align:center;">${vert(BRK[3],"#fffde7","normal","7pt")}</th>
       <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[6].label}</th>
     </tr>
     <tr style="background:#f0f0f0;height:16px;max-height:16px;">
@@ -4368,7 +4368,7 @@ function Reports({S,U,st,gc,ay,sh}){
       const cellBot=(arr,type)=>cell(arr,type).replace("border-bottom:none;","border-bottom:1px solid #888;");
 
       const BKcell=(rows,vtext,bg="#fffde7")=>
-        `<td rowspan="${rows}" style="border:1px solid #888;background:${bg};padding:0;vertical-align:middle;">${vert(vtext,bg,"normal","6.5pt")}</td>`;
+        `<td rowspan="${rows}" style="border:1px solid #888;background:${bg};padding:0;vertical-align:middle;height:100%;">${vert(vtext,bg,"normal","7.5pt")}</td>`;
 
       // break columns ใส่เฉพาะวันแรก (di===0) ด้วย rowspan=15 (5วัน × 3แถว)
       const bk=di===0;
@@ -5060,7 +5060,7 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
   </colgroup>`;
 
   const vert=(txt,bg="#fffde7",fw="normal",fs="6.5pt")=>
-    `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};font-weight:${fw};padding:2px 0;text-align:center;">${txt}</div>`;
+    `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};font-weight:${fw};letter-spacing:3px;width:100%;height:100%;display:flex;align-items:center;justify-content:center;">${txt}</div>`;
 
   const HDR=[
     {label:"คาบ 1",time:"08.30 - 09.20"},
@@ -5074,7 +5074,7 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
   const BRK=["08.00-08.30","10.10-10.25","12.05-13.00","14.40-14.50"];
 
   const hdrRow=`<tr style="background:#f0f0f0;height:22px;max-height:22px;">
-    <th rowspan="2" style="border:1px solid #666;padding:0;position:relative;vertical-align:middle;font-size:7pt;height:38px;max-height:38px;overflow:hidden;">
+    <th rowspan="2" style="border:1px solid #666;padding:0;position:relative;vertical-align:middle;font-size:7pt;height:38px;">
       <div style="position:absolute;top:0;left:0;width:100%;height:100%;">
         <svg style="position:absolute;top:0;left:0;width:100%;height:100%;" preserveAspectRatio="none">
           <line x1="0" y1="0" x2="100%" y2="100%" stroke="#888" stroke-width="0.8"/>
@@ -5083,16 +5083,16 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
         <div style="position:absolute;bottom:2px;left:2px;font-size:5.5pt;color:#555;">วัน</div>
       </div>
     </th>
-    <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;max-height:38px;overflow:hidden;">${vert(BRK[0])}</th>
+    <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;vertical-align:middle;text-align:center;">${vert(BRK[0])}</th>
     <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[0].label}</th>
     <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[1].label}</th>
-    <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;max-height:38px;overflow:hidden;">${vert(BRK[1])}</th>
+    <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;vertical-align:middle;text-align:center;">${vert(BRK[1])}</th>
     <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[2].label}</th>
     <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[3].label}</th>
-    <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;max-height:38px;overflow:hidden;">${vert(BRK[2])}</th>
+    <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;vertical-align:middle;text-align:center;">${vert(BRK[2])}</th>
     <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[4].label}</th>
     <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[5].label}</th>
-    <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;max-height:38px;overflow:hidden;">${vert(BRK[3])}</th>
+    <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;vertical-align:middle;text-align:center;">${vert(BRK[3])}</th>
     <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[6].label}</th>
   </tr>
   <tr style="background:#f0f0f0;height:16px;max-height:16px;">
@@ -5219,9 +5219,9 @@ function pdfPage(title, subtitle, dayRows, footerText, logoBase64) {
     'th.period-time{font-size:9px;height:18px;font-weight:400}' +
     'th.day-col{width:52px;font-size:11px;font-weight:700}' +
     'td.day-cell{font-weight:700;font-size:12px;padding:4px 2px;width:52px}' +
-    'td.slot{padding:3px 2px;vertical-align:middle;height:68px}' +
+    'td.slot{padding:3px 2px;vertical-align:middle;height:68px;text-align:center}' +
     'td.slot-hi{background:#FEF9C3}' +
-    '.ent{margin-bottom:2px}' +
+    '.ent{margin-bottom:2px;display:flex;flex-direction:column;align-items:center;justify-content:center}' +
     '.ent-sub{font-weight:700;font-size:11px;line-height:1.3}' +
     '.ent-room{font-size:10px;color:#111;line-height:1.25}' +
     '.ent-room2{font-size:9px;color:#333;line-height:1.2}' +
