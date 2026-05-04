@@ -4299,7 +4299,7 @@ function Reports({S,U,st,gc,ay,sh}){
 
     // vert cell: ข้อความแนวตั้ง
     const vert=(txt,bg="#fffde7",fw="normal",fs="7.5pt")=>
-      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};font-weight:${fw};letter-spacing:3px;width:100%;height:100%;display:flex;align-items:center;justify-content:center;">${txt}</div>`;
+      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};font-weight:${fw};letter-spacing:3px;text-align:center;">${txt}</div>`;
 
     const HDR=[
       {label:"คาบ 1",time:"08.30 - 09.20"},
@@ -4368,16 +4368,16 @@ function Reports({S,U,st,gc,ay,sh}){
       const cellBot=(arr,type)=>cell(arr,type).replace("border-bottom:none;","border-bottom:1px solid #888;");
 
       const BKcell=(rows,vtext,bg="#fffde7")=>
-        `<td rowspan="${rows}" style="border:1px solid #888;background:${bg};padding:0;vertical-align:middle;height:100%;">${vert(vtext,bg,"normal","7.5pt")}</td>`;
+        `<td rowspan="${rows}" style="border:1px solid #888;background:${bg};padding:0;vertical-align:middle;text-align:center;">${vert(vtext,bg,"normal","7.5pt")}</td>`;
 
       // break columns ใส่เฉพาะวันแรก (di===0) ด้วย rowspan=15 (5วัน × 3แถว)
       const bk=di===0;
       const TOTAL_ROWS=DAYS_TH.length*3;
 
       body+=`
-        <tr style="height:20px;">
+        <tr style="height:20px;max-height:20px;">
           <td rowspan="3" style="border:1px solid #888;text-align:center;font-weight:bold;font-size:8.5pt;vertical-align:middle;background:#f5f5f5;">${day}</td>
-          <td rowspan="3" style="border:1px solid #888;background:${hmBg};padding:0;vertical-align:middle;">${vert(hmTxt,hmBg,"bold","7pt")}</td>
+          <td rowspan="3" style="border:1px solid #888;background:${hmBg};padding:0;vertical-align:middle;text-align:center;">${vert(hmTxt,hmBg,"bold","7pt")}</td>
           ${cellTop(D[0],"th")}${cellTop(D[1],"th")}
           ${bk?BKcell(TOTAL_ROWS,"พักน้อย 15 นาที"):""}
           ${cellTop(D[2],"th")}${cellTop(D[3],"th")}
@@ -4386,13 +4386,13 @@ function Reports({S,U,st,gc,ay,sh}){
           ${bk?BKcell(TOTAL_ROWS,"พักน้อย 10 นาที"):""}
           ${cellTop(D[6],"th")}
         </tr>
-        <tr style="height:17px;">
+        <tr style="height:17px;max-height:17px;">
           ${cell(D[0],"en")}${cell(D[1],"en")}
           ${cell(D[2],"en")}${cell(D[3],"en")}
           ${cell(D[4],"en")}${cell(D[5],"en")}
           ${cell(D[6],"en")}
         </tr>
-        <tr style="height:17px;">
+        <tr style="height:17px;max-height:17px;">
           ${cellBot(D[0],"tch")}${cellBot(D[1],"tch")}
           ${cellBot(D[2],"tch")}${cellBot(D[3],"tch")}
           ${cellBot(D[4],"tch")}${cellBot(D[5],"tch")}
@@ -4410,7 +4410,7 @@ function Reports({S,U,st,gc,ay,sh}){
       <div style="text-align:center;margin-bottom:5px;font-family:'TH SarabunNew','Sarabun',sans-serif;">
         ${logoImg}<b style="font-size:13pt;">${title}&emsp;&emsp;ปีการศึกษา ${yr}</b>
       </div>
-      <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed;overflow:hidden;">
         ${colgroup}
         <thead>${h1row}</thead>
         <tbody>${body}</tbody>
@@ -4448,7 +4448,7 @@ function Reports({S,U,st,gc,ay,sh}){
     <style>
       @page{size:${pageSize};margin:0}
       body{font-family:'TH SarabunNew','Sarabun','Arial',sans-serif;margin:0;padding:0;}
-      td,th{word-wrap:break-word;overflow:hidden;line-height:1.15;}
+      td,th{word-wrap:break-word;overflow:hidden;line-height:1.15;max-height:20px;}
       @media print{body{margin:0;}}
     </style></head><body>${pagesHTML}</body></html>`;
 
@@ -5060,7 +5060,7 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
   </colgroup>`;
 
   const vert=(txt,bg="#fffde7",fw="normal",fs="6.5pt")=>
-    `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};font-weight:${fw};letter-spacing:3px;width:100%;height:100%;display:flex;align-items:center;justify-content:center;">${txt}</div>`;
+    `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};font-weight:${fw};letter-spacing:3px;text-align:center;">${txt}</div>`;
 
   const HDR=[
     {label:"คาบ 1",time:"08.30 - 09.20"},
@@ -5133,7 +5133,7 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
       return`<td style="border:1px solid #ddd;border-top:none;text-align:center;vertical-align:middle;padding:2px 1px;font-size:7.5pt;color:#1a237e;">${v}</td>`;
     };
     const BKcell=(rows,txt)=>
-      `<td rowspan="${rows}" style="border:1px solid #888;background:#fffde7;padding:0;vertical-align:middle;">${vert(txt)}</td>`;
+      `<td rowspan="${rows}" style="border:1px solid #888;background:#fffde7;padding:0;vertical-align:middle;text-align:center;">${vert(txt)}</td>`;
 
     // break columns ใส่เฉพาะวันแรก rowspan=10 (5วัน × 2แถว)
     const bk=di===0;
