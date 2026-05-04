@@ -4343,6 +4343,7 @@ function Reports({S,U,st,gc,ay,sh}){
       ${[0,1,2,3,4,5,6].map(i=>`<td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;height:16px;">${HDR[i].time}</td>`).join("")}
     </tr>`;
 
+    const DAYS_TH=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
     let body="";
 
     DAYS_TH.forEach((day,di)=>{
