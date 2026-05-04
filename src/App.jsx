@@ -5128,8 +5128,8 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
       const v=arr.map(c=>c.th).filter(Boolean).join("<br>");
       return`<td style="border:1px solid #ddd;border-bottom:none;text-align:center;vertical-align:middle;padding:2px 1px;font-size:8.5pt;font-weight:bold;">${v}</td>`;
     };
-    const cell2=(arr)=>{ // แถวล่าง: ห้อง + ชื่ออังกฤษ กึ่งกลาง
-      const v=arr.map(c=>`ครู${c.room.replace(/^ครู/,"")}`).filter(Boolean).join("<br>");
+    const cell2=(arr)=>{ // แถวล่าง: ห้อง กึ่งกลาง
+      const v=arr.map(c=>c.room).filter(Boolean).join("<br>");
       return`<td style="border:1px solid #ddd;border-top:none;text-align:center;vertical-align:middle;padding:2px 1px;font-size:7.5pt;color:#1a237e;">${v}</td>`;
     };
     const BKcell=(rows,txt)=>
@@ -5219,7 +5219,7 @@ function pdfPage(title, subtitle, dayRows, footerText, logoBase64) {
     'th.period-time{font-size:9px;height:18px;font-weight:400}' +
     'th.day-col{width:52px;font-size:11px;font-weight:700}' +
     'td.day-cell{font-weight:700;font-size:12px;padding:4px 2px;width:52px}' +
-    'td.slot{padding:3px 2px;vertical-align:top;height:68px}' +
+    'td.slot{padding:3px 2px;vertical-align:middle;height:68px}' +
     'td.slot-hi{background:#FEF9C3}' +
     '.ent{margin-bottom:2px}' +
     '.ent-sub{font-weight:700;font-size:11px;line-height:1.3}' +
