@@ -4311,20 +4311,6 @@ function Reports({S,U,st,gc,ay,sh}){
       {label:"คาบ 7",time:"14.50 - 15.40"},
     ];
 
-    // vert cell: ข้อความแนวตั้ง ใช้กับทุก break column
-    const vert=(txt,bg="#fffde7",fw="normal",fs="7pt")=>
-      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};font-weight:${fw};padding:2px 0;text-align:center;">${txt}</div>`;
-
-    const HDR=[
-      {label:"คาบ 1",time:"08.30 - 09.20"},
-      {label:"คาบ 2",time:"09.20 - 10.10"},
-      {label:"คาบ 3",time:"10.25 - 11.15"},
-      {label:"คาบ 4",time:"11.15 - 12.05"},
-      {label:"คาบ 5",time:"13.00 - 13.50"},
-      {label:"คาบ 6",time:"13.50 - 14.40"},
-      {label:"คาบ 7",time:"14.50 - 15.40"},
-    ];
-
     // Header — แถว 1: ชื่อคาบ, แถว 2: เวลา
     // col: วัน | 08.00-08.30 | คาบ1 | คาบ2 | 10.10-10.25 | คาบ3 | คาบ4 | 12.05-13.00 | คาบ5 | คาบ6 | 14.40-14.50 | คาบ7
     const BRK=["08.00-08.30","10.10-10.25","12.05-13.00","14.40-14.50"];
@@ -4357,7 +4343,6 @@ function Reports({S,U,st,gc,ay,sh}){
       ${[0,1,2,3,4,5,6].map(i=>`<td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;height:16px;">${HDR[i].time}</td>`).join("")}
     </tr>`;
 
-    const DAYS_TH=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
     let body="";
 
     DAYS_TH.forEach((day,di)=>{
