@@ -3984,7 +3984,7 @@ function buildLevelTableHTML(S, ay, sh, filterLevelId) {
             const coIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
             const coTs=coIds.map(id=>S.teachers.find(x=>x.id===id)).filter(Boolean);
             const subName=(sub?.shortName||sub?.name||'');
-            const teacherNames=[t,...coTs].filter(Boolean).map(x=>x.firstName||'').join('+');
+            const teacherNames=[t,...coTs].filter(Boolean).map(x=>"ครู"+(x.firstName||'')).join('+');
             return '<span style="font-weight:700">'+subName+'</span><br/>'+teacherNames;
           }).join('<hr style="border:none;border-top:1px dashed #bbb;margin:0"/>');
           extra='background:'+rowBg+';';
@@ -4281,7 +4281,7 @@ function Reports({S,U,st,gc,ay,sh}){
         const sub=S.subjects.find(s=>s.id===e.subjectId);
         const t=S.teachers.find(t=>t.id===e.teacherId);
         const cos=(e.coTeacherIds||[]).map(id=>S.teachers.find(x=>x.id===id)).filter(Boolean);
-        return{th:sub?.name||sub?.code||"",en:sub?.shortName||"",tch:[t,...cos].filter(Boolean).map(x=>"อ."+x.firstName).join(", ")};
+        return{th:sub?.name||sub?.code||"",en:sub?.shortName||"",tch:[t,...cos].filter(Boolean).map(x=>"ครู"+x.firstName).join(", ")};
       });
     };
 
@@ -4296,6 +4296,20 @@ function Reports({S,U,st,gc,ay,sh}){
       <col style="width:2.5%;">
       <col style="width:12%;">
     </colgroup>`;
+
+    // vert cell: ข้อความแนวตั้ง
+    const vert=(txt,bg="#fffde7",fw="normal",fs="7pt")=>
+      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};font-weight:${fw};padding:2px 0;text-align:center;">${txt}</div>`;
+
+    const HDR=[
+      {label:"คาบ 1",time:"08.30 - 09.20"},
+      {label:"คาบ 2",time:"09.20 - 10.10"},
+      {label:"คาบ 3",time:"10.25 - 11.15"},
+      {label:"คาบ 4",time:"11.15 - 12.05"},
+      {label:"คาบ 5",time:"13.00 - 13.50"},
+      {label:"คาบ 6",time:"13.50 - 14.40"},
+      {label:"คาบ 7",time:"14.50 - 15.40"},
+    ];
 
     // vert cell: ข้อความแนวตั้ง ใช้กับทุก break column
     const vert=(txt,bg="#fffde7",fw="normal",fs="7pt")=>
@@ -4360,7 +4374,7 @@ function Reports({S,U,st,gc,ay,sh}){
           :type==="en"
           ?"font-size:7.5pt;color:#444;"
           :"font-size:7.5pt;color:#1a237e;";
-        return`<td style="border:1px solid #ddd;border-top:none;border-bottom:none;text-align:center;vertical-align:middle;padding:1px;${s}">${v}</td>`;
+        return`<td style="border:1px solid #ddd;border-top:none;border-bottom:none;text-align:center;vertical-align:middle;padding:2px;${s}">${v}</td>`;
       };
       // แถวแรกของวัน — border-top ชัด
       const cellTop=(arr,type)=>cell(arr,type).replace("border-top:none;","border-top:1px solid #888;");
@@ -4370,16 +4384,20 @@ function Reports({S,U,st,gc,ay,sh}){
       const BKcell=(rows,vtext,bg="#fffde7")=>
         `<td rowspan="${rows}" style="border:1px solid #888;background:${bg};padding:0;vertical-align:middle;">${vert(vtext,bg,"normal","6.5pt")}</td>`;
 
+      // break columns ใส่เฉพาะวันแรก (di===0) ด้วย rowspan=15 (5วัน × 3แถว)
+      const bk=di===0;
+      const TOTAL_ROWS=DAYS_TH.length*3;
+
       body+=`
         <tr style="height:20px;">
           <td rowspan="3" style="border:1px solid #888;text-align:center;font-weight:bold;font-size:8.5pt;vertical-align:middle;background:#f5f5f5;">${day}</td>
           <td rowspan="3" style="border:1px solid #888;background:${hmBg};padding:0;vertical-align:middle;">${vert(hmTxt,hmBg,"bold","7pt")}</td>
           ${cellTop(D[0],"th")}${cellTop(D[1],"th")}
-          ${BKcell(3,"พักน้อย  15  นาที")}
+          ${bk?BKcell(TOTAL_ROWS,"พักน้อย 15 นาที"):""}
           ${cellTop(D[2],"th")}${cellTop(D[3],"th")}
-          ${BKcell(3,"พักกลางวัน  55  นาที")}
+          ${bk?BKcell(TOTAL_ROWS,"พักกลางวัน 55 นาที"):""}
           ${cellTop(D[4],"th")}${cellTop(D[5],"th")}
-          ${BKcell(3,"พักน้อย  10  นาที")}
+          ${bk?BKcell(TOTAL_ROWS,"พักน้อย 10 นาที"):""}
           ${cellTop(D[6],"th")}
         </tr>
         <tr style="height:17px;">
@@ -5119,28 +5137,32 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
     const hmTxt=isAsm?"หอประชุม Assembly":"Homeroom";
     const hmBg=isAsm?"#e8f5e9":"#fafff7";
 
-    // teacher PDF: แต่ละ cell มี 2 แถว — ชื่อวิชา / ห้อง+ชื่ออังกฤษ
-    const cell1=(arr)=>{ // แถวบน: ชื่อวิชาไทย
+    // teacher PDF: แต่ละ cell มี 2 แถว — ชื่อวิชา / ห้อง (ครูชื่อ)
+    const cell1=(arr)=>{ // แถวบน: ชื่อวิชาไทย กึ่งกลาง
       const v=arr.map(c=>c.th).filter(Boolean).join("<br>");
-      return`<td style="border:1px solid #ddd;border-bottom:none;text-align:center;vertical-align:middle;padding:1px;font-size:8.5pt;font-weight:bold;">${v}</td>`;
+      return`<td style="border:1px solid #ddd;border-bottom:none;text-align:center;vertical-align:middle;padding:2px 1px;font-size:8.5pt;font-weight:bold;">${v}</td>`;
     };
-    const cell2=(arr)=>{ // แถวล่าง: ห้อง + ชื่ออังกฤษ
-      const v=arr.map(c=>`${c.room}${c.en?" — "+c.en:""}`).filter(Boolean).join("<br>");
-      return`<td style="border:1px solid #ddd;border-top:none;text-align:center;vertical-align:middle;padding:1px;font-size:7.5pt;color:#1a237e;">${v}</td>`;
+    const cell2=(arr)=>{ // แถวล่าง: ห้อง + ชื่ออังกฤษ กึ่งกลาง
+      const v=arr.map(c=>`ครู${c.room.replace(/^ครู/,"")}`).filter(Boolean).join("<br>");
+      return`<td style="border:1px solid #ddd;border-top:none;text-align:center;vertical-align:middle;padding:2px 1px;font-size:7.5pt;color:#1a237e;">${v}</td>`;
     };
     const BKcell=(rows,txt)=>
       `<td rowspan="${rows}" style="border:1px solid #888;background:#fffde7;padding:0;vertical-align:middle;">${vert(txt)}</td>`;
+
+    // break columns ใส่เฉพาะวันแรก rowspan=10 (5วัน × 2แถว)
+    const bk=di===0;
+    const TOTAL_ROWS=DAYS_TH.length*2;
 
     body+=`
       <tr style="height:22px;${bgRow}">
         <td rowspan="2" style="border:1px solid #888;text-align:center;font-weight:bold;font-size:8.5pt;vertical-align:middle;background:#f5f5f5;">${day}</td>
         <td rowspan="2" style="border:1px solid #888;background:${hmBg};padding:0;vertical-align:middle;">${vert(hmTxt,hmBg,"bold","7pt")}</td>
         ${cell1(D[0])}${cell1(D[1])}
-        ${BKcell(2,"พักน้อย  15  นาที")}
+        ${bk?BKcell(TOTAL_ROWS,"พักน้อย 15 นาที"):""}
         ${cell1(D[2])}${cell1(D[3])}
-        ${BKcell(2,"พักกลางวัน  55  นาที")}
+        ${bk?BKcell(TOTAL_ROWS,"พักกลางวัน 55 นาที"):""}
         ${cell1(D[4])}${cell1(D[5])}
-        ${BKcell(2,"พักน้อย  10  นาที")}
+        ${bk?BKcell(TOTAL_ROWS,"พักน้อย 10 นาที"):""}
         ${cell1(D[6])}
       </tr>
       <tr style="height:18px;${bgRow}">
