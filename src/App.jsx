@@ -4288,19 +4288,19 @@ function Reports({S,U,st,gc,ay,sh}){
 
     // colgroup — % based
     const colgroup=`<colgroup>
-      <col style="width:5%;"><col style="width:2.5%;">
-      <col style="width:12%;"><col style="width:12%;">
-      <col style="width:2.5%;">
-      <col style="width:12%;"><col style="width:12%;">
-      <col style="width:2.5%;">
-      <col style="width:12%;"><col style="width:12%;">
-      <col style="width:2.5%;">
-      <col style="width:12%;">
+      <col style="width:5%;"><col style="width:2%;">
+      <col style="width:12.4%;"><col style="width:12.4%;">
+      <col style="width:2%;">
+      <col style="width:12.4%;"><col style="width:12.4%;">
+      <col style="width:2%;">
+      <col style="width:12.4%;"><col style="width:12.4%;">
+      <col style="width:2%;">
+      <col style="width:12.4%;">
     </colgroup>`;
 
     // vert cell: ข้อความแนวตั้ง
     const vert=(txt,bg="#fffde7",fw="normal",fs="7.5pt")=>
-      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};font-weight:${fw};letter-spacing:3px;text-align:center;">${txt}</div>`;
+      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:${fs};font-weight:${fw};letter-spacing:3px;text-align:center;">${txt}</div>`;
     // homeroom cell: ไม่มี letter-spacing, รองรับ 2 บรรทัด
     const vertHM=(txt,fw="normal",fs="7pt")=>
       `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:${fs};font-weight:${fw};text-align:center;word-break:keep-all;">${txt}</div>`;
@@ -4317,7 +4317,7 @@ function Reports({S,U,st,gc,ay,sh}){
 
     // Header — แถว 1: ชื่อคาบ, แถว 2: เวลา
     // col: วัน | 08.00-08.30 | คาบ1 | คาบ2 | 10.10-10.25 | คาบ3 | คาบ4 | 12.05-13.00 | คาบ5 | คาบ6 | 14.40-14.50 | คาบ7
-    const BRK=["08.00-08.30","10.10-10.25","12.05-13.00","14.40-14.50"];
+    const BRK=["08.00-<br>08.30","10.10-<br>10.25","12.05-<br>13.00","14.40-<br>14.50"];
     const BRKV=["08.00-08.30","Morning Break","Lunch Time","Afternoon Break"];
 
     // Header row1 — ชื่อคาบ (break columns มี rowspan=2)
@@ -5076,7 +5076,7 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
   </colgroup>`;
 
   const vert=(txt,bg="#fffde7",fw="normal",fs="6.5pt")=>
-    `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};font-weight:${fw};letter-spacing:3px;text-align:center;">${txt}</div>`;
+    `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:${fs};font-weight:${fw};letter-spacing:3px;text-align:center;">${txt}</div>`;
 
   const HDR=[
     {label:"คาบ 1",time:"08.30 - 09.20"},
@@ -5087,7 +5087,7 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
     {label:"คาบ 6",time:"13.50 - 14.40"},
     {label:"คาบ 7",time:"14.50 - 15.40"},
   ];
-  const BRK=["08.00-08.30","10.10-10.25","12.05-13.00","14.40-14.50"];
+  const BRK=["08.00-<br>08.30","10.10-<br>10.25","12.05-<br>13.00","14.40-<br>14.50"];
 
   const hdrRow=`<tr style="background:#f0f0f0;height:22px;max-height:22px;">
     <th rowspan="2" style="border:1px solid #666;padding:0;position:relative;vertical-align:middle;font-size:7pt;height:38px;">
