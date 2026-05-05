@@ -4300,7 +4300,7 @@ function Reports({S,U,st,gc,ay,sh}){
 
     // vert cell: ข้อความแนวตั้ง
     const vert=(txt,bg="#fffde7",fw="normal",fs="7.5pt")=>
-      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:${fs};font-weight:${fw};letter-spacing:3px;text-align:center;">${txt}</div>`;
+      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};font-weight:${fw};letter-spacing:3px;text-align:center;">${txt}</div>`;
     // homeroom cell: ไม่มี letter-spacing, รองรับ 2 บรรทัด
     const vertHM=(txt,fw="normal",fs="7pt")=>
       `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:${fs};font-weight:${fw};text-align:center;word-break:keep-all;">${txt}</div>`;
@@ -4317,7 +4317,9 @@ function Reports({S,U,st,gc,ay,sh}){
 
     // Header — แถว 1: ชื่อคาบ, แถว 2: เวลา
     // col: วัน | 08.00-08.30 | คาบ1 | คาบ2 | 10.10-10.25 | คาบ3 | คาบ4 | 12.05-13.00 | คาบ5 | คาบ6 | 14.40-14.50 | คาบ7
-    const BRK=["08.00-<br>08.30","10.10-<br>10.25","12.05-<br>13.00","14.40-<br>14.50"];
+    const BRK=[["08.00-","08.30"],["10.10-","10.25"],["12.05-","13.00"],["14.40-","14.50"]];
+    const vertBRK=(parts,fs="7.5pt")=>
+      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:${fs};font-weight:normal;letter-spacing:3px;text-align:center;display:flex;flex-direction:column;align-items:center;">${parts.map(p=>`<span style="white-space:nowrap;">${p}</span>`).join("")}</div>`;
     const BRKV=["08.00-08.30","Morning Break","Lunch Time","Afternoon Break"];
 
     // Header row1 — ชื่อคาบ (break columns มี rowspan=2)
@@ -4331,16 +4333,16 @@ function Reports({S,U,st,gc,ay,sh}){
           <div style="position:absolute;bottom:2px;left:2px;font-size:5.5pt;color:#555;">วัน</div>
         </div>
       </th>
-      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;display:table-cell;vertical-align:middle;text-align:center;">${vert(BRK[0],"#fffde7","normal","7pt")}</th>
+      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;vertical-align:middle;text-align:center;">${vertBRK(BRK[0])}</th>
       <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[0].label}</th>
       <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[1].label}</th>
-      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;display:table-cell;vertical-align:middle;text-align:center;">${vert(BRK[1],"#fffde7","normal","7pt")}</th>
+      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;vertical-align:middle;text-align:center;">${vertBRK(BRK[1])}</th>
       <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[2].label}</th>
       <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[3].label}</th>
-      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;display:table-cell;vertical-align:middle;text-align:center;">${vert(BRK[2],"#fffde7","normal","7pt")}</th>
+      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;vertical-align:middle;text-align:center;">${vertBRK(BRK[2])}</th>
       <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[4].label}</th>
       <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[5].label}</th>
-      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;display:table-cell;vertical-align:middle;text-align:center;">${vert(BRK[3],"#fffde7","normal","7pt")}</th>
+      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;vertical-align:middle;text-align:center;">${vertBRK(BRK[3])}</th>
       <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[6].label}</th>
     </tr>
     <tr style="background:#f0f0f0;height:16px;max-height:16px;">
@@ -5076,7 +5078,7 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
   </colgroup>`;
 
   const vert=(txt,bg="#fffde7",fw="normal",fs="6.5pt")=>
-    `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:${fs};font-weight:${fw};letter-spacing:3px;text-align:center;">${txt}</div>`;
+    `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};font-weight:${fw};letter-spacing:3px;text-align:center;">${txt}</div>`;
 
   const HDR=[
     {label:"คาบ 1",time:"08.30 - 09.20"},
@@ -5087,7 +5089,9 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
     {label:"คาบ 6",time:"13.50 - 14.40"},
     {label:"คาบ 7",time:"14.50 - 15.40"},
   ];
-  const BRK=["08.00-<br>08.30","10.10-<br>10.25","12.05-<br>13.00","14.40-<br>14.50"];
+  const BRK=[["08.00-","08.30"],["10.10-","10.25"],["12.05-","13.00"],["14.40-","14.50"]];
+  const vertBRK=(parts,fs="6.5pt")=>
+    `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:${fs};font-weight:normal;letter-spacing:3px;text-align:center;display:flex;flex-direction:column;align-items:center;">${parts.map(p=>`<span style="white-space:nowrap;">${p}</span>`).join("")}</div>`;
 
   const hdrRow=`<tr style="background:#f0f0f0;height:22px;max-height:22px;">
     <th rowspan="2" style="border:1px solid #666;padding:0;position:relative;vertical-align:middle;font-size:7pt;height:38px;">
@@ -5099,16 +5103,16 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
         <div style="position:absolute;bottom:2px;left:2px;font-size:5.5pt;color:#555;">วัน</div>
       </div>
     </th>
-    <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;vertical-align:middle;text-align:center;">${vert(BRK[0])}</th>
+    <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;vertical-align:middle;text-align:center;">${vertBRK(BRK[0])}</th>
     <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[0].label}</th>
     <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[1].label}</th>
-    <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;vertical-align:middle;text-align:center;">${vert(BRK[1])}</th>
+    <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;vertical-align:middle;text-align:center;">${vertBRK(BRK[1])}</th>
     <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[2].label}</th>
     <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[3].label}</th>
-    <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;vertical-align:middle;text-align:center;">${vert(BRK[2])}</th>
+    <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;vertical-align:middle;text-align:center;">${vertBRK(BRK[2])}</th>
     <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[4].label}</th>
     <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[5].label}</th>
-    <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;vertical-align:middle;text-align:center;">${vert(BRK[3])}</th>
+    <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;vertical-align:middle;text-align:center;">${vertBRK(BRK[3])}</th>
     <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[6].label}</th>
   </tr>
   <tr style="background:#f0f0f0;height:16px;max-height:16px;">
