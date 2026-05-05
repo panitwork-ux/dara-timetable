@@ -1720,6 +1720,9 @@ function Assigns({S,U,st,gc}){
   const [modal,setModal]=useState(false);
   const [form,setForm]=useState({subjectId:"",roomIds:[],totalPeriods:0});
   const [modalDeptFilter,setModalDeptFilter]=useState("");
+  // ── Edit Assignment Modal ──
+  const [editAssign,setEditAssign]=useState(null); // assignment object ที่กำลังแก้ไข
+  const [editForm,setEditForm]=useState({roomIds:[],totalPeriods:0}); // form state สำหรับ edit
   const [basket,setBasket]=useState([]); // [{subjectId, roomIds, totalPeriods}] รอบันทึก
   const fileRefA=useRef(null);
   const deptTeachers=selDept?S.teachers.filter(t=>t.departmentId===selDept):[];
@@ -1950,7 +1953,7 @@ function Assigns({S,U,st,gc}){
             </div>
           </div>
             <div style={{display:"flex",gap:6}}>
-              <button onClick={()=>{const n=prompt("แก้ไขจำนวนคาบ:",a.totalPeriods);if(n!==null){U.setAssigns(p=>p.map(x=>x.id===a.id?{...x,totalPeriods:parseInt(n)||1}:x));st("แก้ไขสำเร็จ")}}} style={{background:"none",border:"none",cursor:"pointer",color:"#2563EB"}}><Icon name="edit" size={14}/></button>
+              <button onClick={()=>{setEditAssign(a);setEditForm({roomIds:[...a.roomIds],totalPeriods:a.totalPeriods});}} style={{background:"none",border:"none",cursor:"pointer",color:"#2563EB"}}><Icon name="edit" size={14}/></button>
               <button onClick={()=>{
                 if(!window.confirm("ลบวิชานี้?\n\n⚠️ คาบที่ลงตารางไว้จะถูกลบออกด้วย"))return;
                 // ลบ assignment
@@ -1987,6 +1990,97 @@ function Assigns({S,U,st,gc}){
       </div>
     </div>}
     {teacher&&<PersonalLockPanel teacher={teacher} U={U} st={st} sel={sel}/>}
+
+    {/* ── Edit Assignment Modal ── */}
+    {editAssign&&(()=>{
+      const eSub=S.subjects.find(s=>s.id===editAssign.subjectId);
+      const eFilteredRooms=eSub?S.rooms.filter(r=>r.levelId===eSub.levelId):S.rooms;
+      return(
+        <Modal open={!!editAssign} onClose={()=>setEditAssign(null)} title={`แก้ไขการมอบหมาย — ${eSub?.code||""} ${subDisplayName(eSub)||""}`}>
+          <div style={{display:"flex",flexDirection:"column",gap:16}}>
+
+            {/* วิชา (read-only) */}
+            <div style={{background:"#F9FAFB",borderRadius:10,padding:"10px 14px",border:"1px solid #E5E7EB"}}>
+              <div style={{fontSize:11,color:"#6B7280",marginBottom:3}}>วิชา</div>
+              <div style={{fontSize:15,fontWeight:700}}>{eSub?.code} — {subDisplayName(eSub)}</div>
+              <div style={{fontSize:12,color:"#9CA3AF",marginTop:2}}>{S.depts.find(d=>d.id===eSub?.departmentId)?.name}</div>
+            </div>
+
+            {/* เลือกห้อง (toggle pills) */}
+            <div>
+              <label style={{...LS}}>ห้องเรียน
+                <span style={{fontSize:11,color:"#6B7280",fontWeight:400,marginLeft:6}}>
+                  (เลือกได้หลายห้อง — เลือก/ยกเลิกได้)
+                </span>
+              </label>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",maxHeight:200,overflowY:"auto",padding:"4px 0"}}>
+                {eFilteredRooms.length===0&&(
+                  <span style={{fontSize:12,color:"#9CA3AF"}}>ไม่มีห้องในระดับนี้</span>
+                )}
+                {eFilteredRooms.map(rm=>{
+                  const sel2=editForm.roomIds.includes(rm.id);
+                  return(
+                    <button key={rm.id}
+                      onClick={()=>setEditForm(p=>({...p,roomIds:sel2?p.roomIds.filter(r=>r!==rm.id):[...p.roomIds,rm.id]}))}
+                      style={{padding:"6px 14px",borderRadius:20,border:`2px solid ${sel2?"#DC2626":"#D1D5DB"}`,background:sel2?"#FEE2E2":"#fff",color:sel2?"#991B1B":"#374151",fontSize:12,fontWeight:sel2?700:400,cursor:"pointer",transition:"all 0.12s"}}>
+                      {sel2?"✓ ":""}{rm.name}
+                    </button>
+                  );
+                })}
+              </div>
+              {/* ปุ่มเลือก/ยกเลิกทั้งหมด */}
+              <div style={{display:"flex",gap:6,marginTop:8}}>
+                <button onClick={()=>setEditForm(p=>({...p,roomIds:eFilteredRooms.map(r=>r.id)}))}
+                  style={{fontSize:11,color:"#DC2626",background:"none",border:"1px solid #FECACA",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>เลือกทั้งหมด</button>
+                <button onClick={()=>setEditForm(p=>({...p,roomIds:[]}))}
+                  style={{fontSize:11,color:"#6B7280",background:"none",border:"1px solid #E5E7EB",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>ล้าง</button>
+                <span style={{fontSize:11,color:"#6B7280",alignSelf:"center",marginLeft:4}}>เลือกแล้ว {editForm.roomIds.length} ห้อง</span>
+              </div>
+            </div>
+
+            {/* จำนวนคาบ */}
+            <div>
+              <label style={{...LS}}>จำนวนคาบ/สัปดาห์
+                <span style={{fontSize:11,color:"#6B7280",fontWeight:400,marginLeft:6}}>(0 = อัตโนมัติจากวิชา)</span>
+              </label>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <input type="number" min="0" style={{...IS,width:110}}
+                  value={editForm.totalPeriods}
+                  onChange={e=>setEditForm(p=>({...p,totalPeriods:parseInt(e.target.value)||0}))}/>
+                {eSub?.periodsPerWeek&&(
+                  <span style={{fontSize:11,color:"#6B7280"}}>
+                    อัตโนมัติ = {eSub.periodsPerWeek} คาบ × {editForm.roomIds.length||editAssign.roomIds.length} ห้อง = {eSub.periodsPerWeek*(editForm.roomIds.length||editAssign.roomIds.length)} คาบ
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* ปุ่ม action */}
+            <div style={{display:"flex",gap:10,marginTop:4}}>
+              <button onClick={()=>setEditAssign(null)} style={{...BO(),flex:1}}>ยกเลิก</button>
+              <button
+                disabled={editForm.roomIds.length===0}
+                onClick={()=>{
+                  if(!editForm.roomIds.length){st("เลือกอย่างน้อย 1 ห้อง","error");return;}
+                  const sub2=S.subjects.find(s=>s.id===editAssign.subjectId);
+                  const tp=editForm.totalPeriods||((sub2?.periodsPerWeek||1)*editForm.roomIds.length);
+                  U.setAssigns(p=>p.map(x=>x.id===editAssign.id
+                    ?{...x,roomIds:editForm.roomIds,totalPeriods:tp}
+                    :x
+                  ));
+                  setEditAssign(null);
+                  st("แก้ไขสำเร็จ");
+                }}
+                style={{...BS(),flex:2,opacity:editForm.roomIds.length===0?0.4:1}}>
+                💾 บันทึกการแก้ไข
+              </button>
+            </div>
+
+          </div>
+        </Modal>
+      );
+    })()}
+
     <Modal open={modal} onClose={()=>{setModal(false);setBasket([]);}} title={`มอบหมายวิชา — ${teacher?.prefix||""}${teacher?.firstName||""}`}>
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
 
