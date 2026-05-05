@@ -4275,27 +4275,31 @@ function Reports({S,U,st,gc,ay,sh}){
     const yr=ay?.year||"2568";
     const logoImg=sh?.logo?`<img src="${sh.logo}" style="height:40px;vertical-align:middle;margin-right:8px;"/>` :"";
 
-    // หาจำนวนฉบับสูงสุด (จากห้องนี้มีกี่ assign ในคาบที่มีมากสุด)
     const DAYS_TH=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
     const PIDS=[1,2,3,4,5,6,7];
-    let maxEntries=0;
-    DAYS_TH.forEach(day=>PIDS.forEach(pid=>{
-      const n=(S.schedule[room.id+"_"+day+"_"+pid]||[]).length;
-      if(n>maxEntries) maxEntries=n;
-    }));
-    const totalCopies=Math.max(1,maxEntries);
 
-    // สร้าง HTML สำหรับแต่ละฉบับ
+    // หา assignmentId ทั้งหมดที่ใช้ในห้องนี้ (เรียงตามลำดับที่พบ)
+    const assignIds=[];
+    DAYS_TH.forEach(day=>PIDS.forEach(pid=>{
+      const entries=S.schedule[room.id+"_"+day+"_"+pid]||[];
+      entries.forEach(e=>{
+        const key=e.assignmentId||e.subjectId+"_"+e.teacherId;
+        if(key&&!assignIds.includes(key)) assignIds.push(key);
+      });
+    }));
+    const totalCopies=Math.max(1,assignIds.length);
+
     const copies=[];
     for(let copyIdx=0;copyIdx<totalCopies;copyIdx++){
+      const thisAssignId=assignIds[copyIdx];
       const copyLabel=totalCopies>1?` (ฉบับที่ ${copyIdx+1}/${totalCopies})`:"";
       const title=opts.title?opts.title+copyLabel:("ตารางเรียน "+room.name+copyLabel);
 
       const getCells=(day,pid)=>{
         const key=room.id+"_"+day+"_"+pid;
         const all=S.schedule[key]||[];
-        // แต่ละฉบับแสดงเฉพาะ entry ที่ index ตรงกัน
-        const e=all[copyIdx];
+        // กรองเฉพาะ entry ที่ตรงกับ assignmentId ของฉบับนี้
+        const e=all.find(e=>(e.assignmentId||e.subjectId+"_"+e.teacherId)===thisAssignId);
         if(!e) return [];
         const sub=S.subjects.find(s=>s.id===e.subjectId);
         const t=S.teachers.find(t=>t.id===e.teacherId);
