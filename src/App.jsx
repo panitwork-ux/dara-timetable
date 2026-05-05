@@ -4288,14 +4288,14 @@ function Reports({S,U,st,gc,ay,sh}){
 
     // colgroup — % based
     const colgroup=`<colgroup>
-      <col style="width:5%;"><col style="width:2%;">
-      <col style="width:12.4%;"><col style="width:12.4%;">
-      <col style="width:2%;">
-      <col style="width:12.4%;"><col style="width:12.4%;">
-      <col style="width:2%;">
-      <col style="width:12.4%;"><col style="width:12.4%;">
-      <col style="width:2%;">
-      <col style="width:12.4%;">
+      <col style="width:5%;"><col style="width:2.5%;">
+      <col style="width:11.9%;"><col style="width:11.9%;">
+      <col style="width:3%;">
+      <col style="width:11.9%;"><col style="width:11.9%;">
+      <col style="width:3%;">
+      <col style="width:11.9%;"><col style="width:11.9%;">
+      <col style="width:3%;">
+      <col style="width:12.1%;">
     </colgroup>`;
 
     // vert cell: ข้อความแนวตั้ง
