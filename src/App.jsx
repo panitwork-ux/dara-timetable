@@ -4274,17 +4274,34 @@ function Reports({S,U,st,gc,ay,sh}){
     const h1=room.homeroom1||""; const h2=room.homeroom2||""; const hco=room.homeroomCo||"";
     const yr=ay?.year||"2568";
     const logoImg=sh?.logo?`<img src="${sh.logo}" style="height:40px;vertical-align:middle;margin-right:8px;"/>` :"";
-    const title=opts.title||("ตารางเรียน "+room.name);
 
-    const getCells=(day,pid)=>{
-      const key=room.id+"_"+day+"_"+pid;
-      return(S.schedule[key]||[]).map(e=>{
+    // หาจำนวนฉบับสูงสุด (จากห้องนี้มีกี่ assign ในคาบที่มีมากสุด)
+    const DAYS_TH=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
+    const PIDS=[1,2,3,4,5,6,7];
+    let maxEntries=0;
+    DAYS_TH.forEach(day=>PIDS.forEach(pid=>{
+      const n=(S.schedule[room.id+"_"+day+"_"+pid]||[]).length;
+      if(n>maxEntries) maxEntries=n;
+    }));
+    const totalCopies=Math.max(1,maxEntries);
+
+    // สร้าง HTML สำหรับแต่ละฉบับ
+    const copies=[];
+    for(let copyIdx=0;copyIdx<totalCopies;copyIdx++){
+      const copyLabel=totalCopies>1?` (ฉบับที่ ${copyIdx+1}/${totalCopies})`:"";
+      const title=opts.title?opts.title+copyLabel:("ตารางเรียน "+room.name+copyLabel);
+
+      const getCells=(day,pid)=>{
+        const key=room.id+"_"+day+"_"+pid;
+        const all=S.schedule[key]||[];
+        // แต่ละฉบับแสดงเฉพาะ entry ที่ index ตรงกัน
+        const e=all[copyIdx];
+        if(!e) return [];
         const sub=S.subjects.find(s=>s.id===e.subjectId);
         const t=S.teachers.find(t=>t.id===e.teacherId);
         const cos=(e.coTeacherIds||[]).map(id=>S.teachers.find(x=>x.id===id)).filter(Boolean);
-        return{th:sub?.name||sub?.code||"",en:sub?.shortName||"",tch:[t,...cos].filter(Boolean).map(x=>"ครู"+x.firstName).join(", ")};
-      });
-    };
+        return[{th:sub?.name||sub?.code||"",en:sub?.shortName||"",tch:[t,...cos].filter(Boolean).map(x=>"ครู"+x.firstName).join(", ")}];
+      };
 
     // colgroup — % based
     const colgroup=`<colgroup>
@@ -4406,22 +4423,25 @@ function Reports({S,U,st,gc,ay,sh}){
         </tr>`;
     });
 
-    const footer=(h1||h2||hco)?`
-      <div style="margin-top:6px;font-size:10pt;font-family:'TH SarabunNew','Sarabun',sans-serif;text-align:right;line-height:2;">
-        ${h1||h2?`<div><b>ครูประจำชั้นหลัก</b>&emsp;&emsp;${h1}${h2?"&emsp;&emsp;&emsp;&emsp;&emsp;"+h2:""}</div>`:""}
-        ${hco?`<div><b>ครูประจำชั้นร่วม</b>&emsp;&emsp;${hco}</div>`:""}
-      </div>`:"";
+      const footer=(h1||h2||hco)?`
+        <div style="margin-top:6px;font-size:10pt;font-family:'TH SarabunNew','Sarabun',sans-serif;text-align:right;line-height:2;">
+          ${h1||h2?`<div><b>ครูประจำชั้นหลัก</b>&emsp;&emsp;${h1}${h2?"&emsp;&emsp;&emsp;&emsp;&emsp;"+h2:""}</div>`:""}
+          ${hco?`<div><b>ครูประจำชั้นร่วม</b>&emsp;&emsp;${hco}</div>`:""}
+        </div>`:"";
 
-    return`
-      <div style="text-align:center;margin-bottom:5px;font-family:'TH SarabunNew','Sarabun',sans-serif;">
-        ${logoImg}<b style="font-size:13pt;">${title}&emsp;&emsp;ปีการศึกษา ${yr}</b>
-      </div>
-      <table style="width:100%;border-collapse:collapse;table-layout:fixed;overflow:hidden;">
-        ${colgroup}
-        <thead>${h1row}</thead>
-        <tbody>${body}</tbody>
-      </table>
-      ${footer}`;
+      copies.push(`
+        <div style="text-align:center;margin-bottom:5px;font-family:'TH SarabunNew','Sarabun',sans-serif;">
+          ${logoImg}<b style="font-size:13pt;">${title}&emsp;&emsp;ปีการศึกษา ${yr}</b>
+        </div>
+        <table style="width:100%;border-collapse:collapse;table-layout:fixed;overflow:hidden;">
+          ${colgroup}
+          <thead>${h1row}</thead>
+          <tbody>${body}</tbody>
+        </table>
+        ${footer}`);
+    } // end copyIdx loop
+
+    return copies; // return array of HTML strings
   };
 
   const printRoomPDFNew=(rooms,opts={})=>{
@@ -4430,22 +4450,25 @@ function Reports({S,U,st,gc,ay,sh}){
     const w=window.open('','_blank');
     if(!w){st("Browser บล็อก popup","error");return;}
 
-    const layout=opts.layout||"2portrait"; // "2portrait" | "1landscape"
+    const layout=opts.layout||"2portrait";
+
+    // สร้าง pages: แต่ละ element คือ array ของ room copies
+    // flatten: [room1copy1, room1copy2, room2copy1, ...]
+    const allCopies=roomList.flatMap(rm=>buildRoomTableHTML(rm,{}));
 
     let pagesHTML="";
     if(layout==="1landscape"){
-      // 1 ห้อง / 1 หน้า A4 แนวนอน
-      pagesHTML=roomList.map((rm,pi)=>`
-        <div style="page-break-after:${pi<roomList.length-1?"always":"avoid"};padding:8mm 10mm;box-sizing:border-box;">
-          ${buildRoomTableHTML(rm,{})}
+      pagesHTML=allCopies.map((html,pi)=>`
+        <div style="page-break-after:${pi<allCopies.length-1?"always":"avoid"};padding:8mm 10mm;box-sizing:border-box;">
+          ${html}
         </div>`).join("");
     } else {
-      // 2 ห้อง / 1 หน้า A4 แนวตั้ง (default)
+      // 2 ต่อหน้า
       const pages=[];
-      for(let i=0;i<roomList.length;i+=2) pages.push(roomList.slice(i,i+2));
+      for(let i=0;i<allCopies.length;i+=2) pages.push(allCopies.slice(i,i+2));
       pagesHTML=pages.map((pair,pi)=>`
         <div style="page-break-after:${pi<pages.length-1?"always":"avoid"};padding:6mm 8mm;box-sizing:border-box;">
-          ${pair.map(rm=>buildRoomTableHTML(rm,{})).join(`<div style="border-top:1px dashed #ccc;margin:6px 0;"></div>`)}
+          ${pair.join(`<div style="border-top:1px dashed #ccc;margin:6px 0;"></div>`)}
         </div>`).join("");
     }
 
@@ -4695,8 +4718,8 @@ function Reports({S,U,st,gc,ay,sh}){
                 }}
                 style={{...BS("#7C3AED"),flex:2,opacity:newRoomPDFOpts.selectedRooms?.length?1:0.4}}>
                 🖨️ พิมพ์ ({newRoomPDFOpts.layout==="1landscape"
-                  ?`${newRoomPDFOpts.selectedRooms?.length||0} หน้า`
-                  :`${Math.ceil((newRoomPDFOpts.selectedRooms?.length||0)/2)} หน้า`})
+                  ?`${newRoomPDFOpts.selectedRooms?.length||0}+ หน้า`
+                  :`${newRoomPDFOpts.selectedRooms?.length||0}+ หน้า`})
               </button>
             </div>
           </div>
