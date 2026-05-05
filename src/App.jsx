@@ -3544,9 +3544,27 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                           return<div key={ct2.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
                             <span style={{fontSize:10,color:lc.tx}}>
                               {ct2.firstName} {ct2.lastName}
-                              {isFromSchedule&&<span style={{fontSize:8,color:"#059669",marginLeft:3}}>📅ลงตารางแล้ว</span>}
+                              {isFromSchedule&&<span style={{fontSize:8,color:"#059669",marginLeft:3}}>📅ในตาราง</span>}
                             </span>
-                            {!isFromSchedule&&<button onClick={()=>setCardCoMap(p=>({...p,[a.id]:coIds2.filter(id=>id!==ct2.id)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,fontSize:12}}>✕</button>}
+                            <button onClick={()=>{
+                              // ลบออกจาก cardCoMap
+                              setCardCoMap(p=>({...p,[a.id]:coIds2.filter(id=>id!==ct2.id)}));
+                              // ถ้าลงตารางแล้ว ลบออกจาก schedule entries ด้วย
+                              if(isFromSchedule){
+                                U.setSchedule(prev=>{
+                                  const next={};
+                                  Object.entries(prev).forEach(([k,en])=>{
+                                    next[k]=(en||[]).map(e=>{
+                                      if(e.assignmentId!==a.id) return e;
+                                      const newCoIds=(e.coTeacherIds||[]).filter(id=>id!==ct2.id);
+                                      return{...e,coTeacherIds:newCoIds};
+                                    });
+                                  });
+                                  return next;
+                                });
+                              }
+                              st(`ลบ ${ct2.firstName} ออกจากครูร่วมแล้ว`,"warning");
+                            }} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,fontSize:12}}>✕</button>
                           </div>;
                         })}
                         {coTeachers2.length<4&&(
