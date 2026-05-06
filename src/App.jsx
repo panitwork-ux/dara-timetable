@@ -119,8 +119,14 @@ function AdminPanel({user,onBack,refreshPerms}){
 
   // เพิ่มอีเมลล่วงหน้า
   const [addEmail,setAddEmail]=useState("");
-  const [addPerms,setAddPerms]=useState({p1:false,p2:false,m1:false,m2:false});
+  const [addPerms,setAddPerms]=useState({p1:false,p2:false,m1:false,m2:false,canEdit:false});
   const [addLoading,setAddLoading]=useState(false);
+  // Bulk import
+  const [bulkMode,setBulkMode]=useState(false);
+  const [bulkText,setBulkText]=useState("");
+  const [bulkPerms,setBulkPerms]=useState({p1:false,p2:false,m1:false,m2:false,canEdit:false});
+  const [bulkLoading,setBulkLoading]=useState(false);
+  const [bulkResult,setBulkResult]=useState(null);
 
   // Edit existing user
   const [editUid,setEditUid]=useState(null);
@@ -4296,28 +4302,27 @@ function Reports({S,U,st,gc,ay,sh}){
     const DAYS_TH=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
     const PIDS=[1,2,3,4,5,6,7];
 
-    // หา assignmentId ทั้งหมดที่ใช้ในห้องนี้ (เรียงตามลำดับที่พบ)
-    const assignIds=[];
+    // หา maxEntries = จำนวนวิชาสูงสุดในคาบที่ซ้อนมากที่สุด
+    // ถ้าทุกคาบมีไม่เกิน 1 วิชา → totalCopies=1 (ไม่แยกฉบับ)
+    let maxEntries=1;
     DAYS_TH.forEach(day=>PIDS.forEach(pid=>{
-      const entries=S.schedule[room.id+"_"+day+"_"+pid]||[];
-      entries.forEach(e=>{
-        const key=e.assignmentId||e.subjectId+"_"+e.teacherId;
-        if(key&&!assignIds.includes(key)) assignIds.push(key);
-      });
+      const len=(S.schedule[room.id+"_"+day+"_"+pid]||[]).length;
+      if(len>maxEntries) maxEntries=len;
     }));
-    const totalCopies=Math.max(1,assignIds.length);
+    const totalCopies=maxEntries;
 
     const copies=[];
     for(let copyIdx=0;copyIdx<totalCopies;copyIdx++){
-      const thisAssignId=assignIds[copyIdx];
       const copyLabel=totalCopies>1?` (ฉบับที่ ${copyIdx+1}/${totalCopies})`:"";
       const title=opts.title?opts.title+copyLabel:("ตารางเรียน "+room.name+copyLabel);
 
       const getCells=(day,pid)=>{
         const key=room.id+"_"+day+"_"+pid;
         const all=S.schedule[key]||[];
-        // กรองเฉพาะ entry ที่ตรงกับ assignmentId ของฉบับนี้
-        const e=all.find(e=>(e.assignmentId||e.subjectId+"_"+e.teacherId)===thisAssignId);
+        if(!all.length) return [];
+        // คาบที่มีวิชาเดียว → แสดงทุกฉบับ
+        // คาบที่มีหลายวิชา → ฉบับที่ copyIdx แสดง entry ที่ copyIdx
+        const e=all.length>1?(all[copyIdx]||all[0]):all[0];
         if(!e) return [];
         const sub=S.subjects.find(s=>s.id===e.subjectId);
         const t=S.teachers.find(t=>t.id===e.teacherId);
@@ -4397,23 +4402,16 @@ function Reports({S,U,st,gc,ay,sh}){
       const hmTxt=isAsm?"หอประชุม<br>Assembly":"Homeroom";
       const hmBg=isAsm?"#e8f5e9":"#fafff7";
       const D=[1,2,3,4,5,6,7].map(pid=>getCells(day,pid));
-      // ตรวจว่าคาบนั้นมีหลายวิชา (entry > 1 ในช่อง schedule จริง)
       const isMulti=[1,2,3,4,5,6,7].map(pid=>(S.schedule[room.id+"_"+day+"_"+pid]||[]).length>1);
-      const MULTI_BG="#eeeeee"; // สีเทาอ่อน
+      const MBG="#eeeeee";
 
       const cell=(arr,type,multi=false)=>{
         const v=arr.map(c=>c[type]).filter(Boolean).join("<br>");
-        const s=type==="th"
-          ?"font-size:8.5pt;font-weight:bold;"
-          :type==="en"
-          ?"font-size:7.5pt;color:#444;"
-          :"font-size:7.5pt;color:#1a237e;";
-        const bg=multi?`background:${MULTI_BG};`:"";
+        const s=type==="th"?"font-size:8.5pt;font-weight:bold;":type==="en"?"font-size:7.5pt;color:#444;":"font-size:7.5pt;color:#1a237e;";
+        const bg=multi?`background:${MBG};`:"";
         return`<td style="border:1px solid #ddd;border-top:none;border-bottom:none;text-align:center;vertical-align:middle;padding:2px;${bg}${s}">${v}</td>`;
       };
-      // แถวแรกของวัน — border-top ชัด
       const cellTop=(arr,type,multi=false)=>cell(arr,type,multi).replace("border-top:none;","border-top:1px solid #888;");
-      // แถวสุดท้ายของวัน — border-bottom ชัด
       const cellBot=(arr,type,multi=false)=>cell(arr,type,multi).replace("border-bottom:none;","border-bottom:1px solid #888;");
 
       const BKcell=(rows,vtext,bg="#fffde7")=>
@@ -5181,30 +5179,26 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
 
   DAYS_TH.forEach((day,di)=>{
     const D=[1,2,3,4,5,6,7].map(pid=>getCells(day,pid));
-    // ครูสอนมากกว่า 1 ห้องในคาบเดียวกัน = multi
     const isMulti=[1,2,3,4,5,6,7].map(pid=>getCells(day,pid).length>1);
-    const MULTI_BG="#eeeeee";
+    const MBG="#eeeeee";
     const bgRow=di%2===0?"":"background:#fafafa;";
 
-    // ตารางสอนครู: homeroom column แสดง "Homeroom" เสมอ ไม่มี assembly
     const hmTxt="Homeroom";
     const hmBg="#fafff7";
 
-    // teacher PDF: แต่ละ cell มี 2 แถว — ชื่อวิชา / ห้อง (ครูชื่อ)
-    const cell1=(arr,multi=false)=>{ // แถวบน: ชื่อวิชาไทย กึ่งกลาง
+    const cell1=(arr,multi=false)=>{
       const v=arr.map(c=>c.th).filter(Boolean).join("<br>");
-      const bg=multi?`background:${MULTI_BG};`:"";
+      const bg=multi?`background:${MBG};`:"";
       return`<td style="border:1px solid #ddd;border-bottom:none;text-align:center;vertical-align:middle;padding:2px 1px;font-size:8.5pt;font-weight:bold;${bg}">${v}</td>`;
     };
-    const cell2=(arr,multi=false)=>{ // แถวล่าง: ห้อง กึ่งกลาง
+    const cell2=(arr,multi=false)=>{
       const v=arr.map(c=>c.room).filter(Boolean).join("<br>");
-      const bg=multi?`background:${MULTI_BG};`:"";
+      const bg=multi?`background:${MBG};`:"";
       return`<td style="border:1px solid #ddd;border-top:none;text-align:center;vertical-align:middle;padding:2px 1px;font-size:7.5pt;color:#1a237e;${bg}">${v}</td>`;
     };
     const BKcell=(rows,txt)=>
       `<td rowspan="${rows}" style="border:1px solid #888;background:#fffde7;padding:0;vertical-align:middle;text-align:center;">${vert(txt)}</td>`;
 
-    // break columns ใส่เฉพาะวันแรก rowspan=10 (5วัน × 2แถว)
     const bk=di===0;
     const TOTAL_ROWS=DAYS_TH.length*2;
 
