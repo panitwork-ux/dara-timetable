@@ -4210,12 +4210,21 @@ function SwapPage({S,st,ay,sh}){
 
     const tableRows=rows.map(({r,sel,tB},i)=>`
       <tr>
-        <td style="text-align:center">${i+1}</td>
-        <td style="text-align:center">${r.day}<br/><b>${fmtDate(absentDate)}</b><br/>คาบ ${r.period}<br/><span style="font-size:10pt;color:#555">(${r.time})</span></td>
+        <td class="ctr">${i+1}</td>
+        <td class="ctr">
+          <span class="badge">${r.day}</span><br/>
+          <b>${fmtDate(absentDate)}</b><br/>
+          คาบ ${r.period} <span style="font-size:10pt;color:#555">(${r.time})</span>
+        </td>
         <td>${sel.subBName||r.subFullName||r.subName}<br/><span style="font-size:10pt;color:#555">ห้อง ${sel.subBRoom||r.roomName}</span></td>
-        <td>${tB?.prefix||""}${tB?.firstName||""} ${tB?.lastName||""}</td>
-        <td style="text-align:center">${sel.subDay}<br/><b>${fmtDate(sel.calcDate||returnDate)}</b><br/>คาบ ${sel.subPeriod}<br/><span style="font-size:10pt;color:#555">(${PERIODS.find(p=>p.id===sel.subPeriod)?.time||""})</span></td>
+        <td><b>${tB?.prefix||""}${tB?.firstName||""} ${tB?.lastName||""}</b></td>
+        <td class="ctr">
+          <span class="badge badge-green">${sel.subDay}</span><br/>
+          <b>${fmtDate(sel.calcDate||returnDate)}</b><br/>
+          คาบ ${sel.subPeriod} <span style="font-size:10pt;color:#555">(${PERIODS.find(p=>p.id===sel.subPeriod)?.time||""})</span>
+        </td>
         <td>${r.subFullName||r.subName}<br/><span style="font-size:10pt;color:#555">ห้อง ${r.roomName}</span></td>
+        <td></td>
       </tr>`).join("");
 
     // หัวหน้ากลุ่มสาระของครู A
@@ -4223,59 +4232,83 @@ function SwapPage({S,st,ay,sh}){
 
     const html=`<!DOCTYPE html><html><head><meta charset="utf-8"/>
     <style>
-      @page{size:A4 portrait;margin:15mm}
-      body{font-family:'TH SarabunNew','Sarabun',sans-serif;font-size:13pt;color:#000}
-      h1{font-size:16pt;text-align:center;margin:0 0 2px}
-      .sub{text-align:center;font-size:11pt;color:#444;margin-bottom:14px}
-      table{width:100%;border-collapse:collapse;margin:10px 0;font-size:12pt}
-      th,td{border:1px solid #555;padding:6px 8px}
-      th{background:#f0f0f0;font-weight:bold;text-align:center}
-      td{vertical-align:middle}
-      .info-table td{border:none;padding:3px 6px}
-      .info-table td:first-child{width:40%;font-weight:bold}
-      .sig-row{display:flex;justify-content:space-around;margin-top:32px;gap:16px}
-      .sig-box{text-align:center;flex:1}
-      .sig-line{display:inline-block;width:90%;border-bottom:1px solid #000;margin-bottom:4px}
+      @page{size:A4 landscape;margin:10mm 12mm}
+      *{box-sizing:border-box}
+      body{font-family:'TH SarabunNew','Sarabun',sans-serif;font-size:13pt;color:#000;margin:0;padding:0}
+      /* ── Header ── */
+      .hdr{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:4px}
+      .hdr img{height:52px}
+      .hdr-text{text-align:center}
+      .hdr-text h1{font-size:17pt;font-weight:700;margin:0}
+      .hdr-text .school{font-size:11pt;color:#444;margin:0}
+      /* ── Info grid ── */
+      .info{display:grid;grid-template-columns:repeat(4,1fr);gap:2px 12px;margin:8px 0;font-size:12pt}
+      .info .lbl{font-weight:700;color:#333}
+      .info .val{color:#000}
+      /* ── Table ── */
+      table{width:100%;border-collapse:collapse;font-size:12pt;margin:6px 0}
+      thead tr{background:#B91C1C;color:#fff}
+      thead th{padding:6px 8px;font-weight:700;text-align:center;border:1px solid #8B0000;font-size:12pt}
+      tbody tr:nth-child(even){background:#FFF5F5}
+      tbody tr:nth-child(odd){background:#fff}
+      td{padding:5px 8px;border:1px solid #D1D5DB;vertical-align:middle;font-size:12pt}
+      td.ctr{text-align:center}
+      td b{font-size:13pt}
+      .badge{display:inline-block;background:#FEE2E2;color:#991B1B;padding:1px 7px;border-radius:12px;font-size:10pt;font-weight:700}
+      .badge-green{background:#D1FAE5;color:#065F46}
+      /* ── Signatures ── */
+      .sigs{display:flex;justify-content:space-around;margin-top:16px;gap:10px}
+      .sig{flex:1;text-align:center}
+      .sig-line{display:block;width:85%;margin:0 auto 4px;border-bottom:1px solid #000}
+      .sig-name{font-size:12pt}
+      .sig-role{font-size:10pt;color:#555;margin-top:2px}
       @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
     </style></head><body>
-    <div style="text-align:center;margin-bottom:8px">
-      ${logo}
-      <h1>แบบฟอร์มขอแลกเปลี่ยนคาบสอน / สอนแทน</h1>
-      <div class="sub">${school} &nbsp;|&nbsp; ภาคเรียนที่ ${sem}/${yr}</div>
+    <!-- Header -->
+    <div class="hdr">
+      ${sh?.logo?`<img src="${sh.logo}"/>`:""}
+      <div class="hdr-text">
+        <h1>แบบฟอร์มขอแลกเปลี่ยนคาบสอน / สอนแทน</h1>
+        <p class="school">${school} &nbsp;|&nbsp; ภาคเรียนที่ ${sem}/${yr}</p>
+      </div>
     </div>
-    <table class="info-table" style="margin-bottom:10px">
-      <tr><td>ครูผู้ขอแลก</td><td>${tA?.prefix||""}${tA?.firstName||""} ${tA?.lastName||""}</td>
-          <td style="font-weight:bold">กลุ่มสาระ</td><td>${deptA?.name||"—"}</td></tr>
-      <tr><td>เหตุผล</td><td colspan="3">${finalReason}</td></tr>
-      <tr><td>วันที่ไม่อยู่</td><td>${fmtDate(absentDate)}</td>
-          <td style="font-weight:bold">วันที่สอนคืน</td><td>${rows.map(({sel})=>fmtDate(sel.calcDate||returnDate)).filter((v,i,a)=>a.indexOf(v)===i).join(", ")||fmtDate(returnDate)}</td></tr>
-    </table>
+    <!-- Info -->
+    <div class="info">
+      <div><span class="lbl">ครูผู้ขอแลก: </span><span class="val">${tA?.prefix||""}${tA?.firstName||""} ${tA?.lastName||""}</span></div>
+      <div><span class="lbl">กลุ่มสาระ: </span><span class="val">${deptA?.name||"—"}</span></div>
+      <div><span class="lbl">วันที่ไม่อยู่: </span><span class="val">${fmtDate(absentDate)}</span></div>
+      <div><span class="lbl">วันที่สอนคืน: </span><span class="val">${rows.map(({sel})=>fmtDate(sel.calcDate||returnDate)).filter((v,i,a)=>a.indexOf(v)===i).join(", ")||fmtDate(returnDate)}</span></div>
+      <div style="grid-column:1/-1"><span class="lbl">เหตุผล: </span><span class="val">${finalReason}</span></div>
+    </div>
+    <!-- Table -->
     <table>
       <thead><tr>
-        <th style="width:4%">#</th>
-        <th>คาบที่ขอ<br/>(วัน/คาบ)</th>
-        <th>วิชา / ห้อง</th>
-        <th>ครูสอนแทน</th>
-        <th>คาบที่ครู A<br/>สอนคืน</th>
-        <th>วิชา / ห้อง<br/>(ที่สอนคืน)</th>
+        <th style="width:3%">#</th>
+        <th style="width:14%">คาบที่ขอ<br/>(วัน / วันที่ / คาบ)</th>
+        <th style="width:18%">วิชา / ห้อง<br/><span style="font-weight:400;font-size:10pt">(ที่ครูสอนแทนจะสอน)</span></th>
+        <th style="width:16%">ครูสอนแทน</th>
+        <th style="width:14%">คาบที่ครู A สอนคืน<br/>(วัน / วันที่ / คาบ)</th>
+        <th style="width:18%">วิชา / ห้อง<br/><span style="font-weight:400;font-size:10pt">(ที่ครู A จะสอนคืน)</span></th>
+        <th style="width:17%">หมายเหตุ</th>
       </tr></thead>
       <tbody>${tableRows}</tbody>
     </table>
-    <div class="sig-row">
-      <div class="sig-box">
-        <div class="sig-line"></div><br/>
-        <div>(${tA?.prefix||""}${tA?.firstName||""} ${tA?.lastName||""})</div>
-        <div style="font-size:10pt;color:#555">ผู้ขอแลก &nbsp; วันที่ ___________</div>
+    <!-- Signatures -->
+    <div class="sigs">
+      <div class="sig">
+        <span class="sig-line"></span>
+        <div class="sig-name">(${tA?.prefix||""}${tA?.firstName||""} ${tA?.lastName||""})</div>
+        <div class="sig-role">ผู้ขอแลก &nbsp; วันที่ ___________</div>
       </div>
-      <div class="sig-box">
-        <div class="sig-line"></div><br/>
-        <div>(....................................)</div>
-        <div style="font-size:10pt;color:#555">หัวหน้ากลุ่มสาระ${deptA?.name?"<br/>"+deptA.name:""}</div>
+      <div class="sig">
+        <span class="sig-line"></span>
+        <div class="sig-name">(....................................)</div>
+        <div class="sig-role">หัวหน้ากลุ่มสาระ${deptA?.name?`<br/>${deptA.name}`:""}</div>
       </div>
-      <div class="sig-box">
-        <div class="sig-line"></div><br/>
-        <div>(....................................)</div>
-        <div style="font-size:10pt;color:#555">รองฯ ฝ่ายวิชาการ</div>
+      <div class="sig">
+        <span class="sig-line"></span>
+        <div class="sig-name">(....................................)</div>
+        <div class="sig-role">รองฯ ฝ่ายวิชาการ</div>
       </div>
     </div>
     </body></html>`;
