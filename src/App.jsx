@@ -4041,8 +4041,9 @@ function SwapPage({S,st,ay,sh}){
 
   const [teacherA,setTeacherA]=useState("");
   const [absentDays,setAbsentDays]=useState([]);
-  const [absentDate,setAbsentDate]=useState(""); // วันที่จริงที่ครู A ไม่อยู่ (YYYY-MM-DD)
-  const [returnDate,setReturnDate]=useState(""); // วันที่ครู A จะสอนคืน (YYYY-MM-DD)
+  const [absentDateFrom,setAbsentDateFrom]=useState(""); // วันที่เริ่มต้น
+  const [absentDateTo,setAbsentDateTo]=useState("");     // วันที่สิ้นสุด
+  const [returnDate,setReturnDate]=useState("");
   const [reason,setReason]=useState("ติดธุระ");
   const [reasonOther,setReasonOther]=useState("");
   const [searched,setSearched]=useState(false);
@@ -4050,12 +4051,36 @@ function SwapPage({S,st,ay,sh}){
   const [selected,setSelected]=useState({});
   const [printReady,setPrintReady]=useState(false);
 
-  // ── แปลง YYYY-MM-DD → วัน dd/mm/yyyy (พ.ศ.) ──
+  // ── แปลง YYYY-MM-DD → dd/mm/พ.ศ. ──
   const fmtDate=(d)=>{
     if(!d)return"___________";
     const [y,m,day2]=d.split("-");
     return`${day2}/${m}/${parseInt(y)+543}`;
   };
+
+  const DAY_NAMES=["อาทิตย์","จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์","เสาร์"];
+
+  // คืน array ของ {dateStr, dayName} ทุกวันจันทร์-ศุกร์ในช่วง from→to
+  const getAbsentDateRange=(from,to)=>{
+    if(!from)return[];
+    const end=to||from; // ถ้าไม่ได้เลือก to → ใช้แค่วันเดียว
+    const result=[];
+    const cur=new Date(from);
+    const endD=new Date(end);
+    while(cur<=endD){
+      const dow=cur.getDay();
+      if(dow>=1&&dow<=5){ // จันทร์-ศุกร์
+        result.push({dateStr:cur.toISOString().split("T")[0],dayName:DAY_NAMES[dow]});
+      }
+      cur.setDate(cur.getDate()+1);
+    }
+    return result;
+  };
+
+  // วันใน range (จันทร์-ศุกร์)
+  const absentRange=getAbsentDateRange(absentDateFrom,absentDateTo);
+  // set ของชื่อวันที่อยู่ใน range (อาจมีซ้ำ เช่น จันทร์ 2 สัปดาห์)
+  const absentDayNamesInRange=new Set(absentRange.map(r=>r.dayName));
 
   // ── helper: ดึง entries ของครูในคาบที่กำหนด ──
   const getEntries=(tid,day,pid)=>{
@@ -4112,16 +4137,14 @@ function SwapPage({S,st,ay,sh}){
   // คืนวันที่ใกล้ที่สุด (ก่อนหรือหลัง absentDate ก็ได้) ที่ตรงกับ dayName
   const DAY_IDX={"จันทร์":1,"อังคาร":2,"พุธ":3,"พฤหัสบดี":4,"ศุกร์":5};
 
-  // คืน array ของวันที่ทั้งหมดใน window ที่ตรงกับ dayName
-  // window: absentDate-14 ถึง ไม่จำกัด (แต่แสดงแค่ 4 สัปดาห์หลัง)
-  const calcReturnDates=(returnDayName,absentDateStr)=>{
-    if(!absentDateStr||!returnDayName)return[];
-    const base=new Date(absentDateStr);
+  // คืน array ของวันที่ทั้งหมดใน window ที่ตรงกับ dayName (anchor = absentDateFrom)
+  const calcReturnDates=(returnDayName,anchorDate)=>{
+    if(!anchorDate||!returnDayName)return[];
+    const base=new Date(anchorDate);
     const baseIdx=base.getDay();
     const targetIdx=DAY_IDX[returnDayName]??1;
-    const minDate=new Date(absentDateStr); minDate.setDate(minDate.getDate()-14);
+    const minDate=new Date(anchorDate); minDate.setDate(minDate.getDate()-14);
     const dates=[];
-    // scan -2 สัปดาห์ ถึง +4 สัปดาห์ (รวม 6 สัปดาห์ = สูงสุด ~6 ตัวเลือกต่อวัน)
     for(let w=-2;w<=4;w++){
       const d=new Date(base);
       d.setDate(base.getDate()+(targetIdx-baseIdx)+w*7);
@@ -4160,7 +4183,7 @@ function SwapPage({S,st,ay,sh}){
                   // ชื่อวิชาของครู B ในห้องนั้น
                   const subB=bEntries[0];
                   // แสดงทุกวันที่ใน window ±2 สัปดาห์
-                  const calcDates=calcReturnDates(rd,absentDate);
+                  const calcDates=calcReturnDates(rd,absentDateFrom);
                   calcDates.forEach(calcDate=>{
                     returnSlots.push({day:rd,period:rp.id,time:rp.time,calcDate,subBName:subB.subFullName||subB.subName,subBRoom:subB.roomName});
                   });
@@ -4199,7 +4222,9 @@ function SwapPage({S,st,ay,sh}){
     const school=sh?.name||"โรงเรียนดาราวิทยาลัย";
     const yr=ay?.year||"2568";const sem=ay?.semester||"1";
     const finalReason=reason==="อื่นๆ"?(reasonOther||"อื่นๆ"):reason;
-    const logo=sh?.logo?`<img src="${sh.logo}" style="height:56px;vertical-align:middle;margin-right:12px;"/>` :"";
+    const absentRangeStr=absentDateTo&&absentDateTo!==absentDateFrom
+      ?`${fmtDate(absentDateFrom)} — ${fmtDate(absentDateTo)}`
+      :fmtDate(absentDateFrom);
 
     const rows=filledKeys.map(k=>{
       const r=results.find(r=>`${r.day}_${r.period}_${r.roomId}`===k);
@@ -4213,7 +4238,7 @@ function SwapPage({S,st,ay,sh}){
         <td class="ctr">${i+1}</td>
         <td class="ctr">
           <span class="badge">${r.day}</span><br/>
-          <b>${fmtDate(absentDate)}</b><br/>
+          <b>${absentRangeStr}</b><br/>
           คาบ ${r.period} <span style="font-size:10pt;color:#555">(${r.time})</span>
         </td>
         <td>${sel.subBName||r.subFullName||r.subName}<br/><span style="font-size:10pt;color:#555">ห้อง ${sel.subBRoom||r.roomName}</span></td>
@@ -4276,7 +4301,7 @@ function SwapPage({S,st,ay,sh}){
     <div class="info">
       <div><span class="lbl">ครูผู้ขอแลก: </span><span class="val">${tA?.prefix||""}${tA?.firstName||""} ${tA?.lastName||""}</span></div>
       <div><span class="lbl">กลุ่มสาระ: </span><span class="val">${deptA?.name||"—"}</span></div>
-      <div><span class="lbl">วันที่ไม่อยู่: </span><span class="val">${fmtDate(absentDate)}</span></div>
+      <div><span class="lbl">วันที่ไม่อยู่: </span><span class="val">${absentRangeStr}</span></div>
       <div><span class="lbl">วันที่สอนคืน: </span><span class="val">${rows.map(({sel})=>fmtDate(sel.calcDate||returnDate)).filter((v,i,a)=>a.indexOf(v)===i).join(", ")||fmtDate(returnDate)}</span></div>
       <div style="grid-column:1/-1"><span class="lbl">เหตุผล: </span><span class="val">${finalReason}</span></div>
     </div>
@@ -4350,21 +4375,40 @@ function SwapPage({S,st,ay,sh}){
           </div>
         </div>
 
-        {/* วันที่จริง */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+        {/* วันที่ไม่อยู่ (ช่วง) */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16,marginBottom:16}}>
           <div>
-            <label style={LS}>📅 วันที่ครู A ไม่อยู่ (วันที่จะขอแลก)</label>
-            <input type="date" style={IS} value={absentDate} onChange={e=>setAbsentDate(e.target.value)}/>
-            {absentDate&&<div style={{fontSize:11,color:"#991B1B",marginTop:4,fontWeight:600}}>วันที่ {fmtDate(absentDate)}</div>}
+            <label style={LS}>📅 วันที่เริ่มต้น (ไม่อยู่ตั้งแต่)</label>
+            <input type="date" style={IS} value={absentDateFrom}
+              onChange={e=>{setAbsentDateFrom(e.target.value);setAbsentDays([]);setSearched(false);}}/>
+            {absentDateFrom&&<div style={{fontSize:11,color:"#991B1B",marginTop:4,fontWeight:600}}>{fmtDate(absentDateFrom)}</div>}
+          </div>
+          <div>
+            <label style={LS}>📅 วันที่สิ้นสุด (จนถึง)</label>
+            <input type="date" style={IS} value={absentDateTo} min={absentDateFrom||undefined}
+              onChange={e=>{setAbsentDateTo(e.target.value);setAbsentDays([]);setSearched(false);}}/>
+            {absentDateTo&&<div style={{fontSize:11,color:"#991B1B",marginTop:4,fontWeight:600}}>{fmtDate(absentDateTo)}</div>}
+            {!absentDateTo&&absentDateFrom&&<div style={{fontSize:11,color:"#9CA3AF",marginTop:4}}>ไม่เลือก = วันเดียว</div>}
           </div>
           <div>
             <label style={LS}>📅 วันที่ครู A จะสอนคืน</label>
             <input type="date" style={IS} value={returnDate} onChange={e=>setReturnDate(e.target.value)}
-              min={absentDate?(()=>{const d=new Date(absentDate);d.setDate(d.getDate()-14);return d.toISOString().split("T")[0]})():undefined}/>
-            {returnDate&&<div style={{fontSize:11,color:"#059669",marginTop:4,fontWeight:600}}>วันที่ {fmtDate(returnDate)}</div>}
-            <div style={{fontSize:11,color:"#9CA3AF",marginTop:3}}>สอนคืนก่อนวันแลกได้ไม่เกิน 14 วัน / หลังวันแลกไม่จำกัด</div>
+              min={absentDateFrom?(()=>{const d=new Date(absentDateFrom);d.setDate(d.getDate()-14);return d.toISOString().split("T")[0]})():undefined}/>
+            {returnDate&&<div style={{fontSize:11,color:"#059669",marginTop:4,fontWeight:600}}>{fmtDate(returnDate)}</div>}
+            <div style={{fontSize:11,color:"#9CA3AF",marginTop:3}}>ก่อนวันแลกได้ไม่เกิน 14 วัน / หลังไม่จำกัด</div>
           </div>
         </div>
+        {/* แสดงสรุปช่วงวัน */}
+        {absentRange.length>0&&(
+          <div style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:10,padding:"8px 14px",marginBottom:14,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+            <span style={{fontSize:12,fontWeight:700,color:"#991B1B"}}>📌 ช่วงที่ไม่อยู่:</span>
+            {absentRange.map(r=>(
+              <span key={r.dateStr} style={{background:"#FEE2E2",color:"#991B1B",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>
+                {r.dayName} {fmtDate(r.dateStr)}
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* ตารางเลือกคาบที่ครู A ไม่อยู่ */}
         {teacherA&&(
@@ -4387,12 +4431,10 @@ function SwapPage({S,st,ay,sh}){
                 </thead>
                 <tbody>
                   {DAYS.map(day=>{
-                    // คำนวณว่า absentDate ตรงกับวันไหนในสัปดาห์
-                    const absentDayName=absentDate?(["อาทิตย์","จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์","เสาร์"][new Date(absentDate).getDay()]||""):"";
-                    const isAbsentDay=!absentDate||day===absentDayName; // ถ้ายังไม่เลือกวันที่ → ให้กดได้ทุกวัน
+                    const isAbsentDay=absentRange.length===0||absentDayNamesInRange.has(day);
                     return(
-                    <tr key={day} style={{opacity:absentDate&&!isAbsentDay?0.4:1}}>
-                      <td style={{padding:"4px 10px",border:"1px solid #E5E7EB",fontWeight:700,fontSize:11,background:isAbsentDay?"#FFF5F5":"#F9FAFB",color:isAbsentDay?"#991B1B":"#374151"}}>{day}</td>
+                    <tr key={day} style={{opacity:absentRange.length>0&&!isAbsentDay?0.35:1}}>
+                      <td style={{padding:"4px 10px",border:"1px solid #E5E7EB",fontWeight:700,fontSize:11,background:isAbsentDay&&absentRange.length>0?"#FFF5F5":"#F9FAFB",color:isAbsentDay&&absentRange.length>0?"#991B1B":"#374151"}}>{day}</td>
                       {PERIODS.map(p=>{
                         const ents=getEntries(teacherA,day,p.id);
                         const absent=isAbsent(day,p.id);
