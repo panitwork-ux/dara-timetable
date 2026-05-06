@@ -4111,23 +4111,23 @@ function SwapPage({S,st,ay,sh}){
   // ── คำนวณวันที่จริงจากวันในสัปดาห์ + absentDate เป็น anchor ──
   // คืนวันที่ใกล้ที่สุด (ก่อนหรือหลัง absentDate ก็ได้) ที่ตรงกับ dayName
   const DAY_IDX={"จันทร์":1,"อังคาร":2,"พุธ":3,"พฤหัสบดี":4,"ศุกร์":5};
-  const calcReturnDate=(returnDayName,absentDateStr)=>{
-    if(!absentDateStr||!returnDayName)return"";
+
+  // คืน array ของวันที่ทั้งหมดใน window ที่ตรงกับ dayName
+  // window: absentDate-14 ถึง ไม่จำกัด (แต่แสดงแค่ 4 สัปดาห์หลัง)
+  const calcReturnDates=(returnDayName,absentDateStr)=>{
+    if(!absentDateStr||!returnDayName)return[];
     const base=new Date(absentDateStr);
-    const baseIdx=base.getDay(); // 0=Sun,1=Mon,...
+    const baseIdx=base.getDay();
     const targetIdx=DAY_IDX[returnDayName]??1;
-    // หาทั้งสัปดาห์ก่อน ปัจจุบัน และถัดไป แล้วเลือกอันที่อยู่ใน window min/max
     const minDate=new Date(absentDateStr); minDate.setDate(minDate.getDate()-14);
-    const candidates=[];
+    const dates=[];
+    // scan -2 สัปดาห์ ถึง +4 สัปดาห์ (รวม 6 สัปดาห์ = สูงสุด ~6 ตัวเลือกต่อวัน)
     for(let w=-2;w<=4;w++){
       const d=new Date(base);
       d.setDate(base.getDate()+(targetIdx-baseIdx)+w*7);
-      if(d>=minDate) candidates.push(d);
+      if(d>=minDate) dates.push(d.toISOString().split("T")[0]);
     }
-    // เลือกวันที่ใกล้ absentDate ที่สุด (ก่อนหรือหลัง)
-    candidates.sort((a,b)=>Math.abs(a-base)-Math.abs(b-base));
-    const best=candidates[0];
-    return best?best.toISOString().split("T")[0]:"";
+    return dates;
   };
 
   // ── ค้นหาครูที่สอนแทนได้ ──
@@ -4151,17 +4151,26 @@ function SwapPage({S,st,ay,sh}){
             DAYS.forEach(rd=>{
               PERIODS.forEach(rp=>{
                 if(rd===day&&rp.id===pid)return;
-                const bHasSlot=getEntries(t.id,rd,rp.id).some(e=>e.roomId===roomId);
+                // ครู B สอนห้องเดียวกันในคาบนั้น
+                const bEntries=getEntries(t.id,rd,rp.id).filter(e=>e.roomId===roomId);
+                const bHasSlot=bEntries.length>0;
                 const aFree=isFree(teacherA,rd,rp.id);
                 const aHasRoom=S.assigns.some(a=>a.teacherId===teacherA&&(a.roomIds||[]).includes(roomId));
                 if(bHasSlot&&aFree&&aHasRoom){
-                  // คำนวณวันที่จริงที่ใกล้ absentDate ที่สุด
-                  const calcDate=calcReturnDate(rd,absentDate);
-                  returnSlots.push({day:rd,period:rp.id,time:rp.time,calcDate});
+                  // ชื่อวิชาของครู B ในห้องนั้น
+                  const subB=bEntries[0];
+                  // แสดงทุกวันที่ใน window ±2 สัปดาห์
+                  const calcDates=calcReturnDates(rd,absentDate);
+                  calcDates.forEach(calcDate=>{
+                    returnSlots.push({day:rd,period:rp.id,time:rp.time,calcDate,subBName:subB.subFullName||subB.subName,subBRoom:subB.roomName});
+                  });
                 }
               });
             });
-            return{teacher:t,returnSlots};
+            // deduplicate: กัน slot ซ้ำกัน (day+period+calcDate เดียวกัน)
+            const seen=new Set();
+            const uniq=returnSlots.filter(s=>{const k=`${s.day}_${s.period}_${s.calcDate}`;if(seen.has(k))return false;seen.add(k);return true;});
+            return{teacher:t,returnSlots:uniq};
           }).filter(c=>c.returnSlots.length>0);
 
           res.push({day,period:pid,time:PERIODS.find(p=>p.id===pid)?.time,subName,subFullName,roomId,roomName,candidates});
@@ -4177,8 +4186,8 @@ function SwapPage({S,st,ay,sh}){
   };
 
   // ── เลือกครูสอนแทน + คาบคืน ──
-  const selectSub=(key,subTeacherId,subDay,subPeriod,calcDate)=>{
-    setSelected(p=>({...p,[key]:{subTeacherId,subDay,subPeriod,calcDate}}));
+  const selectSub=(key,subTeacherId,subDay,subPeriod,calcDate,subBName,subBRoom)=>{
+    setSelected(p=>({...p,[key]:{subTeacherId,subDay,subPeriod,calcDate,subBName,subBRoom}}));
     setPrintReady(false);
   };
 
@@ -4203,7 +4212,7 @@ function SwapPage({S,st,ay,sh}){
       <tr>
         <td style="text-align:center">${i+1}</td>
         <td style="text-align:center">${r.day}<br/><b>${fmtDate(absentDate)}</b><br/>คาบ ${r.period}<br/><span style="font-size:10pt;color:#555">(${r.time})</span></td>
-        <td>${r.subFullName||r.subName}<br/><span style="font-size:10pt;color:#555">ห้อง ${r.roomName}</span></td>
+        <td>${sel.subBName||r.subFullName||r.subName}<br/><span style="font-size:10pt;color:#555">ห้อง ${sel.subBRoom||r.roomName}</span></td>
         <td>${tB?.prefix||""}${tB?.firstName||""} ${tB?.lastName||""}</td>
         <td style="text-align:center">${sel.subDay}<br/><b>${fmtDate(sel.calcDate||returnDate)}</b><br/>คาบ ${sel.subPeriod}<br/><span style="font-size:10pt;color:#555">(${PERIODS.find(p=>p.id===sel.subPeriod)?.time||""})</span></td>
         <td>${r.subFullName||r.subName}<br/><span style="font-size:10pt;color:#555">ห้อง ${r.roomName}</span></td>
@@ -4426,14 +4435,15 @@ function SwapPage({S,st,ay,sh}){
                             </div>
                             <div style={{fontSize:11,color:"#6B7280",marginBottom:6}}>คาบที่ครู A สอนคืนได้ (เฉพาะห้อง {r.roomName}):</div>
                             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                              {returnSlots.map(rs=>{
-                                const isActive=sel?.subTeacherId===tB.id&&sel?.subDay===rs.day&&sel?.subPeriod===rs.period;
+                              {returnSlots.map((rs,ri)=>{
+                                const isActive=sel?.subTeacherId===tB.id&&sel?.subDay===rs.day&&sel?.subPeriod===rs.period&&sel?.calcDate===rs.calcDate;
                                 return(
-                                  <button key={`${rs.day}_${rs.period}`}
-                                    onClick={()=>selectSub(key,tB.id,rs.day,rs.period,rs.calcDate)}
-                                    style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${isActive?"#059669":"#D1D5DB"}`,background:isActive?"#F0FDF4":"#fff",color:isActive?"#065F46":"#374151",fontSize:11,fontWeight:isActive?700:400,cursor:"pointer",textAlign:"left"}}>
-                                    {isActive?"✓ ":""}{rs.day} คาบ {rs.period} ({rs.time})
-                                    {rs.calcDate&&<span style={{display:"block",fontSize:10,color:isActive?"#059669":"#9CA3AF",marginTop:1}}>📅 {fmtDate(rs.calcDate)}</span>}
+                                  <button key={`${rs.day}_${rs.period}_${rs.calcDate}_${ri}`}
+                                    onClick={()=>selectSub(key,tB.id,rs.day,rs.period,rs.calcDate,rs.subBName,rs.subBRoom)}
+                                    style={{padding:"6px 12px",borderRadius:10,border:`2px solid ${isActive?"#059669":"#D1D5DB"}`,background:isActive?"#F0FDF4":"#fff",color:isActive?"#065F46":"#374151",fontSize:11,fontWeight:isActive?700:400,cursor:"pointer",textAlign:"left",minWidth:160}}>
+                                    <div style={{fontWeight:700}}>{isActive?"✓ ":""}{rs.day} คาบ {rs.period} ({rs.time})</div>
+                                    <div style={{fontSize:10,color:isActive?"#059669":"#6B7280",marginTop:2}}>📅 {fmtDate(rs.calcDate)}</div>
+                                    {rs.subBName&&<div style={{fontSize:10,color:"#1E40AF",marginTop:1}}>📚 {rs.subBName}</div>}
                                   </button>
                                 );
                               })}
