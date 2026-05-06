@@ -2107,7 +2107,7 @@ function Assigns({S,U,st,gc}){
                     <span style={{color:"#374151",marginLeft:6}}>{bs?.name}</span>
                     <span style={{color:"#9CA3AF",marginLeft:6,fontSize:11}}>
                       {b.roomIds.map(rid=>S.rooms.find(r=>r.id===rid)?.name).join(", ")}
-                      {b.totalPeriods>0?` · ${b.totalPeriods} คาบ`:""}
+                      {b.totalPeriods>0?" · "+b.totalPeriods+" คาบ":""}
                     </span>
                   </div>
                   <button onClick={()=>setBasket(p=>p.filter((_,i)=>i!==bi))}
@@ -2236,7 +2236,7 @@ function Assigns({S,U,st,gc}){
               st(`มอบหมาย ${newAssigns.length} วิชาสำเร็จ`);
             }}
             style={{...BS(),flex:2,opacity:basket.length===0?0.4:1}}>
-            💾 บันทึก {basket.length>0?`(${basket.length} วิชา)`:""}
+            {"💾 บันทึก "+(basket.length>0?"("+basket.length+" วิชา)":"")}
           </button>
         </div>
 
@@ -3522,7 +3522,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
           </div>
           {autoResult.details.length>0&&(
             <div style={{fontSize:11,color:"#92400E",flex:1}}>
-              ❌ ไม่สามารถจัดได้: {autoResult.details.slice(0,5).join(", ")}{autoResult.details.length>5?` และอีก ${autoResult.details.length-5} รายการ`:""}
+              {"❌ ไม่สามารถจัดได้: "+autoResult.details.slice(0,5).join(", ")+(autoResult.details.length>5?" และอีก "+(autoResult.details.length-5)+" รายการ":"")}
             </div>
           )}
           <button onClick={()=>setAutoResult(null)} style={{background:"none",border:"none",cursor:"pointer",color:"#9CA3AF",fontSize:16}}>✕</button>
@@ -5339,7 +5339,7 @@ function Reports({S,U,st,gc,ay,sh}){
               <div style={{padding:"10px 12px",background:"#F0F9FF",borderRadius:8,fontSize:11,color:"#0369A1"}}>
                 💡 ครูประจำชั้นจะถูกอ่านจากข้อมูลในเมนู <b>ครูประจำชั้น</b> โดยอัตโนมัติ
                 <div style={{marginTop:4,color:"#0284C7"}}>
-                  ตัวอย่าง: {S.rooms.filter(r=>(newRoomPDFOpts.selectedRooms||[]).includes(r.id)&&r.homeroom1).slice(0,2).map(r=>`${r.name}: ${r.homeroom1}`).join(" · ")||"(เลือกห้องก่อน)"}
+                  {"ตัวอย่าง: "+(S.rooms.filter(r=>(newRoomPDFOpts.selectedRooms||[]).includes(r.id)&&r.homeroom1).slice(0,2).map(r=>r.name+": "+r.homeroom1).join(" · ")||"(เลือกห้องก่อน)")}
                 </div>
               </div>
             </div>
