@@ -117,16 +117,16 @@ function AdminPanel({user,onBack,refreshPerms}){
   const [saving,setSaving]=useState(false);
   const [toast,setToast]=useState(null);
 
-  // เพิ่มอีเมลล่วงหน้า
+  // เพิ่มอีเมลทีละคน
   const [addEmail,setAddEmail]=useState("");
-  const [addPerms,setAddPerms]=useState({p1:false,p2:false,m1:false,m2:false,canEdit:false});
+  const [addPerms,setAddPerms]=useState({p1:false,p2:false,m1:false,m2:false,canEdit:false,isTeacher:false});
   const [addLoading,setAddLoading]=useState(false);
-  // Bulk import
-  const [bulkMode,setBulkMode]=useState(false);
+
+  // Bulk import หลายอีเมลพร้อมกัน
   const [bulkText,setBulkText]=useState("");
-  const [bulkPerms,setBulkPerms]=useState({p1:false,p2:false,m1:false,m2:false,canEdit:false});
+  const [bulkPerms,setBulkPerms]=useState({p1:false,p2:false,m1:false,m2:false,canEdit:false,isTeacher:false});
   const [bulkLoading,setBulkLoading]=useState(false);
-  const [bulkResult,setBulkResult]=useState(null);
+  const [bulkResult,setBulkResult]=useState(null); // {ok:[], skip:[]}
 
   // Edit existing user
   const [editUid,setEditUid]=useState(null);
@@ -149,9 +149,23 @@ function AdminPanel({user,onBack,refreshPerms}){
     setLoading(false);
   };
 
-  // เพิ่ม / อัปเดตผู้ใช้จากอีเมล (ใช้อีเมลเป็น uid placeholder)
   const makePreKey=(email)=>"pre_"+email.trim().toLowerCase().replace(/[@.]/g,"_");
 
+  // ── helper: save one email ──
+  const saveOneEmail=async(db,email,perms,currentUsers)=>{
+    const existing=currentUsers.find(u=>u.email===email&&!u.preAdded);
+    const uid=existing?existing.uid:makePreKey(email);
+    await setDoc(doc(db,"permissions",uid),{
+      email,
+      displayName:existing?.displayName||"",
+      divisions:perms,
+      preAdded:!existing,
+      merged:false,
+    },{merge:true});
+    return{uid,email,existing,perms};
+  };
+
+  // เพิ่มอีเมลทีละคน
   const handleAddEmail=async()=>{
     const email=addEmail.trim().toLowerCase();
     if(!email){showToast("กรุณากรอกอีเมล","error");return;}
@@ -159,32 +173,40 @@ function AdminPanel({user,onBack,refreshPerms}){
     setAddLoading(true);
     const {db}=getFB();
     if(!db){showToast("Firebase ไม่พร้อม","error");setAddLoading(false);return;}
-
-    // ค้นหาว่ามี doc ที่มี email นี้อยู่แล้วไหม (จาก users ที่โหลดมา = login จริงแล้ว)
-    const existing=users.find(u=>u.email===email&&!u.preAdded);
-    const uid=existing?existing.uid:makePreKey(email);
-
-    await setDoc(doc(db,"permissions",uid),{
-      email,
-      displayName:existing?.displayName||"",
-      divisions:addPerms,
-      preAdded:!existing,
-      merged:false,
-    },{merge:true});
-
+    const {uid,existing}=await saveOneEmail(db,email,addPerms,users);
     if(existing){
       setUsers(p=>p.map(u=>u.uid===uid?{...u,divisions:addPerms}:u));
     } else {
-      // ลบ pre doc เก่าถ้ามี แล้วเพิ่มใหม่
-      setUsers(p=>{
-        const filtered=p.filter(u=>u.uid!==uid);
-        return [...filtered,{uid,email,displayName:"",divisions:addPerms,preAdded:true}];
-      });
+      setUsers(p=>{const f=p.filter(u=>u.uid!==uid);return[...f,{uid,email,displayName:"",divisions:addPerms,preAdded:true}];});
     }
     setAddEmail("");
-    setAddPerms({p1:false,p2:false,m1:false,m2:false});
+    setAddPerms({p1:false,p2:false,m1:false,m2:false,canEdit:false,isTeacher:false});
     showToast("บันทึกสิทธิ์สำเร็จ: "+email);
     setAddLoading(false);
+    if(refreshPerms)refreshPerms();
+  };
+
+  // Bulk import: วางอีเมลหลายบรรทัด
+  const handleBulkImport=async()=>{
+    const emails=bulkText.split(/[\n,;]+/).map(e=>e.trim().toLowerCase()).filter(e=>e.includes("@"));
+    if(!emails.length){showToast("ไม่พบอีเมลที่ถูกต้อง","error");return;}
+    setBulkLoading(true);
+    const {db}=getFB();
+    if(!db){showToast("Firebase ไม่พร้อม","error");setBulkLoading(false);return;}
+    const ok=[],skip=[];
+    for(const email of emails){
+      try{
+        const {uid,existing}=await saveOneEmail(db,email,bulkPerms,users);
+        if(existing){
+          setUsers(p=>p.map(u=>u.uid===uid?{...u,divisions:bulkPerms}:u));
+        } else {
+          setUsers(p=>{const f=p.filter(u=>u.uid!==uid);return[...f,{uid,email,displayName:"",divisions:bulkPerms,preAdded:true}];});
+        }
+        ok.push(email);
+      } catch(e){skip.push(email);}
+    }
+    setBulkResult({ok,skip});
+    setBulkLoading(false);
     if(refreshPerms)refreshPerms();
   };
 
@@ -202,10 +224,30 @@ function AdminPanel({user,onBack,refreshPerms}){
   const deleteUser=async(uid)=>{
     if(!confirm("ลบผู้ใช้นี้ออกจากระบบ?"))return;
     const {db}=getFB();if(!db)return;
-    await setDoc(doc(db,"permissions",uid),{divisions:{p1:false,p2:false,m1:false,m2:false}},{merge:true});
-    setUsers(p=>p.map(u=>u.uid===uid?{...u,divisions:{p1:false,p2:false,m1:false,m2:false}}:u));
+    await setDoc(doc(db,"permissions",uid),{divisions:{p1:false,p2:false,m1:false,m2:false,canEdit:false,isTeacher:false}},{merge:true});
+    setUsers(p=>p.map(u=>u.uid===uid?{...u,divisions:{p1:false,p2:false,m1:false,m2:false,canEdit:false,isTeacher:false}}:u));
     showToast("ถอนสิทธิ์แล้ว","warning");
   };
+
+  // ── helper render สิทธิ์ checkbox group ──
+  const PermChecks=({perms,setPerms})=>(
+    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+      {Object.entries(divNames).map(([k,name])=>(
+        <label key={k} style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",padding:"6px 10px",borderRadius:8,border:`2px solid ${perms[k]?"#DC2626":"#D1D5DB"}`,background:perms[k]?"#FEE2E2":"#F9FAFB",userSelect:"none",fontSize:12}}>
+          <input type="checkbox" checked={!!perms[k]} onChange={e=>setPerms(p=>({...p,[k]:e.target.checked}))} style={{width:13,height:13,accentColor:"#DC2626"}}/>
+          <span style={{fontWeight:perms[k]?700:400,color:perms[k]?"#991B1B":"#374151"}}>{name}</span>
+        </label>
+      ))}
+      <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",padding:"6px 10px",borderRadius:8,border:`2px solid ${perms.canEdit?"#7C3AED":"#D1D5DB"}`,background:perms.canEdit?"#F5F3FF":"#F9FAFB",userSelect:"none",fontSize:12}}>
+        <input type="checkbox" checked={!!perms.canEdit} onChange={e=>setPerms(p=>({...p,canEdit:e.target.checked}))} style={{width:13,height:13,accentColor:"#7C3AED"}}/>
+        <span style={{fontWeight:perms.canEdit?700:400,color:perms.canEdit?"#5B21B6":"#374151"}}>✏️ แก้ตารางได้</span>
+      </label>
+      <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",padding:"6px 10px",borderRadius:8,border:`2px solid ${perms.isTeacher?"#0891B2":"#D1D5DB"}`,background:perms.isTeacher?"#ECFEFF":"#F9FAFB",userSelect:"none",fontSize:12}}>
+        <input type="checkbox" checked={!!perms.isTeacher} onChange={e=>setPerms(p=>({...p,isTeacher:e.target.checked}))} style={{width:13,height:13,accentColor:"#0891B2"}}/>
+        <span style={{fontWeight:perms.isTeacher?700:400,color:perms.isTeacher?"#0E7490":"#374151"}}>👨‍🏫 ครูทั่วไป</span>
+      </label>
+    </div>
+  );
 
   if(!unlocked) return(
     <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#F3F4F6"}}>
@@ -240,41 +282,71 @@ function AdminPanel({user,onBack,refreshPerms}){
           <h1 style={{fontSize:20,fontWeight:700}}>Admin Panel — จัดการสิทธิ์</h1>
         </div>
 
-        {/* ── เพิ่มอีเมลล่วงหน้า ── */}
-        <div style={{background:"#fff",borderRadius:14,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:20}}>
-          <h2 style={{fontSize:15,fontWeight:700,marginBottom:4}}>➕ กำหนดสิทธิ์ล่วงหน้า (Admin พิมพ์อีเมลเอง)</h2>
-          <p style={{fontSize:12,color:"#6B7280",marginBottom:16}}>เพิ่มอีเมลพร้อมสิทธิ์ได้เลย — เมื่อผู้ใช้ login ครั้งแรกระบบจะจำสิทธิ์ที่ตั้งไว้</p>
+        {/* ── เพิ่มอีเมลทีละคน ── */}
+        <div style={{background:"#fff",borderRadius:14,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:16}}>
+          <h2 style={{fontSize:15,fontWeight:700,marginBottom:4}}>➕ เพิ่มอีเมลทีละคน</h2>
+          <p style={{fontSize:12,color:"#6B7280",marginBottom:14}}>เมื่อผู้ใช้ login ครั้งแรก ระบบจะจำสิทธิ์ที่ตั้งไว้อัตโนมัติ</p>
           <div style={{display:"flex",gap:10,alignItems:"flex-end",flexWrap:"wrap"}}>
-            <div style={{flex:"1 1 280px"}}>
+            <div style={{flex:"1 1 240px"}}>
               <label style={LS}>อีเมล</label>
-              <input
-                style={IS}
-                value={addEmail}
-                onChange={e=>setAddEmail(e.target.value)}
+              <input style={IS} value={addEmail} onChange={e=>setAddEmail(e.target.value)}
                 onKeyDown={e=>e.key==="Enter"&&handleAddEmail()}
-                placeholder="teacher@web1.dara.ac.th"
-                type="email"
-              />
+                placeholder="teacher@web1.dara.ac.th" type="email"/>
             </div>
             <div style={{flex:"1 1 auto"}}>
-              <label style={LS}>ระดับที่เข้าได้</label>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                {Object.entries(divNames).map(([k,name])=>(
-                  <label key={k} style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",padding:"8px 12px",borderRadius:8,border:`2px solid ${addPerms[k]?"#DC2626":"#D1D5DB"}`,background:addPerms[k]?"#FEE2E2":"#F9FAFB",userSelect:"none"}}>
-                    <input type="checkbox" checked={!!addPerms[k]} onChange={e=>setAddPerms(p=>({...p,[k]:e.target.checked}))} style={{width:15,height:15,accentColor:"#DC2626"}}/>
-                    <span style={{fontSize:13,fontWeight:addPerms[k]?700:400,color:addPerms[k]?"#991B1B":"#374151"}}>{name}</span>
-                  </label>
-                ))}
-              </div>
+              <label style={LS}>สิทธิ์</label>
+              <PermChecks perms={addPerms} setPerms={setAddPerms}/>
             </div>
-            <button
-              onClick={handleAddEmail}
-              disabled={addLoading}
-              style={{...BS(),flexShrink:0,opacity:addLoading?0.6:1}}
-            >
+            <button onClick={handleAddEmail} disabled={addLoading}
+              style={{...BS(),flexShrink:0,opacity:addLoading?0.6:1}}>
               {addLoading?"กำลังบันทึก...":"บันทึกสิทธิ์"}
             </button>
           </div>
+        </div>
+
+        {/* ── Bulk Import หลายอีเมล ── */}
+        <div style={{background:"#fff",borderRadius:14,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:20}}>
+          <h2 style={{fontSize:15,fontWeight:700,marginBottom:4}}>📋 Import อีเมลหลายคนพร้อมกัน</h2>
+          <p style={{fontSize:12,color:"#6B7280",marginBottom:14}}>วางอีเมลหลายบรรทัด (หรือคั่นด้วย , ; ) — ระบบจะบันทึกทีละคนอัตโนมัติ</p>
+          <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
+            <div style={{flex:"1 1 280px"}}>
+              <label style={LS}>รายชื่ออีเมล</label>
+              <textarea
+                style={{...IS,height:120,resize:"vertical",fontFamily:"inherit",fontSize:12}}
+                value={bulkText}
+                onChange={e=>setBulkText(e.target.value)}
+                placeholder={"teacher1@web1.dara.ac.th\nteacher2@web1.dara.ac.th\nteacher3@web1.dara.ac.th"}
+              />
+              <div style={{fontSize:11,color:"#9CA3AF",marginTop:4}}>
+                พบ {bulkText.split(/[\n,;]+/).map(e=>e.trim()).filter(e=>e.includes("@")).length} อีเมลที่ถูกต้อง
+              </div>
+            </div>
+            <div style={{flex:"1 1 auto"}}>
+              <label style={LS}>สิทธิ์ (จะใช้กับทุกคนในรายการ)</label>
+              <PermChecks perms={bulkPerms} setPerms={setBulkPerms}/>
+              <button onClick={handleBulkImport} disabled={bulkLoading}
+                style={{...BS("#2563EB"),marginTop:14,opacity:bulkLoading?0.6:1}}>
+                {bulkLoading?"กำลัง import...":"🚀 Import ทั้งหมด"}
+              </button>
+            </div>
+          </div>
+          {/* ผลลัพธ์ Bulk Import */}
+          {bulkResult&&(
+            <div style={{marginTop:14,padding:"12px 16px",borderRadius:10,background:"#F0FDF4",border:"1px solid #BBF7D0"}}>
+              <div style={{fontSize:13,fontWeight:700,color:"#065F46",marginBottom:6}}>
+                ✅ Import สำเร็จ {bulkResult.ok.length} คน {bulkResult.skip.length>0?`/ ⚠️ ล้มเหลว ${bulkResult.skip.length} คน`:""}
+              </div>
+              {bulkResult.skip.length>0&&(
+                <div style={{fontSize:11,color:"#991B1B",marginTop:4}}>
+                  ล้มเหลว: {bulkResult.skip.join(", ")}
+                </div>
+              )}
+              <button onClick={()=>{setBulkResult(null);setBulkText("");}}
+                style={{fontSize:11,color:"#6B7280",background:"none",border:"none",cursor:"pointer",marginTop:6}}>
+                ล้างผลลัพธ์
+              </button>
+            </div>
+          )}
         </div>
 
         {/* ── ค้นหา ── */}
@@ -292,7 +364,7 @@ function AdminPanel({user,onBack,refreshPerms}){
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
             <thead>
               <tr style={{background:"#F9FAFB"}}>
-                {["ชื่อ / อีเมล","สถานะ","ระดับที่เข้าได้","จัดการ"].map(h=>(
+                {["ชื่อ / อีเมล","สถานะ","ระดับที่เข้าได้","บทบาท","จัดการ"].map(h=>(
                   <th key={h} style={{padding:"12px 16px",textAlign:"left",fontWeight:600,color:"#6B7280",fontSize:12}}>{h}</th>
                 ))}
               </tr>
@@ -312,16 +384,23 @@ function AdminPanel({user,onBack,refreshPerms}){
                   </td>
                   <td style={{padding:"12px 16px"}}>
                     <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                      {Object.entries(u.divisions||{}).filter(([,v])=>v).map(([k])=>(
-                        <span key={k} style={{background:"#FEE2E2",color:"#991B1B",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>{divNames[k]||k}</span>
+                      {Object.entries(u.divisions||{}).filter(([k,v])=>v&&divNames[k]).map(([k])=>(
+                        <span key={k} style={{background:"#FEE2E2",color:"#991B1B",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>{divNames[k]}</span>
                       ))}
-                      {!Object.values(u.divisions||{}).some(Boolean)&&<span style={{color:"#9CA3AF",fontSize:12}}>ไม่มีสิทธิ์</span>}
+                      {!Object.entries(u.divisions||{}).filter(([k,v])=>v&&divNames[k]).length&&<span style={{color:"#9CA3AF",fontSize:12}}>ไม่มีสิทธิ์</span>}
+                    </div>
+                  </td>
+                  <td style={{padding:"12px 16px"}}>
+                    <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                      {u.divisions?.canEdit&&<span style={{background:"#F5F3FF",color:"#5B21B6",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>✏️ แก้ตารางได้</span>}
+                      {u.divisions?.isTeacher&&<span style={{background:"#ECFEFF",color:"#0E7490",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>👨‍🏫 ครูทั่วไป</span>}
+                      {!u.divisions?.canEdit&&!u.divisions?.isTeacher&&<span style={{color:"#9CA3AF",fontSize:11}}>—</span>}
                     </div>
                   </td>
                   <td style={{padding:"12px 16px"}}>
                     <div style={{display:"flex",gap:6}}>
                       <button
-                        onClick={()=>{setEditUid(u.uid);setEditPerms(u.divisions||{p1:false,p2:false,m1:false,m2:false});}}
+                        onClick={()=>{setEditUid(u.uid);setEditPerms(u.divisions||{p1:false,p2:false,m1:false,m2:false,canEdit:false,isTeacher:false});}}
                         style={{background:"none",border:"1px solid #D1D5DB",borderRadius:8,padding:"4px 12px",cursor:"pointer",fontSize:12}}
                       >แก้ไขสิทธิ์</button>
                       <button
@@ -334,7 +413,7 @@ function AdminPanel({user,onBack,refreshPerms}){
                 </tr>
               ))}
               {!loading&&!filtered.length&&(
-                <tr><td colSpan={4} style={{padding:32,textAlign:"center",color:"#9CA3AF"}}>
+                <tr><td colSpan={5} style={{padding:32,textAlign:"center",color:"#9CA3AF"}}>
                   {users.length===0?"ยังไม่มีผู้ใช้ — เพิ่มอีเมลได้ที่กล่องด้านบน":"ไม่พบผู้ใช้ที่ค้นหา"}
                 </td></tr>
               )}
@@ -345,16 +424,12 @@ function AdminPanel({user,onBack,refreshPerms}){
         {/* ── Edit permissions modal ── */}
         {editUid&&(
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
-            <div style={{background:"#fff",borderRadius:16,padding:28,width:420}}>
+            <div style={{background:"#fff",borderRadius:16,padding:28,width:460}}>
               <h3 style={{fontSize:16,fontWeight:700,marginBottom:4}}>แก้ไขสิทธิ์</h3>
               <p style={{fontSize:12,color:"#6B7280",marginBottom:16}}>{users.find(u=>u.uid===editUid)?.email||editUid}</p>
-              <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
-                {Object.entries(divNames).map(([k,name])=>(
-                  <label key={k} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",padding:"10px 14px",borderRadius:10,background:editPerms[k]?"#FEE2E2":"#F9FAFB",border:`1.5px solid ${editPerms[k]?"#DC2626":"#E5E7EB"}`}}>
-                    <input type="checkbox" checked={!!editPerms[k]} onChange={e=>setEditPerms(p=>({...p,[k]:e.target.checked}))} style={{width:16,height:16,accentColor:"#DC2626"}}/>
-                    <span style={{fontWeight:editPerms[k]?700:400,color:editPerms[k]?"#991B1B":"#374151",fontSize:14}}>{name}</span>
-                  </label>
-                ))}
+              <div style={{marginBottom:20}}>
+                <label style={{...LS,marginBottom:8}}>สิทธิ์ทั้งหมด</label>
+                <PermChecks perms={editPerms} setPerms={setEditPerms}/>
               </div>
               <div style={{display:"flex",gap:8}}>
                 <button onClick={savePerms} disabled={saving} style={{...BS(),opacity:saving?0.6:1}}>{saving?"กำลังบันทึก...":"บันทึก"}</button>
@@ -875,6 +950,7 @@ export default function App() {
     {id:"homeroom",icon:"users",label:"ครูประจำชั้น"},
     {id:"meetings",icon:"clock",label:"คาบล็อค / ประชุม"},
     {id:"scheduler",icon:"grid",label:"จัดตารางสอน"},
+    {id:"swap",icon:"layers",label:"แลกคาบ / สอนแทน"},
     {id:"reports",icon:"download",label:"รายงาน / Export"},
     {id:"settings",icon:"file",label:"ตั้งค่า / ปีการศึกษา"},
   ];
@@ -998,6 +1074,7 @@ export default function App() {
             {page==="assignments"&&<Assigns S={S} U={U} st={st} gc={gc}/>}
             {page==="meetings"&&<Meetings S={S} U={U} st={st} gc={gc}/>}
             {page==="scheduler"&&<Scheduler S={S} U={U} st={st} gc={gc} isSavingRef={isSavingRef} fsReadyRef={fsReadyRef} fsSave={(s)=>fsSaveTimetable(divId,{...stateRef.current,schedule:s})}/>}
+            {page==="swap"&&<SwapPage S={S} st={st} ay={academicYear} sh={schoolHeader}/>}
             {page==="reports"&&<Reports S={S} st={st} gc={gc} ay={academicYear} sh={schoolHeader}/>}
             {page==="settings"&&<Settings S={S} U={U} st={st} ay={academicYear} setAY={setAcademicYear} sh={schoolHeader} setSH={setSchoolHeader} div={div}/>}
           </>
@@ -5232,6 +5309,432 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
       <thead>${hdrRow}</thead>
       <tbody>${body}</tbody>
     </table>`;
+}
+
+/* ===== SWAP PAGE — แลกคาบสอน / สอนแทน ===== */
+function SwapPage({S,st,ay,sh}){
+  const DAYS=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
+  const PERIODS=[
+    {id:1,time:"08.30-09.20"},{id:2,time:"09.20-10.10"},
+    {id:3,time:"10.25-11.15"},{id:4,time:"11.15-12.05"},
+    {id:5,time:"13.00-13.50"},{id:6,time:"13.50-14.40"},
+    {id:7,time:"14.50-15.40"},
+  ];
+
+  // ── mode: swap (แลกคาบ) หรือ sub (สอนแทน) ──
+  const [mode,setMode]=useState("swap");
+
+  // ── ฝั่ง A (ครูที่ขอแลก/ครูที่ขาด) ──
+  const [teacherA,setTeacherA]=useState("");
+  const [dayA,setDayA]=useState("");
+  const [periodA,setPeriodA]=useState("");
+
+  // ── ฝั่ง B (ครูที่รับแลก / ครูที่สอนแทน) ──
+  const [teacherB,setTeacherB]=useState("");
+  const [dayB,setDayB]=useState("");
+  const [periodB,setPeriodB]=useState("");
+
+  // ── ผลการค้นหา ──
+  const [result,setResult]=useState(null); // {slotA, slotB, conflicts}
+
+  // ── helper: ดึงคาบที่ครูสอนในวัน/คาบที่ระบุ ──
+  const getSlot=(tid,day,pid)=>{
+    const entries=[];
+    Object.entries(S.schedule).forEach(([k,en])=>{
+      const pts=k.split("_");
+      if(pts[pts.length-2]!==day||parseInt(pts[pts.length-1])!==pid) return;
+      (en||[]).forEach(e=>{
+        const coIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
+        if(e.teacherId===tid||coIds.includes(tid)){
+          const sub=S.subjects.find(s=>s.id===e.subjectId);
+          const rid=pts.slice(0,-2).join("_");
+          const rm=S.rooms.find(r=>r.id===rid);
+          entries.push({sub:sub?.name||sub?.code||"—",room:rm?.name||"—",subShort:sub?.shortName||sub?.name||"—"});
+        }
+      });
+    });
+    return entries;
+  };
+
+  // ── ดึงตารางสอนครูทั้งสัปดาห์ (เพื่อแสดงช่องว่าง) ──
+  const getTeacherWeek=(tid)=>{
+    const week={};
+    DAYS.forEach(day=>{
+      week[day]={};
+      PERIODS.forEach(p=>{
+        week[day][p.id]=getSlot(tid,day,p.id);
+      });
+    });
+    return week;
+  };
+
+  // ── ตรวจ conflict: ครูว่างในช่องนั้นไหม ──
+  const isBusy=(tid,day,pid,excludeAssignId=null)=>{
+    let busy=false;
+    // ตรวจ meetings/locks
+    (S.meetings||[]).forEach(m=>{
+      if(m.teacherId===tid&&m.day===day&&(m.periods||[]).includes(pid)) busy=true;
+    });
+    if(busy) return true;
+    // ตรวจ schedule
+    Object.entries(S.schedule).forEach(([k,en])=>{
+      const pts=k.split("_");
+      if(pts[pts.length-2]!==day||parseInt(pts[pts.length-1])!==pid) return;
+      (en||[]).forEach(e=>{
+        const coIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
+        if(e.teacherId===tid||coIds.includes(tid)) busy=true;
+      });
+    });
+    return busy;
+  };
+
+  // ── ค้นหาอัตโนมัติ: หาครูที่ว่างในช่วงเวลาที่ต้องการ ──
+  const autoSearch=()=>{
+    if(!teacherA||!dayA||!periodA){st("เลือกครู วัน และคาบของฝั่ง A ก่อน","error");return;}
+    if(mode==="swap"&&(!teacherB||!dayB||!periodB)){st("เลือกครู วัน และคาบของฝั่ง B ด้วย","error");return;}
+
+    const slotA=getSlot(teacherA,dayA,parseInt(periodA));
+    const slotB=mode==="swap"?getSlot(teacherB,dayB,parseInt(periodB)):[];
+
+    const conflicts=[];
+    if(mode==="swap"){
+      // ตรวจว่า A ว่างในช่อง B และ B ว่างในช่อง A (หลังแลก)
+      const aBusyInB=isBusy(teacherA,dayB,parseInt(periodB));
+      const bBusyInA=isBusy(teacherB,dayA,parseInt(periodA));
+      // ถ้าช่องนั้นเป็นคาบของตัวเองอยู่แล้ว ถือว่าไม่ conflict (เพราะแลกออกไป)
+      const slotAKey=`${dayA}_${periodA}`;
+      const slotBKey=`${dayB}_${periodB}`;
+      if(aBusyInB&&slotBKey!==`${dayA}_${periodA}`) conflicts.push(`${S.teachers.find(t=>t.id===teacherA)?.firstName} ไม่ว่างในคาบ ${dayB} ที่ ${periodB}`);
+      if(bBusyInA&&slotAKey!==`${dayB}_${periodB}`) conflicts.push(`${S.teachers.find(t=>t.id===teacherB)?.firstName} ไม่ว่างในคาบ ${dayA} ที่ ${periodA}`);
+    }
+
+    setResult({slotA,slotB,conflicts,
+      tA:S.teachers.find(t=>t.id===teacherA),
+      tB:mode==="swap"?S.teachers.find(t=>t.id===teacherB):null,
+      dayA,periodA:parseInt(periodA),
+      dayB:mode==="swap"?dayB:"",periodB:mode==="swap"?parseInt(periodB):0,
+      mode,
+    });
+  };
+
+  // ── ค้นหาครูที่ว่างในช่องที่กำหนด (สำหรับสอนแทน) ──
+  const findFreeTeachers=(day,pid)=>{
+    return S.teachers.filter(t=>{
+      if(!t.totalPeriods) return false; // ข้ามครูที่ไม่มีคาบ
+      return !isBusy(t.id,day,pid);
+    });
+  };
+
+  // ── Print form ──
+  const printForm=()=>{
+    if(!result){st("ค้นหาก่อนแล้วค่อย print","error");return;}
+    const w=window.open("","_blank");
+    if(!w){st("Browser บล็อก popup","error");return;}
+    const tA=result.tA;
+    const tB=result.tB;
+    const yr=ay?.year||"2568";
+    const sem=ay?.semester||"1";
+    const school=sh?.name||"โรงเรียนดาราวิทยาลัย";
+    const logoHtml=sh?.logo?`<img src="${sh.logo}" style="height:50px;vertical-align:middle;margin-right:10px;"/>` :"";
+    const pTime=(pid)=>PERIODS.find(p=>p.id===pid)?.time||"";
+
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"/>
+    <style>
+      @page{size:A4 portrait;margin:15mm}
+      body{font-family:'TH SarabunNew','Sarabun',sans-serif;font-size:13pt;color:#000}
+      h1{font-size:16pt;text-align:center;margin:0 0 4px}
+      .sub{text-align:center;font-size:11pt;color:#444;margin-bottom:16px}
+      table{width:100%;border-collapse:collapse;margin:12px 0}
+      th,td{border:1px solid #666;padding:8px 10px;font-size:12pt}
+      th{background:#f0f0f0;font-weight:bold;text-align:center}
+      td{text-align:center}
+      .label{font-weight:bold;text-align:left;width:28%}
+      .sig-row{display:flex;justify-content:space-around;margin-top:32px}
+      .sig-box{text-align:center;min-width:160px}
+      .sig-line{display:inline-block;width:160px;border-bottom:1px solid #000;margin-bottom:4px}
+      @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+    </style></head><body>
+    <div style="text-align:center;margin-bottom:8px">
+      ${logoHtml}<h1>${result.mode==="swap"?"แบบฟอร์มขอแลกเปลี่ยนคาบสอน":"แบบฟอร์มขอสอนแทน"}</h1>
+      <div class="sub">${school} &nbsp;|&nbsp; ภาคเรียนที่ ${sem}/${yr}</div>
+    </div>
+    <table>
+      <tr><th colspan="4">${result.mode==="swap"?"ข้อมูลการแลกคาบ":"ข้อมูลการสอนแทน"}</th></tr>
+      <tr>
+        <td class="label">${result.mode==="swap"?"ครูที่ขอแลก (ฝ่าย ก)":"ครูที่ขาด / ไม่ว่าง"}</td>
+        <td>${tA?.prefix||""}${tA?.firstName||""} ${tA?.lastName||""}</td>
+        <td class="label">คาบที่ขอ${result.mode==="swap"?"แลก":"ให้สอนแทน"}</td>
+        <td>${result.dayA} คาบ ${result.periodA} (${pTime(result.periodA)})</td>
+      </tr>
+      <tr>
+        <td class="label">วิชา / ห้อง (ฝ่าย ก)</td>
+        <td colspan="3">${result.slotA.map(s=>`${s.sub} — ${s.room}`).join(", ")||"—"}</td>
+      </tr>
+      ${result.mode==="swap"?`
+      <tr>
+        <td class="label">ครูที่รับแลก (ฝ่าย ข)</td>
+        <td>${tB?.prefix||""}${tB?.firstName||""} ${tB?.lastName||""}</td>
+        <td class="label">คาบที่นำมาแลก</td>
+        <td>${result.dayB} คาบ ${result.periodB} (${pTime(result.periodB)})</td>
+      </tr>
+      <tr>
+        <td class="label">วิชา / ห้อง (ฝ่าย ข)</td>
+        <td colspan="3">${result.slotB.map(s=>`${s.sub} — ${s.room}`).join(", ")||"—"}</td>
+      </tr>`:""}
+    </table>
+    <table>
+      <tr><th>รายการ</th><th>รายละเอียด</th></tr>
+      <tr><td class="label">วันที่ขอ</td><td>_____ / _____ / _____</td></tr>
+      <tr><td class="label">เหตุผล</td><td style="height:40px"></td></tr>
+    </table>
+    <div class="sig-row">
+      <div class="sig-box">
+        <div class="sig-line"></div><br/>
+        <div>(${tA?.prefix||""}${tA?.firstName||""} ${tA?.lastName||""})</div>
+        <div style="font-size:10pt;color:#555;">ผู้ขอ${result.mode==="swap"?"แลก":"สอนแทน"}</div>
+      </div>
+      ${result.mode==="swap"&&tB?`
+      <div class="sig-box">
+        <div class="sig-line"></div><br/>
+        <div>(${tB.prefix||""}${tB.firstName||""} ${tB.lastName||""})</div>
+        <div style="font-size:10pt;color:#555;">ผู้รับแลก</div>
+      </div>`:""}
+      <div class="sig-box">
+        <div class="sig-line"></div><br/>
+        <div>(....................................)</div>
+        <div style="font-size:10pt;color:#555;">หัวหน้ากลุ่มสาระ</div>
+      </div>
+      <div class="sig-box">
+        <div class="sig-line"></div><br/>
+        <div>(....................................)</div>
+        <div style="font-size:10pt;color:#555;">รองฯ ฝ่ายวิชาการ</div>
+      </div>
+    </div>
+    </body></html>`;
+    w.document.write(html);
+    w.document.close();
+    setTimeout(()=>w.print(),500);
+    st("กำลังเปิดหน้า print...");
+  };
+
+  const tAObj=S.teachers.find(t=>t.id===teacherA);
+  const tBObj=S.teachers.find(t=>t.id===teacherB);
+  const weekA=teacherA?getTeacherWeek(teacherA):null;
+  const freeTeachers=dayA&&periodA?findFreeTeachers(dayA,parseInt(periodA)):[];
+
+  return(
+    <div style={{animation:"fadeIn 0.3s",display:"flex",flexDirection:"column",gap:16}}>
+
+      {/* ── Mode selector ── */}
+      <div style={{background:"#fff",borderRadius:14,padding:20,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
+        <div style={{display:"flex",gap:10,marginBottom:16}}>
+          {[{v:"swap",label:"🔄 แลกคาบสอน",desc:"ครู 2 คนสลับคาบกัน"},{v:"sub",label:"🙋 สอนแทน",desc:"ครูคนหนึ่งสอนแทนอีกคน"}].map(opt=>(
+            <button key={opt.v} onClick={()=>{setMode(opt.v);setResult(null);}}
+              style={{flex:1,padding:"12px 16px",borderRadius:12,border:`2px solid ${mode===opt.v?"#B91C1C":"#E5E7EB"}`,background:mode===opt.v?"#FEF2F2":"#fff",cursor:"pointer",textAlign:"left"}}>
+              <div style={{fontSize:14,fontWeight:700,color:mode===opt.v?"#991B1B":"#374151"}}>{opt.label}</div>
+              <div style={{fontSize:11,color:"#6B7280",marginTop:2}}>{opt.desc}</div>
+            </button>
+          ))}
+        </div>
+
+        <div style={{display:"grid",gridTemplateColumns:mode==="swap"?"1fr 1fr":"1fr",gap:16}}>
+          {/* ฝั่ง A */}
+          <div style={{background:"#FFF5F5",borderRadius:12,padding:16,border:"1.5px solid #FECACA"}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#991B1B",marginBottom:12}}>
+              {mode==="swap"?"🅐 ครูที่ขอแลก":"👤 ครูที่ขาด / ต้องการสอนแทน"}
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              <div>
+                <label style={LS}>ครู</label>
+                <SearchSelect value={teacherA} onChange={v=>{setTeacherA(v);setResult(null);}}
+                  options={[{value:"",label:"-- เลือกครู --"},...S.teachers.map(t=>({value:t.id,label:`${t.prefix}${t.firstName} ${t.lastName}`}))]}
+                  placeholder="-- เลือกครู --"/>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                <div>
+                  <label style={LS}>วัน</label>
+                  <select style={IS} value={dayA} onChange={e=>{setDayA(e.target.value);setResult(null);}}>
+                    <option value="">-- วัน --</option>
+                    {DAYS.map(d=><option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={LS}>คาบ</label>
+                  <select style={IS} value={periodA} onChange={e=>{setPeriodA(e.target.value);setResult(null);}}>
+                    <option value="">-- คาบ --</option>
+                    {PERIODS.map(p=><option key={p.id} value={p.id}>คาบ {p.id} ({p.time})</option>)}
+                  </select>
+                </div>
+              </div>
+              {/* แสดงวิชาที่สอนในช่องนั้น */}
+              {teacherA&&dayA&&periodA&&(()=>{
+                const s=getSlot(teacherA,dayA,parseInt(periodA));
+                return s.length>0
+                  ?<div style={{background:"#fff",borderRadius:8,padding:"8px 12px",border:"1px solid #FECACA"}}>
+                    {s.map((x,i)=><div key={i} style={{fontSize:12}}><span style={{fontWeight:700}}>{x.sub}</span> <span style={{color:"#6B7280"}}>— {x.room}</span></div>)}
+                  </div>
+                  :<div style={{fontSize:12,color:"#9CA3AF",padding:"6px 0"}}>📭 ครูว่างในคาบนี้</div>;
+              })()}
+            </div>
+          </div>
+
+          {/* ฝั่ง B (เฉพาะ swap) */}
+          {mode==="swap"&&(
+            <div style={{background:"#F0F9FF",borderRadius:12,padding:16,border:"1.5px solid #BAE6FD"}}>
+              <div style={{fontSize:13,fontWeight:700,color:"#0369A1",marginBottom:12}}>🅑 ครูที่รับแลก</div>
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                <div>
+                  <label style={LS}>ครู</label>
+                  <SearchSelect value={teacherB} onChange={v=>{setTeacherB(v);setResult(null);}}
+                    options={[{value:"",label:"-- เลือกครู --"},...S.teachers.filter(t=>t.id!==teacherA).map(t=>({value:t.id,label:`${t.prefix}${t.firstName} ${t.lastName}`}))]}
+                    placeholder="-- เลือกครู --"/>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <div>
+                    <label style={LS}>วัน</label>
+                    <select style={IS} value={dayB} onChange={e=>{setDayB(e.target.value);setResult(null);}}>
+                      <option value="">-- วัน --</option>
+                      {DAYS.map(d=><option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={LS}>คาบ</label>
+                    <select style={IS} value={periodB} onChange={e=>{setPeriodB(e.target.value);setResult(null);}}>
+                      <option value="">-- คาบ --</option>
+                      {PERIODS.map(p=><option key={p.id} value={p.id}>คาบ {p.id} ({p.time})</option>)}
+                    </select>
+                  </div>
+                </div>
+                {teacherB&&dayB&&periodB&&(()=>{
+                  const s=getSlot(teacherB,dayB,parseInt(periodB));
+                  return s.length>0
+                    ?<div style={{background:"#fff",borderRadius:8,padding:"8px 12px",border:"1px solid #BAE6FD"}}>
+                      {s.map((x,i)=><div key={i} style={{fontSize:12}}><span style={{fontWeight:700}}>{x.sub}</span> <span style={{color:"#6B7280"}}>— {x.room}</span></div>)}
+                    </div>
+                    :<div style={{fontSize:12,color:"#9CA3AF",padding:"6px 0"}}>📭 ครูว่างในคาบนี้</div>;
+                })()}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={{display:"flex",gap:10,marginTop:16}}>
+          <button onClick={autoSearch} style={BS()}>🔍 ตรวจสอบ &amp; ดูผล</button>
+          {result&&<button onClick={printForm} style={BS("#059669")}>🖨️ พิมพ์ฟอร์ม</button>}
+          <button onClick={()=>{setTeacherA("");setTeacherB("");setDayA("");setDayB("");setPeriodA("");setPeriodB("");setResult(null);}} style={BO()}>ล้าง</button>
+        </div>
+      </div>
+
+      {/* ── ผลการตรวจสอบ ── */}
+      {result&&(
+        <div style={{background:"#fff",borderRadius:14,padding:20,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
+          <h3 style={{fontSize:15,fontWeight:700,marginBottom:14}}>📋 ผลการตรวจสอบ</h3>
+
+          {result.conflicts.length>0?(
+            <div style={{background:"#FEF2F2",border:"1.5px solid #FECACA",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
+              <div style={{fontSize:13,fontWeight:700,color:"#991B1B",marginBottom:6}}>⚠️ พบข้อขัดแย้ง</div>
+              {result.conflicts.map((c,i)=><div key={i} style={{fontSize:12,color:"#DC2626"}}>• {c}</div>)}
+            </div>
+          ):(
+            <div style={{background:"#F0FDF4",border:"1.5px solid #BBF7D0",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
+              <div style={{fontSize:13,fontWeight:700,color:"#065F46"}}>✅ {result.mode==="swap"?"แลกคาบได้โดยไม่มีข้อขัดแย้ง":"สอนแทนได้โดยไม่มีข้อขัดแย้ง"}</div>
+            </div>
+          )}
+
+          <div style={{display:"grid",gridTemplateColumns:result.mode==="swap"?"1fr 1fr":"1fr",gap:12}}>
+            <div style={{background:"#FFF5F5",borderRadius:10,padding:"12px 16px",border:"1px solid #FECACA"}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#991B1B",marginBottom:6}}>ฝั่ง {result.mode==="swap"?"ก":"— ครูที่ขาด"}</div>
+              <div style={{fontSize:14,fontWeight:700}}>{result.tA?.prefix}{result.tA?.firstName} {result.tA?.lastName}</div>
+              <div style={{fontSize:12,color:"#6B7280",marginTop:2}}>{result.dayA} คาบ {result.periodA}</div>
+              {result.slotA.length>0
+                ?result.slotA.map((s,i)=><div key={i} style={{fontSize:12,marginTop:4}}><b>{s.sub}</b> — {s.room}</div>)
+                :<div style={{fontSize:12,color:"#9CA3AF",marginTop:4}}>ว่าง</div>
+              }
+            </div>
+            {result.mode==="swap"&&result.tB&&(
+              <div style={{background:"#F0F9FF",borderRadius:10,padding:"12px 16px",border:"1px solid #BAE6FD"}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#0369A1",marginBottom:6}}>ฝั่ง ข</div>
+                <div style={{fontSize:14,fontWeight:700}}>{result.tB?.prefix}{result.tB?.firstName} {result.tB?.lastName}</div>
+                <div style={{fontSize:12,color:"#6B7280",marginTop:2}}>{result.dayB} คาบ {result.periodB}</div>
+                {result.slotB.length>0
+                  ?result.slotB.map((s,i)=><div key={i} style={{fontSize:12,marginTop:4}}><b>{s.sub}</b> — {s.room}</div>)
+                  :<div style={{fontSize:12,color:"#9CA3AF",marginTop:4}}>ว่าง</div>
+                }
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── ครูที่ว่างอัตโนมัติ (สำหรับสอนแทน) ── */}
+      {mode==="sub"&&dayA&&periodA&&(
+        <div style={{background:"#fff",borderRadius:14,padding:20,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
+          <h3 style={{fontSize:15,fontWeight:700,marginBottom:12}}>
+            🙋 ครูที่ว่างในวัน{dayA} คาบ {periodA} ({PERIODS.find(p=>p.id===parseInt(periodA))?.time})
+          </h3>
+          {freeTeachers.length===0
+            ?<div style={{color:"#9CA3AF",fontSize:13}}>ไม่มีครูว่างในช่วงเวลานี้</div>
+            :<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {freeTeachers.map(t=>(
+                <button key={t.id}
+                  onClick={()=>{setTeacherB(t.id);}}
+                  style={{padding:"6px 14px",borderRadius:20,border:`2px solid ${teacherB===t.id?"#059669":"#E5E7EB"}`,background:teacherB===t.id?"#F0FDF4":"#fff",fontSize:12,fontWeight:teacherB===t.id?700:400,cursor:"pointer",color:teacherB===t.id?"#065F46":"#374151"}}>
+                  {teacherB===t.id?"✓ ":""}{t.prefix}{t.firstName} {t.lastName}
+                </button>
+              ))}
+            </div>
+          }
+        </div>
+      )}
+
+      {/* ── Mini timetable ครู A ── */}
+      {weekA&&(
+        <div style={{background:"#fff",borderRadius:14,padding:20,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
+          <h3 style={{fontSize:14,fontWeight:700,marginBottom:12}}>
+            📅 ตารางสอนของ {tAObj?.prefix}{tAObj?.firstName} {tAObj?.lastName}
+          </h3>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:600}}>
+              <thead>
+                <tr style={{background:"#F9FAFB"}}>
+                  <th style={{padding:"6px 8px",border:"1px solid #E5E7EB",fontSize:11}}>วัน</th>
+                  {PERIODS.map(p=><th key={p.id} style={{padding:"6px 4px",border:"1px solid #E5E7EB",textAlign:"center",fontSize:10,minWidth:72}}>คาบ {p.id}<br/><span style={{fontWeight:400,fontSize:9}}>{p.time}</span></th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {DAYS.map(day=>(
+                  <tr key={day}>
+                    <td style={{padding:"4px 8px",border:"1px solid #E5E7EB",fontWeight:600,fontSize:11,whiteSpace:"nowrap",background:"#F9FAFB"}}>{day}</td>
+                    {PERIODS.map(p=>{
+                      const slot=weekA[day][p.id];
+                      const isSelectedA=day===dayA&&p.id===parseInt(periodA);
+                      const isSelectedB=mode==="swap"&&day===dayB&&p.id===parseInt(periodB);
+                      const bg=isSelectedA?"#FEE2E2":isSelectedB?"#DBEAFE":slot.length>0?"#FFF7ED":"";
+                      return(
+                        <td key={p.id} style={{padding:"3px 4px",border:"1px solid #E5E7EB",textAlign:"center",verticalAlign:"middle",background:bg,height:48}}>
+                          {slot.map((s,i)=>(
+                            <div key={i} style={{fontSize:10,lineHeight:1.3}}>
+                              <div style={{fontWeight:700}}>{s.subShort||s.sub}</div>
+                              <div style={{color:"#6B7280"}}>{s.room}</div>
+                            </div>
+                          ))}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{display:"flex",gap:12,marginTop:8,fontSize:11,color:"#6B7280"}}>
+            <span style={{display:"inline-flex",alignItems:"center",gap:4}}><span style={{width:12,height:12,background:"#FEE2E2",borderRadius:2,display:"inline-block"}}></span>ช่อง A ที่เลือก</span>
+            {mode==="swap"&&<span style={{display:"inline-flex",alignItems:"center",gap:4}}><span style={{width:12,height:12,background:"#DBEAFE",borderRadius:2,display:"inline-block"}}></span>ช่อง B ที่เลือก</span>}
+            <span style={{display:"inline-flex",alignItems:"center",gap:4}}><span style={{width:12,height:12,background:"#FFF7ED",borderRadius:2,display:"inline-block"}}></span>มีวิชา</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function pdfPage(title, subtitle, dayRows, footerText, logoBase64) {
