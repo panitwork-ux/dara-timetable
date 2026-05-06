@@ -6102,7 +6102,8 @@ function buildTeacherTableHTML3(teacher, S, ay, sh) {
         ${assigns.map(a=>{
           const sub=S.subjects.find(s=>s.id===a.subjectId);
           if(!sub)return"";
-          return`<div>${sub.name||""} ${sub.code?`(${sub.code})`:""}</div>`;
+          const codeStr=sub.code?"("+sub.code+")":"";
+          return"<div>"+(sub.name||"")+" "+codeStr+"</div>";
         }).join("")}
         ${specialMeets.map(l=>`<div>${l}</div>`).join("")}
       </div>
