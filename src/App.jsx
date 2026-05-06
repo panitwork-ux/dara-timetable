@@ -4386,29 +4386,34 @@ function SwapPage({S,st,ay,sh}){
                   </tr>
                 </thead>
                 <tbody>
-                  {DAYS.map(day=>(
-                    <tr key={day}>
-                      <td style={{padding:"4px 10px",border:"1px solid #E5E7EB",fontWeight:700,fontSize:11,background:"#F9FAFB"}}>{day}</td>
+                  {DAYS.map(day=>{
+                    // คำนวณว่า absentDate ตรงกับวันไหนในสัปดาห์
+                    const absentDayName=absentDate?(["อาทิตย์","จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์","เสาร์"][new Date(absentDate).getDay()]||""):"";
+                    const isAbsentDay=!absentDate||day===absentDayName; // ถ้ายังไม่เลือกวันที่ → ให้กดได้ทุกวัน
+                    return(
+                    <tr key={day} style={{opacity:absentDate&&!isAbsentDay?0.4:1}}>
+                      <td style={{padding:"4px 10px",border:"1px solid #E5E7EB",fontWeight:700,fontSize:11,background:isAbsentDay?"#FFF5F5":"#F9FAFB",color:isAbsentDay?"#991B1B":"#374151"}}>{day}</td>
                       {PERIODS.map(p=>{
                         const ents=getEntries(teacherA,day,p.id);
                         const absent=isAbsent(day,p.id);
                         const hasClass=ents.length>0;
+                        const canClick=hasClass&&isAbsentDay;
                         return(
                           <td key={p.id}
-                            onClick={()=>hasClass&&toggleAbsent(day,p.id)}
+                            onClick={()=>canClick&&toggleAbsent(day,p.id)}
                             style={{
                               padding:"3px 4px",border:"1px solid #E5E7EB",textAlign:"center",
                               verticalAlign:"middle",height:46,
-                              background:absent?"#FEE2E2":hasClass?"#FFF7ED":"",
-                              cursor:hasClass?"pointer":"default",
+                              background:absent?"#FEE2E2":hasClass&&isAbsentDay?"#FFF7ED":hasClass?"#F9FAFB":"",
+                              cursor:canClick?"pointer":"default",
                               outline:absent?"2px solid #DC2626":"none",
                               borderRadius:absent?4:0,
                               transition:"all 0.1s",
                             }}>
                             {ents.map((e,i)=>(
                               <div key={i} style={{fontSize:10,lineHeight:1.25}}>
-                                <div style={{fontWeight:700,color:absent?"#991B1B":"#1E40AF"}}>{e.subName.length>6?e.subName.slice(0,6)+"…":e.subName}</div>
-                                <div style={{color:"#6B7280",fontSize:9}}>{e.roomName}</div>
+                                <div style={{fontWeight:700,color:absent?"#991B1B":isAbsentDay?"#1E40AF":"#9CA3AF"}}>{e.subName.length>6?e.subName.slice(0,6)+"…":e.subName}</div>
+                                <div style={{color:"#9CA3AF",fontSize:9}}>{e.roomName}</div>
                               </div>
                             ))}
                             {absent&&<div style={{fontSize:9,color:"#DC2626",fontWeight:700,marginTop:2}}>✕ ขอแลก</div>}
@@ -4416,7 +4421,8 @@ function SwapPage({S,st,ay,sh}){
                         );
                       })}
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
