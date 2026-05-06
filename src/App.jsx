@@ -4040,13 +4040,22 @@ function SwapPage({S,st,ay,sh}){
   const REASON_OPTS=["ติดธุระ","ลาป่วย","ลากิจ","ไปราชการ","ไปอบรม","อื่นๆ"];
 
   const [teacherA,setTeacherA]=useState("");
-  const [absentDays,setAbsentDays]=useState([]); // [{day, periods:[]}]
+  const [absentDays,setAbsentDays]=useState([]);
+  const [absentDate,setAbsentDate]=useState(""); // วันที่จริงที่ครู A ไม่อยู่ (YYYY-MM-DD)
+  const [returnDate,setReturnDate]=useState(""); // วันที่ครู A จะสอนคืน (YYYY-MM-DD)
   const [reason,setReason]=useState("ติดธุระ");
   const [reasonOther,setReasonOther]=useState("");
   const [searched,setSearched]=useState(false);
-  const [results,setResults]=useState([]); // [{day,period,room,subName,candidates:[{teacher,returnSlots:[]}]}]
-  const [selected,setSelected]=useState({}); // {`day_period_room`: {subTeacherId, subDay, subPeriod}}
+  const [results,setResults]=useState([]);
+  const [selected,setSelected]=useState({});
   const [printReady,setPrintReady]=useState(false);
+
+  // ── แปลง YYYY-MM-DD → วัน dd/mm/yyyy (พ.ศ.) ──
+  const fmtDate=(d)=>{
+    if(!d)return"___________";
+    const [y,m,day2]=d.split("-");
+    return`${day2}/${m}/${parseInt(y)+543}`;
+  };
 
   // ── helper: ดึง entries ของครูในคาบที่กำหนด ──
   const getEntries=(tid,day,pid)=>{
@@ -4061,7 +4070,9 @@ function SwapPage({S,st,ay,sh}){
         const sub=S.subjects.find(s=>s.id===e.subjectId);
         const rid=pts.slice(0,-2).join("_");
         const rm=S.rooms.find(r=>r.id===rid);
-        out.push({subId:e.subjectId,subName:sub?.name||sub?.code||"—",roomId:rid,roomName:rm?.name||"—",assignId:e.assignmentId});
+        // ใช้ subDisplayName (shortName ก่อน → name → code)
+        const dispName=sub?.shortName||sub?.name||sub?.code||"—";
+        out.push({subId:e.subjectId,subName:dispName,subFullName:sub?.name||sub?.code||"—",roomId:rid,roomName:rm?.name||"—",assignId:e.assignmentId});
       });
     });
     return out;
@@ -4173,11 +4184,11 @@ function SwapPage({S,st,ay,sh}){
     const tableRows=rows.map(({r,sel,tB},i)=>`
       <tr>
         <td style="text-align:center">${i+1}</td>
-        <td>${r.day} คาบ ${r.period} (${r.time})</td>
-        <td>${r.subName} — ห้อง ${r.roomName}</td>
+        <td style="text-align:center">${r.day}<br/><b>${fmtDate(absentDate)}</b><br/>คาบ ${r.period}<br/><span style="font-size:10pt;color:#555">(${r.time})</span></td>
+        <td>${r.subFullName||r.subName}<br/><span style="font-size:10pt;color:#555">ห้อง ${r.roomName}</span></td>
         <td>${tB?.prefix||""}${tB?.firstName||""} ${tB?.lastName||""}</td>
-        <td>${sel.subDay} คาบ ${sel.subPeriod} (${PERIODS.find(p=>p.id===sel.subPeriod)?.time||""})</td>
-        <td>${r.subName} — ห้อง ${r.roomName}</td>
+        <td style="text-align:center">${sel.subDay}<br/><b>${fmtDate(returnDate)}</b><br/>คาบ ${sel.subPeriod}<br/><span style="font-size:10pt;color:#555">(${PERIODS.find(p=>p.id===sel.subPeriod)?.time||""})</span></td>
+        <td>${r.subFullName||r.subName}<br/><span style="font-size:10pt;color:#555">ห้อง ${r.roomName}</span></td>
       </tr>`).join("");
 
     // หัวหน้ากลุ่มสาระของครู A
@@ -4209,6 +4220,8 @@ function SwapPage({S,st,ay,sh}){
       <tr><td>ครูผู้ขอแลก</td><td>${tA?.prefix||""}${tA?.firstName||""} ${tA?.lastName||""}</td>
           <td style="font-weight:bold">กลุ่มสาระ</td><td>${deptA?.name||"—"}</td></tr>
       <tr><td>เหตุผล</td><td colspan="3">${finalReason}</td></tr>
+      <tr><td>วันที่ไม่อยู่</td><td>${fmtDate(absentDate)}</td>
+          <td style="font-weight:bold">วันที่สอนคืน</td><td>${fmtDate(returnDate)}</td></tr>
     </table>
     <table>
       <thead><tr>
@@ -4274,6 +4287,22 @@ function SwapPage({S,st,ay,sh}){
             {reason==="อื่นๆ"&&(
               <input style={{...IS,marginTop:8}} value={reasonOther} onChange={e=>setReasonOther(e.target.value)} placeholder="ระบุเหตุผล..."/>
             )}
+          </div>
+        </div>
+
+        {/* วันที่จริง */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+          <div>
+            <label style={LS}>📅 วันที่ครู A ไม่อยู่ (วันที่จะขอแลก)</label>
+            <input type="date" style={IS} value={absentDate} onChange={e=>setAbsentDate(e.target.value)}/>
+            {absentDate&&<div style={{fontSize:11,color:"#991B1B",marginTop:4,fontWeight:600}}>วันที่ {fmtDate(absentDate)}</div>}
+          </div>
+          <div>
+            <label style={LS}>📅 วันที่ครู A จะสอนคืน</label>
+            <input type="date" style={IS} value={returnDate} onChange={e=>setReturnDate(e.target.value)}
+              min={absentDate?(()=>{const d=new Date(absentDate);d.setDate(d.getDate()-14);return d.toISOString().split("T")[0]})():undefined}/>
+            {returnDate&&<div style={{fontSize:11,color:"#059669",marginTop:4,fontWeight:600}}>วันที่ {fmtDate(returnDate)}</div>}
+            <div style={{fontSize:11,color:"#9CA3AF",marginTop:3}}>สอนคืนก่อนวันแลกได้ไม่เกิน 14 วัน / หลังวันแลกไม่จำกัด</div>
           </div>
         </div>
 
