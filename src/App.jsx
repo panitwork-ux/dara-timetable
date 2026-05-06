@@ -2096,7 +2096,7 @@ function Assigns({S,U,st,gc}){
         {basket.length>0&&(
           <div style={{background:"#F0FDF4",border:"1.5px solid #BBF7D0",borderRadius:12,padding:"10px 14px"}}>
             <div style={{fontSize:12,fontWeight:700,color:"#065F46",marginBottom:8}}>
-              🛒 วิชาที่รอบันทึก ({basket.length} รายการ)
+              {"🛒 วิชาที่รอบันทึก ("+basket.length+" รายการ)"}
             </div>
             {basket.map((b,bi)=>{
               const bs=S.subjects.find(s=>s.id===b.subjectId);
@@ -3671,7 +3671,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                         })}
                         {coTeachers2.length<4&&(
                           <button onClick={()=>{ setShowGearId(null); setCardCoM(a.id); }} style={{fontSize:10,color:lc.head,background:"rgba(0,0,0,0.06)",border:`1px solid ${lc.border}`,borderRadius:6,padding:"3px 8px",cursor:"pointer",width:"100%",textAlign:"left",marginBottom:6}}>
-                            + เพิ่มครูร่วม ({coTeachers2.length}/4)
+                            {"+ เพิ่มครูร่วม ("+coTeachers2.length+"/4)"}
                           </button>
                         )}
                         {/* วิชาคู่ */}
@@ -3958,7 +3958,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                 disabled={!autoOpts.allowNormal&&!autoOpts.allowConsec&&!autoOpts.allowNP&&!autoOpts.allowSR}
                 style={{...BS("#059669"),opacity:(!autoOpts.allowNormal&&!autoOpts.allowConsec&&!autoOpts.allowNP&&!autoOpts.allowSR)?0.4:1,cursor:(!autoOpts.allowNormal&&!autoOpts.allowConsec&&!autoOpts.allowNP&&!autoOpts.allowSR)?"not-allowed":"pointer"}}
               >
-                ⚡ เริ่มจัดตาราง ({autoOpts.runs} รอบ)
+                {"⚡ เริ่มจัดตาราง ("+autoOpts.runs+" รอบ)"}
               </button>
             </div>
           </div>
@@ -4644,7 +4644,7 @@ function SwapPage({S,st,ay,sh}){
             <button onClick={printForm}
               style={{...BS("#059669"),marginTop:8}}
               disabled={!Object.keys(selected).length}>
-              🖨️ พิมพ์ฟอร์มแลกคาบ ({Object.keys(selected).length} คาบ)
+              {"🖨️ พิมพ์ฟอร์มแลกคาบ ("+Object.keys(selected).length+" คาบ)"}
             </button>
           )}
         </div>
@@ -5379,9 +5379,7 @@ function Reports({S,U,st,gc,ay,sh}){
                   setShowNewRoomPDF(false);
                 }}
                 style={{...BS("#7C3AED"),flex:2,opacity:newRoomPDFOpts.selectedRooms?.length?1:0.4}}>
-                🖨️ พิมพ์ ({newRoomPDFOpts.layout==="1landscape"
-                  ?`${newRoomPDFOpts.selectedRooms?.length||0}+ หน้า`
-                  :`${newRoomPDFOpts.selectedRooms?.length||0}+ หน้า`})
+                {"🖨️ พิมพ์ ("+(newRoomPDFOpts.selectedRooms?.length||0)+"+ หน้า)"}
               </button>
             </div>
           </div>
@@ -5429,7 +5427,7 @@ function Reports({S,U,st,gc,ay,sh}){
                   await exportRoomScheduleXLSX(rooms);
                 }}
                 style={{...BS("#059669"),flex:2,opacity:excelSelectedRooms.length?1:0.4}}>
-                <Icon name="download" size={14}/>📊 Export ({excelSelectedRooms.length} ห้อง)
+                <Icon name="download" size={14}/>{" 📊 Export ("+excelSelectedRooms.length+" ห้อง)"}
               </button>
             </div>
           </div>
@@ -5474,7 +5472,7 @@ function Reports({S,U,st,gc,ay,sh}){
               <div style={{display:"flex",gap:6,marginTop:6}}>
                 <button onClick={()=>setSelectedTeachersPDF(S.teachers.map(t=>t.id))} style={{fontSize:11,color:"#7C3AED",background:"none",border:"1px solid #E5E7EB",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>เลือกทั้งหมด</button>
                 <button onClick={()=>setSelectedTeachersPDF([])} style={{fontSize:11,color:"#6B7280",background:"none",border:"1px solid #E5E7EB",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>ล้าง</button>
-                <span style={{fontSize:11,color:"#6B7280",alignSelf:"center"}}>เลือก {selectedTeachersPDF.length} คน → {Math.ceil(selectedTeachersPDF.length/2)} หน้า</span>
+                <span style={{fontSize:11,color:"#6B7280",alignSelf:"center"}}>{"เลือก "+selectedTeachersPDF.length+" คน → "+Math.ceil(selectedTeachersPDF.length/2)+" หน้า"}</span>
               </div>
             </div>
             <div style={{display:"flex",gap:10,marginTop:20}}>
@@ -5493,7 +5491,7 @@ function Reports({S,U,st,gc,ay,sh}){
                   setShowNewTeacherPDF(false);
                 }}
                 style={{...BS("#B91C1C"),flex:2,opacity:selectedTeachersPDF.length?1:0.4}}>
-                🖨️ พิมพ์แบบ 3 — รหัสห้อง+สรุปวิชา ({selectedTeachersPDF.length} หน้า)
+                {"🖨️ พิมพ์แบบ 3 — รหัสห้อง+สรุปวิชา ("+selectedTeachersPDF.length+" หน้า)"}
               </button>
             </div>
           </div>
