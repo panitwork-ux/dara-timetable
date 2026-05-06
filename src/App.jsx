@@ -4108,6 +4108,28 @@ function SwapPage({S,st,ay,sh}){
 
   const isAbsent=(day,pid)=>absentDays.some(d=>d.day===day&&d.periods.includes(pid));
 
+  // ── คำนวณวันที่จริงจากวันในสัปดาห์ + absentDate เป็น anchor ──
+  // คืนวันที่ใกล้ที่สุด (ก่อนหรือหลัง absentDate ก็ได้) ที่ตรงกับ dayName
+  const DAY_IDX={"จันทร์":1,"อังคาร":2,"พุธ":3,"พฤหัสบดี":4,"ศุกร์":5};
+  const calcReturnDate=(returnDayName,absentDateStr)=>{
+    if(!absentDateStr||!returnDayName)return"";
+    const base=new Date(absentDateStr);
+    const baseIdx=base.getDay(); // 0=Sun,1=Mon,...
+    const targetIdx=DAY_IDX[returnDayName]??1;
+    // หาทั้งสัปดาห์ก่อน ปัจจุบัน และถัดไป แล้วเลือกอันที่อยู่ใน window min/max
+    const minDate=new Date(absentDateStr); minDate.setDate(minDate.getDate()-14);
+    const candidates=[];
+    for(let w=-2;w<=4;w++){
+      const d=new Date(base);
+      d.setDate(base.getDate()+(targetIdx-baseIdx)+w*7);
+      if(d>=minDate) candidates.push(d);
+    }
+    // เลือกวันที่ใกล้ absentDate ที่สุด (ก่อนหรือหลัง)
+    candidates.sort((a,b)=>Math.abs(a-base)-Math.abs(b-base));
+    const best=candidates[0];
+    return best?best.toISOString().split("T")[0]:"";
+  };
+
   // ── ค้นหาครูที่สอนแทนได้ ──
   const doSearch=()=>{
     if(!teacherA){st("เลือกครู A ก่อน","error");return;}
@@ -4116,37 +4138,33 @@ function SwapPage({S,st,ay,sh}){
     const res=[];
     absentDays.forEach(({day,periods})=>{
       periods.forEach(pid=>{
-        // คาบที่ครู A สอนในวัน/คาบนั้น
         const entriA=getEntries(teacherA,day,pid);
-        if(!entriA.length)return; // ครู A ว่างอยู่แล้ว ไม่นับ
-        entriA.forEach(({subName,roomId,roomName})=>{
-          // หาครูที่: 1) สอนห้องเดียวกัน (มี roomId ใน assigns) 2) ว่างในคาบนั้น
+        if(!entriA.length)return;
+        entriA.forEach(({subName,subFullName,roomId,roomName})=>{
           const candidates=S.teachers.filter(t=>{
             if(t.id===teacherA)return false;
-            // ครูต้องมี assignment ที่รวม roomId นั้นด้วย
             const hasRoom=S.assigns.some(a=>a.teacherId===t.id&&(a.roomIds||[]).includes(roomId));
             if(!hasRoom)return false;
             return isFree(t.id,day,pid);
           }).map(t=>{
-            // หาคาบที่ครู A ว่าง ให้ครูคนนั้นไปสอนคืน (ต้องเป็นห้องเดียวกัน)
             const returnSlots=[];
             DAYS.forEach(rd=>{
               PERIODS.forEach(rp=>{
-                if(rd===day&&rp.id===pid)return; // ไม่นับคาบที่แลก
-                // ครู B ต้องสอนในห้องเดียวกัน และ ครู A ต้องว่าง
+                if(rd===day&&rp.id===pid)return;
                 const bHasSlot=getEntries(t.id,rd,rp.id).some(e=>e.roomId===roomId);
                 const aFree=isFree(teacherA,rd,rp.id);
-                // ครู A ต้องสอนห้องเดียวกันในคาบคืน
                 const aHasRoom=S.assigns.some(a=>a.teacherId===teacherA&&(a.roomIds||[]).includes(roomId));
                 if(bHasSlot&&aFree&&aHasRoom){
-                  returnSlots.push({day:rd,period:rp.id,time:rp.time});
+                  // คำนวณวันที่จริงที่ใกล้ absentDate ที่สุด
+                  const calcDate=calcReturnDate(rd,absentDate);
+                  returnSlots.push({day:rd,period:rp.id,time:rp.time,calcDate});
                 }
               });
             });
             return{teacher:t,returnSlots};
           }).filter(c=>c.returnSlots.length>0);
 
-          res.push({day,period:pid,time:PERIODS.find(p=>p.id===pid)?.time,subName,roomId,roomName,candidates});
+          res.push({day,period:pid,time:PERIODS.find(p=>p.id===pid)?.time,subName,subFullName,roomId,roomName,candidates});
         });
       });
     });
@@ -4159,8 +4177,8 @@ function SwapPage({S,st,ay,sh}){
   };
 
   // ── เลือกครูสอนแทน + คาบคืน ──
-  const selectSub=(key,subTeacherId,subDay,subPeriod)=>{
-    setSelected(p=>({...p,[key]:{subTeacherId,subDay,subPeriod}}));
+  const selectSub=(key,subTeacherId,subDay,subPeriod,calcDate)=>{
+    setSelected(p=>({...p,[key]:{subTeacherId,subDay,subPeriod,calcDate}}));
     setPrintReady(false);
   };
 
@@ -4187,7 +4205,7 @@ function SwapPage({S,st,ay,sh}){
         <td style="text-align:center">${r.day}<br/><b>${fmtDate(absentDate)}</b><br/>คาบ ${r.period}<br/><span style="font-size:10pt;color:#555">(${r.time})</span></td>
         <td>${r.subFullName||r.subName}<br/><span style="font-size:10pt;color:#555">ห้อง ${r.roomName}</span></td>
         <td>${tB?.prefix||""}${tB?.firstName||""} ${tB?.lastName||""}</td>
-        <td style="text-align:center">${sel.subDay}<br/><b>${fmtDate(returnDate)}</b><br/>คาบ ${sel.subPeriod}<br/><span style="font-size:10pt;color:#555">(${PERIODS.find(p=>p.id===sel.subPeriod)?.time||""})</span></td>
+        <td style="text-align:center">${sel.subDay}<br/><b>${fmtDate(sel.calcDate||returnDate)}</b><br/>คาบ ${sel.subPeriod}<br/><span style="font-size:10pt;color:#555">(${PERIODS.find(p=>p.id===sel.subPeriod)?.time||""})</span></td>
         <td>${r.subFullName||r.subName}<br/><span style="font-size:10pt;color:#555">ห้อง ${r.roomName}</span></td>
       </tr>`).join("");
 
@@ -4221,7 +4239,7 @@ function SwapPage({S,st,ay,sh}){
           <td style="font-weight:bold">กลุ่มสาระ</td><td>${deptA?.name||"—"}</td></tr>
       <tr><td>เหตุผล</td><td colspan="3">${finalReason}</td></tr>
       <tr><td>วันที่ไม่อยู่</td><td>${fmtDate(absentDate)}</td>
-          <td style="font-weight:bold">วันที่สอนคืน</td><td>${fmtDate(returnDate)}</td></tr>
+          <td style="font-weight:bold">วันที่สอนคืน</td><td>${rows.map(({sel})=>fmtDate(sel.calcDate||returnDate)).filter((v,i,a)=>a.indexOf(v)===i).join(", ")||fmtDate(returnDate)}</td></tr>
     </table>
     <table>
       <thead><tr>
@@ -4412,9 +4430,10 @@ function SwapPage({S,st,ay,sh}){
                                 const isActive=sel?.subTeacherId===tB.id&&sel?.subDay===rs.day&&sel?.subPeriod===rs.period;
                                 return(
                                   <button key={`${rs.day}_${rs.period}`}
-                                    onClick={()=>selectSub(key,tB.id,rs.day,rs.period)}
-                                    style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${isActive?"#059669":"#D1D5DB"}`,background:isActive?"#F0FDF4":"#fff",color:isActive?"#065F46":"#374151",fontSize:11,fontWeight:isActive?700:400,cursor:"pointer"}}>
+                                    onClick={()=>selectSub(key,tB.id,rs.day,rs.period,rs.calcDate)}
+                                    style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${isActive?"#059669":"#D1D5DB"}`,background:isActive?"#F0FDF4":"#fff",color:isActive?"#065F46":"#374151",fontSize:11,fontWeight:isActive?700:400,cursor:"pointer",textAlign:"left"}}>
                                     {isActive?"✓ ":""}{rs.day} คาบ {rs.period} ({rs.time})
+                                    {rs.calcDate&&<span style={{display:"block",fontSize:10,color:isActive?"#059669":"#9CA3AF",marginTop:1}}>📅 {fmtDate(rs.calcDate)}</span>}
                                   </button>
                                 );
                               })}
