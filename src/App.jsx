@@ -2089,6 +2089,7 @@ function Assigns({S,U,st,gc}){
         </Modal>
       );
     })()}
+    <Modal open={modal} onClose={()=>{setModal(false);setBasket([]);}} title={`มอบหมายวิชา — ${teacher?.prefix||""}${teacher?.firstName||""}`}>
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
 
         {/* ── ตะกร้าวิชาที่เพิ่มแล้ว ── */}
