@@ -4296,28 +4296,28 @@ function Reports({S,U,st,gc,ay,sh}){
     const DAYS_TH=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
     const PIDS=[1,2,3,4,5,6,7];
 
-    // หา maxEntries: คาบที่มีวิชาซ้อนกันมากที่สุด
-    let maxEntries=1;
+    // หา assignmentId ทั้งหมดที่ใช้ในห้องนี้ (เรียงตามลำดับที่พบ)
+    const assignIds=[];
     DAYS_TH.forEach(day=>PIDS.forEach(pid=>{
-      const len=(S.schedule[room.id+"_"+day+"_"+pid]||[]).length;
-      if(len>maxEntries) maxEntries=len;
+      const entries=S.schedule[room.id+"_"+day+"_"+pid]||[];
+      entries.forEach(e=>{
+        const key=e.assignmentId||e.subjectId+"_"+e.teacherId;
+        if(key&&!assignIds.includes(key)) assignIds.push(key);
+      });
     }));
-    // totalCopies = 1 ถ้าทุกคาบมีไม่เกิน 1 วิชา, หรือเท่ากับ maxEntries ถ้ามีคาบซ้อน
-    const totalCopies=maxEntries;
+    const totalCopies=Math.max(1,assignIds.length);
 
     const copies=[];
     for(let copyIdx=0;copyIdx<totalCopies;copyIdx++){
-      // copyLabel แสดงเฉพาะเมื่อมีหลายฉบับ
+      const thisAssignId=assignIds[copyIdx];
       const copyLabel=totalCopies>1?` (ฉบับที่ ${copyIdx+1}/${totalCopies})`:"";
       const title=opts.title?opts.title+copyLabel:("ตารางเรียน "+room.name+copyLabel);
 
       const getCells=(day,pid)=>{
         const key=room.id+"_"+day+"_"+pid;
         const all=S.schedule[key]||[];
-        if(!all.length) return [];
-        // ถ้าคาบนี้มีวิชาเดียว → แสดงในทุกฉบับ
-        // ถ้าคาบนี้มีหลายวิชา → ฉบับที่ copyIdx แสดง entry[copyIdx] (หรือ entry[0] ถ้าเกิน)
-        const e = all.length > 1 ? (all[copyIdx] || all[0]) : all[0];
+        // กรองเฉพาะ entry ที่ตรงกับ assignmentId ของฉบับนี้
+        const e=all.find(e=>(e.assignmentId||e.subjectId+"_"+e.teacherId)===thisAssignId);
         if(!e) return [];
         const sub=S.subjects.find(s=>s.id===e.subjectId);
         const t=S.teachers.find(t=>t.id===e.teacherId);
@@ -4397,20 +4397,24 @@ function Reports({S,U,st,gc,ay,sh}){
       const hmTxt=isAsm?"หอประชุม<br>Assembly":"Homeroom";
       const hmBg=isAsm?"#e8f5e9":"#fafff7";
       const D=[1,2,3,4,5,6,7].map(pid=>getCells(day,pid));
+      // ตรวจว่าคาบนั้นมีหลายวิชา (entry > 1 ในช่อง schedule จริง)
+      const isMulti=[1,2,3,4,5,6,7].map(pid=>(S.schedule[room.id+"_"+day+"_"+pid]||[]).length>1);
+      const MULTI_BG="#eeeeee"; // สีเทาอ่อน
 
-      const cell=(arr,type)=>{
+      const cell=(arr,type,multi=false)=>{
         const v=arr.map(c=>c[type]).filter(Boolean).join("<br>");
         const s=type==="th"
           ?"font-size:8.5pt;font-weight:bold;"
           :type==="en"
           ?"font-size:7.5pt;color:#444;"
           :"font-size:7.5pt;color:#1a237e;";
-        return`<td style="border:1px solid #ddd;border-top:none;border-bottom:none;text-align:center;vertical-align:middle;padding:2px;${s}">${v}</td>`;
+        const bg=multi?`background:${MULTI_BG};`:"";
+        return`<td style="border:1px solid #ddd;border-top:none;border-bottom:none;text-align:center;vertical-align:middle;padding:2px;${bg}${s}">${v}</td>`;
       };
       // แถวแรกของวัน — border-top ชัด
-      const cellTop=(arr,type)=>cell(arr,type).replace("border-top:none;","border-top:1px solid #888;");
+      const cellTop=(arr,type,multi=false)=>cell(arr,type,multi).replace("border-top:none;","border-top:1px solid #888;");
       // แถวสุดท้ายของวัน — border-bottom ชัด
-      const cellBot=(arr,type)=>cell(arr,type).replace("border-bottom:none;","border-bottom:1px solid #888;");
+      const cellBot=(arr,type,multi=false)=>cell(arr,type,multi).replace("border-bottom:none;","border-bottom:1px solid #888;");
 
       const BKcell=(rows,vtext,bg="#fffde7")=>
         `<td rowspan="${rows}" style="border:1px solid #888;background:${bg};padding:0;vertical-align:middle;text-align:center;">${vert(vtext,bg,"normal","7.5pt")}</td>`;
@@ -4423,25 +4427,25 @@ function Reports({S,U,st,gc,ay,sh}){
         <tr style="height:20px;max-height:20px;">
           <td rowspan="3" style="border:1px solid #888;text-align:center;font-weight:bold;font-size:8.5pt;vertical-align:middle;background:#f5f5f5;">${day}</td>
           <td rowspan="3" style="border:1px solid #888;background:${hmBg};padding:0;vertical-align:middle;text-align:center;overflow:hidden;max-width:20px;">${vertHM(hmTxt,"bold","7pt")}</td>
-          ${cellTop(D[0],"th")}${cellTop(D[1],"th")}
+          ${cellTop(D[0],"th",isMulti[0])}${cellTop(D[1],"th",isMulti[1])}
           ${bk?BKcell(TOTAL_ROWS,"พักน้อย 15 นาที"):""}
-          ${cellTop(D[2],"th")}${cellTop(D[3],"th")}
+          ${cellTop(D[2],"th",isMulti[2])}${cellTop(D[3],"th",isMulti[3])}
           ${bk?BKcell(TOTAL_ROWS,"พักกลางวัน 55 นาที"):""}
-          ${cellTop(D[4],"th")}${cellTop(D[5],"th")}
+          ${cellTop(D[4],"th",isMulti[4])}${cellTop(D[5],"th",isMulti[5])}
           ${bk?BKcell(TOTAL_ROWS,"พักน้อย 10 นาที"):""}
-          ${cellTop(D[6],"th")}
+          ${cellTop(D[6],"th",isMulti[6])}
         </tr>
         <tr style="height:17px;max-height:17px;">
-          ${cell(D[0],"en")}${cell(D[1],"en")}
-          ${cell(D[2],"en")}${cell(D[3],"en")}
-          ${cell(D[4],"en")}${cell(D[5],"en")}
-          ${cell(D[6],"en")}
+          ${cell(D[0],"en",isMulti[0])}${cell(D[1],"en",isMulti[1])}
+          ${cell(D[2],"en",isMulti[2])}${cell(D[3],"en",isMulti[3])}
+          ${cell(D[4],"en",isMulti[4])}${cell(D[5],"en",isMulti[5])}
+          ${cell(D[6],"en",isMulti[6])}
         </tr>
         <tr style="height:17px;max-height:17px;">
-          ${cellBot(D[0],"tch")}${cellBot(D[1],"tch")}
-          ${cellBot(D[2],"tch")}${cellBot(D[3],"tch")}
-          ${cellBot(D[4],"tch")}${cellBot(D[5],"tch")}
-          ${cellBot(D[6],"tch")}
+          ${cellBot(D[0],"tch",isMulti[0])}${cellBot(D[1],"tch",isMulti[1])}
+          ${cellBot(D[2],"tch",isMulti[2])}${cellBot(D[3],"tch",isMulti[3])}
+          ${cellBot(D[4],"tch",isMulti[4])}${cellBot(D[5],"tch",isMulti[5])}
+          ${cellBot(D[6],"tch",isMulti[6])}
         </tr>`;
     });
 
@@ -5177,6 +5181,9 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
 
   DAYS_TH.forEach((day,di)=>{
     const D=[1,2,3,4,5,6,7].map(pid=>getCells(day,pid));
+    // ครูสอนมากกว่า 1 ห้องในคาบเดียวกัน = multi
+    const isMulti=[1,2,3,4,5,6,7].map(pid=>getCells(day,pid).length>1);
+    const MULTI_BG="#eeeeee";
     const bgRow=di%2===0?"":"background:#fafafa;";
 
     // ตารางสอนครู: homeroom column แสดง "Homeroom" เสมอ ไม่มี assembly
@@ -5184,13 +5191,15 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
     const hmBg="#fafff7";
 
     // teacher PDF: แต่ละ cell มี 2 แถว — ชื่อวิชา / ห้อง (ครูชื่อ)
-    const cell1=(arr)=>{ // แถวบน: ชื่อวิชาไทย กึ่งกลาง
+    const cell1=(arr,multi=false)=>{ // แถวบน: ชื่อวิชาไทย กึ่งกลาง
       const v=arr.map(c=>c.th).filter(Boolean).join("<br>");
-      return`<td style="border:1px solid #ddd;border-bottom:none;text-align:center;vertical-align:middle;padding:2px 1px;font-size:8.5pt;font-weight:bold;">${v}</td>`;
+      const bg=multi?`background:${MULTI_BG};`:"";
+      return`<td style="border:1px solid #ddd;border-bottom:none;text-align:center;vertical-align:middle;padding:2px 1px;font-size:8.5pt;font-weight:bold;${bg}">${v}</td>`;
     };
-    const cell2=(arr)=>{ // แถวล่าง: ห้อง กึ่งกลาง
+    const cell2=(arr,multi=false)=>{ // แถวล่าง: ห้อง กึ่งกลาง
       const v=arr.map(c=>c.room).filter(Boolean).join("<br>");
-      return`<td style="border:1px solid #ddd;border-top:none;text-align:center;vertical-align:middle;padding:2px 1px;font-size:7.5pt;color:#1a237e;">${v}</td>`;
+      const bg=multi?`background:${MULTI_BG};`:"";
+      return`<td style="border:1px solid #ddd;border-top:none;text-align:center;vertical-align:middle;padding:2px 1px;font-size:7.5pt;color:#1a237e;${bg}">${v}</td>`;
     };
     const BKcell=(rows,txt)=>
       `<td rowspan="${rows}" style="border:1px solid #888;background:#fffde7;padding:0;vertical-align:middle;text-align:center;">${vert(txt)}</td>`;
@@ -5203,19 +5212,19 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
       <tr style="height:22px;${bgRow}">
         <td rowspan="2" style="border:1px solid #888;text-align:center;font-weight:bold;font-size:8.5pt;vertical-align:middle;background:#f5f5f5;">${day}</td>
         <td rowspan="2" style="border:1px solid #888;background:${hmBg};padding:0;vertical-align:middle;">${vert(hmTxt,hmBg,"bold","7pt")}</td>
-        ${cell1(D[0])}${cell1(D[1])}
+        ${cell1(D[0],isMulti[0])}${cell1(D[1],isMulti[1])}
         ${bk?BKcell(TOTAL_ROWS,"พักน้อย 15 นาที"):""}
-        ${cell1(D[2])}${cell1(D[3])}
+        ${cell1(D[2],isMulti[2])}${cell1(D[3],isMulti[3])}
         ${bk?BKcell(TOTAL_ROWS,"พักกลางวัน 55 นาที"):""}
-        ${cell1(D[4])}${cell1(D[5])}
+        ${cell1(D[4],isMulti[4])}${cell1(D[5],isMulti[5])}
         ${bk?BKcell(TOTAL_ROWS,"พักน้อย 10 นาที"):""}
-        ${cell1(D[6])}
+        ${cell1(D[6],isMulti[6])}
       </tr>
       <tr style="height:18px;${bgRow}">
-        ${cell2(D[0])}${cell2(D[1])}
-        ${cell2(D[2])}${cell2(D[3])}
-        ${cell2(D[4])}${cell2(D[5])}
-        ${cell2(D[6])}
+        ${cell2(D[0],isMulti[0])}${cell2(D[1],isMulti[1])}
+        ${cell2(D[2],isMulti[2])}${cell2(D[3],isMulti[3])}
+        ${cell2(D[4],isMulti[4])}${cell2(D[5],isMulti[5])}
+        ${cell2(D[6],isMulti[6])}
       </tr>`;
   });
 
@@ -5280,7 +5289,7 @@ function pdfPage(title, subtitle, dayRows, footerText, logoBase64) {
     'th.day-col{width:52px;font-size:11px;font-weight:700}' +
     'td.day-cell{font-weight:700;font-size:12px;padding:4px 2px;width:52px}' +
     'td.slot{padding:3px 2px;vertical-align:middle;height:68px;text-align:center}' +
-    'td.slot-hi{background:#FEF9C3}' +
+    'td.slot-hi{background:#eeeeee}' +
     '.ent{margin-bottom:2px;display:flex;flex-direction:column;align-items:center;justify-content:center}' +
     '.ent-sub{font-weight:700;font-size:11px;line-height:1.3}' +
     '.ent-room{font-size:10px;color:#111;line-height:1.25}' +
@@ -5383,7 +5392,7 @@ function pdfMultiPage(pages, logoBase64) {
     'th.day-col{width:46px;font-size:10px;font-weight:700}' +
     'td.day-cell{font-weight:700;font-size:11px;padding:2px;width:46px}' +
     'td.slot{padding:2px 1px;vertical-align:top;height:56px}' +
-    'td.slot-hi{background:#FEF9C3}' +
+    'td.slot-hi{background:#eeeeee}' +
     '.ent{margin-bottom:1px}' +
     '.ent-sub{font-weight:700;font-size:10px;line-height:1.25}' +
     '.ent-room{font-size:9px;color:#111;line-height:1.2}' +
