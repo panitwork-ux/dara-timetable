@@ -907,20 +907,93 @@ export default function App() {
   const divHasAccess=!firebaseConfigured||userPerms?.divisions?.[divId]===true;
 
   return <div style={{display:"flex",height:"100vh",fontFamily:"'Sarabun','Noto Sans Thai',sans-serif",background:"linear-gradient(145deg,#EEF2FF 0%,#F8F9FF 40%,#FFF5F5 100%)",overflow:"hidden"}}>
-    <style>{`@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#D4C5BA;border-radius:4px}::-webkit-scrollbar-track{background:transparent}@keyframes slideIn{from{transform:translateX(100px);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}.ni:hover{background:rgba(255,255,255,0.12)!important;border-radius:10px}.ni.a{background:rgba(255,255,255,0.15)!important;border-radius:10px}input:focus,select:focus{border-color:#991B1B!important;box-shadow:0 0 0 3px rgba(153,27,27,0.12)!important}input,select{transition:border-color 0.15s,box-shadow 0.15s}.drag-card{cursor:grab;user-select:none}.drag-card:active{cursor:grabbing}.dz{transition:background 0.15s,outline 0.15s}.dz.over{background:#FEE2E2!important;outline:2px dashed #DC2626}button:hover{opacity:0.88;transition:opacity 0.15s}select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:36px!important}.div-sel{appearance:none!important;background:rgba(0,0,0,0.2)!important;background-image:none!important;border:1px solid rgba(255,255,255,0.25)!important;border-radius:10px!important;color:#fff!important;font-size:13px!important;font-weight:600!important;font-family:inherit!important;padding:8px 32px 8px 12px!important;width:100%!important;cursor:pointer!important;outline:none!important;transition:border-color 0.15s}.div-sel:focus{box-shadow:0 0 0 2px rgba(255,255,255,0.2)!important;border-color:rgba(255,255,255,0.5)!important}.div-sel option{background:#991B1B;color:#fff}`}</style>
+    <style>{`
+      @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800&display=swap');
+      *{box-sizing:border-box;margin:0;padding:0}
+      ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#D4C5BA;border-radius:4px}::-webkit-scrollbar-track{background:transparent}
+      @keyframes slideIn{from{transform:translateX(100px);opacity:0}to{transform:translateX(0);opacity:1}}
+      @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+      @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+      @keyframes slideFromLeft{from{transform:translateX(-100%)}to{transform:translateX(0)}}
+      .ni:hover{background:rgba(255,255,255,0.12)!important;border-radius:10px}
+      .ni.a{background:rgba(255,255,255,0.15)!important;border-radius:10px}
+      input:focus,select:focus{border-color:#991B1B!important;box-shadow:0 0 0 3px rgba(153,27,27,0.12)!important}
+      input,select{transition:border-color 0.15s,box-shadow 0.15s}
+      .drag-card{cursor:grab;user-select:none}.drag-card:active{cursor:grabbing}
+      .dz{transition:background 0.15s,outline 0.15s}.dz.over{background:#FEE2E2!important;outline:2px dashed #DC2626}
+      button:hover{opacity:0.88;transition:opacity 0.15s}
+      select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:36px!important}
+      .div-sel{appearance:none!important;background:rgba(0,0,0,0.2)!important;background-image:none!important;border:1px solid rgba(255,255,255,0.25)!important;border-radius:10px!important;color:#fff!important;font-size:13px!important;font-weight:600!important;font-family:inherit!important;padding:8px 32px 8px 12px!important;width:100%!important;cursor:pointer!important;outline:none!important;transition:border-color 0.15s}
+      .div-sel:focus{box-shadow:0 0 0 2px rgba(255,255,255,0.2)!important;border-color:rgba(255,255,255,0.5)!important}
+      .div-sel option{background:#991B1B;color:#fff}
 
-    <div style={{width:side?240:0,background:"linear-gradient(180deg,#B91C1C 0%,#991B1B 100%)",transition:"width 0.3s",overflow:"hidden",flexShrink:0,display:"flex",flexDirection:"column",boxShadow:"2px 0 12px rgba(185,28,28,0.2)"}}>
-      <div style={{padding:"20px 16px",borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
+      /* ── Sidebar overlay on mobile ── */
+      .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:199}
+      .sidebar{position:relative;z-index:200;flex-shrink:0;display:flex;flex-direction:column;background:linear-gradient(180deg,#B91C1C 0%,#991B1B 100%);box-shadow:2px 0 12px rgba(185,28,28,0.2);transition:width 0.3s,transform 0.3s;overflow:hidden}
+
+      /* ── Responsive breakpoints ── */
+      @media(max-width:768px){
+        .sidebar{position:fixed!important;top:0;left:0;height:100vh;width:260px!important;transform:translateX(-100%);z-index:200}
+        .sidebar.open{transform:translateX(0)!important;animation:slideFromLeft 0.25s ease}
+        .sidebar-overlay.open{display:block}
+        .main-content{margin-left:0!important}
+        .header-bar{padding:0 12px!important}
+        .header-breadcrumb{display:none!important}
+        .main-pad{padding:12px!important;padding-bottom:72px!important}
+        /* ── Bottom nav ── */
+        .bottom-nav{display:flex!important}
+        /* ── Cards responsive ── */
+        .resp-grid{grid-template-columns:1fr!important}
+        /* ── Swap table scroll ── */
+        .swap-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+      }
+      @media(min-width:769px) and (max-width:1024px){
+        .sidebar{width:200px!important}
+        .main-pad{padding:14px 16px!important}
+      }
+      /* ── Bottom nav (hidden on desktop) ── */
+      .bottom-nav{
+        display:none;position:fixed;bottom:0;left:0;right:0;
+        background:linear-gradient(180deg,#B91C1C,#991B1B);
+        z-index:198;height:62px;
+        box-shadow:0 -2px 12px rgba(185,28,28,0.25);
+        overflow-x:auto;overflow-y:hidden;
+        -webkit-overflow-scrolling:touch;
+        white-space:nowrap;
+        padding:0 4px;
+        align-items:center;
+        gap:0;
+      }
+      .bn-item{
+        display:inline-flex;flex-direction:column;align-items:center;justify-content:center;
+        min-width:60px;padding:6px 8px;cursor:pointer;
+        color:rgba(255,255,255,0.65);font-size:9px;font-weight:500;gap:3px;
+        border-radius:10px;transition:all 0.15s;font-family:inherit;
+      }
+      .bn-item.a{color:#fff;background:rgba(255,255,255,0.15);font-weight:700}
+      .bn-item:hover{color:#fff;background:rgba(255,255,255,0.1)}
+      /* ── Typography scale down on mobile ── */
+      @media(max-width:480px){
+        .resp-card-title{font-size:13px!important}
+        .resp-label{font-size:11px!important}
+      }
+    `}</style>
+
+    {/* Sidebar overlay backdrop (mobile) */}
+    <div className={`sidebar-overlay ${side?"open":""}`} onClick={()=>setSide(false)}/>
+
+    {/* Sidebar */}
+    <div className={`sidebar ${side?"open":""}`} style={{width:side?240:0}}>
+      <div style={{padding:"20px 16px",borderBottom:"1px solid rgba(255,255,255,0.1)",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           {schoolHeader.logo
             ?<img src={schoolHeader.logo} alt="logo" style={{width:38,height:38,borderRadius:10,objectFit:"cover",flexShrink:0}}/>
             :<div style={{width:38,height:38,borderRadius:10,background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:800,color:"#fff",flexShrink:0}}>ด</div>
           }
-          <div><div style={{color:"#fff",fontSize:14,fontWeight:700}}>{schoolHeader.name||"ดาราวิทยาลัย"}</div><div style={{color:"rgba(255,255,255,0.6)",fontSize:10}}>ระบบจัดตารางสอน v3</div></div>
+          <div style={{minWidth:0}}><div style={{color:"#fff",fontSize:14,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{schoolHeader.name||"ดาราวิทยาลัย"}</div><div style={{color:"rgba(255,255,255,0.6)",fontSize:10}}>ระบบจัดตารางสอน v3</div></div>
         </div>
       </div>
-      {/* Division selector — dropdown */}
-      <div style={{padding:"10px 12px",borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
+      <div style={{padding:"10px 12px",borderBottom:"1px solid rgba(255,255,255,0.1)",flexShrink:0}}>
         <div style={{fontSize:10,color:"rgba(255,255,255,0.5)",marginBottom:5,paddingLeft:2,fontWeight:600}}>ระดับการศึกษา</div>
         <div style={{position:"relative"}}>
           <select className="div-sel" value={divId} onChange={e=>switchDivision(e.target.value)}>
@@ -932,52 +1005,58 @@ export default function App() {
         </div>
       </div>
       <nav style={{flex:1,padding:"12px 10px",overflowY:"auto"}}>
-        {nav.map(n=><div key={n.id} className={`ni ${page===n.id?"a":""}`} onClick={()=>setPage(n.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:10,cursor:"pointer",color:page===n.id?"#fff":"rgba(255,255,255,0.7)",fontSize:13,fontWeight:page===n.id?700:400,marginBottom:2,transition:"all 0.15s",background:page===n.id?"rgba(255,255,255,0.15)":"transparent"}}><Icon name={n.icon} size={16}/>{n.label}</div>)}
+        {nav.map(n=><div key={n.id} className={`ni ${page===n.id?"a":""}`}
+          onClick={()=>{setPage(n.id);if(window.innerWidth<=768)setSide(false);}}
+          style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:10,cursor:"pointer",color:page===n.id?"#fff":"rgba(255,255,255,0.7)",fontSize:13,fontWeight:page===n.id?700:400,marginBottom:2,transition:"all 0.15s",background:page===n.id?"rgba(255,255,255,0.15)":"transparent"}}>
+          <Icon name={n.icon} size={16}/>{n.label}
+        </div>)}
       </nav>
-      <div style={{padding:"12px 16px",borderTop:"1px solid #F3F4F6"}}>
-        {firebaseConfigured&&authUser&&<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,padding:"8px 10px",background:"#F9FAFB",borderRadius:10}}>
-          <div style={{width:32,height:32,borderRadius:"50%",background:"linear-gradient(135deg,#B91C1C,#991B1B)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#fff",flexShrink:0}}>
+      <div style={{padding:"12px 16px",borderTop:"1px solid rgba(255,255,255,0.1)",flexShrink:0}}>
+        {firebaseConfigured&&authUser&&<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,padding:"8px 10px",background:"rgba(255,255,255,0.1)",borderRadius:10}}>
+          <div style={{width:32,height:32,borderRadius:"50%",background:"rgba(255,255,255,0.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#fff",flexShrink:0}}>
             {(authUser.displayName||authUser.email||"U")[0].toUpperCase()}
           </div>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{color:"#111",fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{authUser.displayName||authUser.email}</div>
-            <div style={{color:"#9CA3AF",fontSize:10,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{authUser.email}</div>
+            <div style={{color:"#fff",fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{authUser.displayName||authUser.email}</div>
+            <div style={{color:"rgba(255,255,255,0.6)",fontSize:10,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{authUser.email}</div>
           </div>
         </div>}
         <div style={{display:"flex",gap:6,marginBottom:6}}>
-          {firebaseConfigured&&<button onClick={handleLogout} style={{flex:1,padding:"6px 0",background:"#F9FAFB",border:"1px solid #FECACA",borderRadius:8,color:CRED,fontSize:11,fontWeight:600,cursor:"pointer"}}>ออกจากระบบ</button>}
-          {firebaseConfigured&&<button onClick={()=>setShowAdmin(true)} style={{flex:1,padding:"6px 0",background:"#F9FAFB",border:"1px solid #E5E7EB",borderRadius:8,color:"#374151",fontSize:11,fontWeight:600,cursor:"pointer"}}>🔐 Admin</button>}
+          {firebaseConfigured&&<button onClick={handleLogout} style={{flex:1,padding:"6px 0",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer"}}>ออกจากระบบ</button>}
+          {firebaseConfigured&&<button onClick={()=>setShowAdmin(true)} style={{flex:1,padding:"6px 0",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer"}}>🔐 Admin</button>}
         </div>
-        <div style={{color:"#D1D5DB",fontSize:10,textAlign:"center"}}>พัฒนาโดย พนิต เกิดมงคล</div>
+        <div style={{color:"rgba(255,255,255,0.4)",fontSize:10,textAlign:"center"}}>พัฒนาโดย พนิต เกิดมงคล</div>
       </div>
     </div>
 
-    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-      <header style={{height:60,background:"rgba(255,255,255,0.85)",backdropFilter:"blur(12px)",borderBottom:"1px solid rgba(240,240,240,0.8)",display:"flex",alignItems:"center",padding:"0 20px",gap:12,flexShrink:0,boxShadow:"0 1px 8px rgba(0,0,0,0.05)"}}>
-        <button onClick={()=>setSide(!side)} style={{background:"none",border:"none",cursor:"pointer",color:"#9CA3AF",padding:4,borderRadius:8,display:"flex"}}><Icon name="menu" size={20}/></button>
-        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:"#9CA3AF"}}>
-          <span style={{cursor:"pointer",color:"#9CA3AF"}} onClick={()=>setPage("dashboard")}>🏠</span>
-          <span>/</span>
-          <span style={{color:"#111",fontWeight:600}}>{nav.find(n=>n.id===page)?.label}</span>
+    {/* Main content */}
+    <div className="main-content" style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0}}>
+      <header className="header-bar" style={{height:60,background:"rgba(255,255,255,0.85)",backdropFilter:"blur(12px)",borderBottom:"1px solid rgba(240,240,240,0.8)",display:"flex",alignItems:"center",padding:"0 20px",gap:12,flexShrink:0,boxShadow:"0 1px 8px rgba(0,0,0,0.05)"}}>
+        <button onClick={()=>setSide(!side)} style={{background:"none",border:"none",cursor:"pointer",color:"#9CA3AF",padding:4,borderRadius:8,display:"flex",flexShrink:0}}><Icon name="menu" size={20}/></button>
+        <div className="header-breadcrumb" style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:"#9CA3AF",minWidth:0}}>
+          <span style={{cursor:"pointer",color:"#9CA3AF",flexShrink:0}} onClick={()=>setPage("dashboard")}>🏠</span>
+          <span style={{flexShrink:0}}>/</span>
+          <span style={{color:"#111",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nav.find(n=>n.id===page)?.label}</span>
         </div>
-        <span style={{fontSize:10,background:"#F9FAFB",color:CRED,padding:"2px 10px",borderRadius:20,fontWeight:700,border:"1px solid #FECACA"}}>{div.short}</span>
-        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:10}}>
+        {/* Mobile page title */}
+        <span style={{color:"#111",fontWeight:700,fontSize:14,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"none"}} className="mobile-title">{nav.find(n=>n.id===page)?.label}</span>
+        <span style={{fontSize:10,background:"#F9FAFB",color:CRED,padding:"2px 10px",borderRadius:20,fontWeight:700,border:"1px solid #FECACA",flexShrink:0}}>{div.short}</span>
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
           {syncing
-            ?<span style={{fontSize:11,color:"#D97706",background:"#FFFBEB",padding:"3px 10px",borderRadius:20,border:"1px solid #FDE68A",fontWeight:600}}>⏳ กำลัง sync...</span>
-            :<span style={{fontSize:11,color:"#059669",background:"#F0FDF4",padding:"3px 10px",borderRadius:20,border:"1px solid #BBF7D0",fontWeight:600}}>● sync แล้ว</span>
+            ?<span style={{fontSize:11,color:"#D97706",background:"#FFFBEB",padding:"3px 8px",borderRadius:20,border:"1px solid #FDE68A",fontWeight:600,whiteSpace:"nowrap"}}>⏳ sync...</span>
+            :<span style={{fontSize:11,color:"#059669",background:"#F0FDF4",padding:"3px 8px",borderRadius:20,border:"1px solid #BBF7D0",fontWeight:600,whiteSpace:"nowrap"}}>● sync</span>
           }
           {firebaseConfigured&&authUser?.photoURL&&(
-            <img src={authUser.photoURL} alt="avatar" style={{width:32,height:32,borderRadius:"50%",objectFit:"cover",border:"2px solid #E5E7EB"}}/>
+            <img src={authUser.photoURL} alt="avatar" style={{width:32,height:32,borderRadius:"50%",objectFit:"cover",border:"2px solid #E5E7EB",flexShrink:0}}/>
           )}
         </div>
       </header>
-      <main style={{flex:1,overflow:"auto",padding:"20px 24px",background:"#F3F4F6"}}>
-        {/* No access guard */}
+      <main className="main-pad" style={{flex:1,overflow:"auto",padding:"20px 24px",background:"#F3F4F6"}}>
         {firebaseConfigured&&!divHasAccess
           ?<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:16}}>
               <div style={{fontSize:48}}>🔒</div>
               <h2 style={{fontSize:20,fontWeight:700,color:"#374151"}}>ไม่มีสิทธิ์เข้าระดับนี้</h2>
-              <p style={{color:"#6B7280",fontSize:14}}>กรุณาติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์ {div.name}</p>
+              <p style={{color:"#6B7280",fontSize:14,textAlign:"center"}}>กรุณาติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์ {div.name}</p>
             </div>
           :<>
             {page==="dashboard"&&<Dash S={S} setPage={setPage}/>}
@@ -998,6 +1077,29 @@ export default function App() {
         }
       </main>
     </div>
+
+    {/* Bottom nav (mobile only) */}
+    <nav className="bottom-nav">
+      {[
+        {id:"dashboard",icon:"🏠",label:"หน้าแรก"},
+        {id:"assignments",icon:"📋",label:"มอบหมาย"},
+        {id:"scheduler",icon:"🗓️",label:"ตาราง"},
+        {id:"swap",icon:"🔄",label:"แลกคาบ"},
+        {id:"reports",icon:"📥",label:"Export"},
+        {id:"teachers",icon:"👨‍🏫",label:"ครู"},
+        {id:"subjects",icon:"📚",label:"วิชา"},
+        {id:"settings",icon:"⚙️",label:"ตั้งค่า"},
+      ].map(n=>(
+        <div key={n.id} className={`bn-item ${page===n.id?"a":""}`} onClick={()=>setPage(n.id)}>
+          <span style={{fontSize:18,lineHeight:1}}>{n.icon}</span>
+          <span>{n.label}</span>
+        </div>
+      ))}
+      <div className="bn-item" onClick={()=>setSide(true)}>
+        <span style={{fontSize:18,lineHeight:1}}>☰</span>
+        <span>เมนู</span>
+      </div>
+    </nav>
     {toast&&<Toast {...toast} onClose={()=>setToast(null)}/>}
   </div>;
 }
@@ -4608,8 +4710,27 @@ function Reports({S,U,st,gc,ay,sh}){
     setTimeout(()=>w.print(),700);
   };
 
-  // Export ตารางห้องเรียน ตาม format import_Schedule.xlsx
-  const exportScheduleJSON=()=>{
+  // พิมพ์ตารางสอนครูแบบที่ 3 (รหัสห้อง + สรุปวิชา)
+  const printTeacherPDF3=(teachers)=>{
+    const list=Array.isArray(teachers)?teachers:[teachers];
+    if(!list.length){st("ไม่มีครูที่เลือก","error");return;}
+    const w=window.open('','_blank');
+    if(!w){st("Browser บล็อก popup","error");return;}
+    const pagesHTML=list.map((t,i)=>`
+      <div style="page-break-after:${i<list.length-1?"always":"avoid"};padding:8mm 10mm;box-sizing:border-box;">
+        ${buildTeacherTableHTML3(t,S,ay,sh)}
+      </div>`).join("");
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"/>
+      <style>
+        @page{size:A4 portrait;margin:0}
+        body{font-family:'TH SarabunNew','Sarabun','Arial',sans-serif;margin:0;padding:0;}
+        td,th{word-wrap:break-word;overflow:hidden;line-height:1.3;}
+        @media print{body{margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
+      </style></head><body>${pagesHTML}</body></html>`;
+    w.document.write(html);w.document.close();
+    setTimeout(()=>w.print(),700);
+    st("กำลังเปิดหน้า print...");
+  };
     const data={version:1,exportedAt:new Date().toISOString(),schedule:S.schedule,locks:S.locks,assigns:S.assigns,teachers:S.teachers,subjects:S.subjects,rooms:S.rooms,levels:S.levels,plans:S.plans,depts:S.depts,meetings:S.meetings,specialRooms:S.specialRooms};
     const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`backup_timetable_${new Date().toISOString().slice(0,10)}.json`;a.click();
@@ -5361,22 +5482,18 @@ function Reports({S,U,st,gc,ay,sh}){
               <button disabled={!selectedTeachersPDF.length}
                 onClick={()=>{
                   const teachers=S.teachers.filter(t=>selectedTeachersPDF.includes(t.id));
-                  const w=window.open('','_blank');
-                  if(!w){st("Browser บล็อก popup","error");return;}
-                  const saved=w.setTimeout;w.setTimeout=()=>{};
                   printTeacherPDFNew(teachers);
-                  setTimeout(()=>{if(w.setTimeout)w.setTimeout=saved;},100);
                 }}
                 style={{...BO("#7C3AED"),flex:1,opacity:selectedTeachersPDF.length?1:0.4,fontSize:12}}>
-                👁️ ดูตัวอย่าง
+                🖨️ พิมพ์แบบ 2
               </button>
               <button disabled={!selectedTeachersPDF.length}
                 onClick={()=>{
-                  printTeacherPDFNew(S.teachers.filter(t=>selectedTeachersPDF.includes(t.id)));
+                  printTeacherPDF3(S.teachers.filter(t=>selectedTeachersPDF.includes(t.id)));
                   setShowNewTeacherPDF(false);
                 }}
-                style={{...BS("#7C3AED"),flex:2,opacity:selectedTeachersPDF.length?1:0.4}}>
-                🖨️ พิมพ์ ({Math.ceil(selectedTeachersPDF.length/2)} หน้า)
+                style={{...BS("#B91C1C"),flex:2,opacity:selectedTeachersPDF.length?1:0.4}}>
+                🖨️ พิมพ์แบบ 3 — รหัสห้อง+สรุปวิชา ({selectedTeachersPDF.length} หน้า)
               </button>
             </div>
           </div>
@@ -5749,6 +5866,253 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
       <thead>${hdrRow}</thead>
       <tbody>${body}</tbody>
     </table>`;
+}
+
+/* ===== ตารางสอนครู แบบที่ 3 (รหัสห้อง + ส่วนสรุปวิชา) ===== */
+function buildTeacherTableHTML3(teacher, S, ay, sh) {
+  const yr = ay?.year || "2568";
+  const logoImg = sh?.logo ? `<img src="${sh.logo}" style="height:44px;vertical-align:middle;margin-right:10px;"/>` : "";
+  const tName = `${teacher.prefix||""}${teacher.firstName} ${teacher.lastName}`;
+  const dept = S.depts.find(d => d.id === teacher.departmentId)?.name || "";
+
+  const DAYS = ["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
+  const PIDS = [1,2,3,4,5,6,7];
+  const PTIMES = ["08.30-09.20","09.20-10.10","10.25-11.15","11.15-12.05","13.00-13.50","13.50-14.00","14.50-15.40"];
+  const BRK_COLS = [
+    {time:"08.00-08.30", after:null},   // ก่อนคาบ 1 (homeroom)
+    {time:"10.10-10.25", afterPid:2},   // หลังคาบ 2
+    {time:"12.05-13.00", afterPid:4},   // หลังคาบ 4
+    {time:"13.50-14.00", afterPid:6},   // หลังคาบ 6
+  ];
+
+  // ── helper: ดึงข้อมูลเซลล์ ──
+  const getCell = (day, pid) => {
+    const results = [];
+    S.rooms.forEach(room => {
+      const key = room.id + "_" + day + "_" + pid;
+      (S.schedule[key] || []).forEach(e => {
+        if (e.teacherId !== teacher.id && !(e.coTeacherIds||[]).includes(teacher.id)) return;
+        const sub = S.subjects.find(s => s.id === e.subjectId);
+        results.push({ sub, room, entry: e });
+      });
+    });
+    return results;
+  };
+
+  // ── helper: ข้อความในเซลล์ homeroom row 1 ──
+  const getHomeroom = (day) => {
+    // เช็ค meetings ที่ครูมีในวันนั้น คาบ homeroom
+    const hmMeet = (S.meetings||[]).find(m =>
+      m.teacherId === teacher.id && m.day === day && (m.isAssembly || m.isHomeroom || (m.periods||[]).includes(0))
+    );
+    if (hmMeet) return hmMeet.isAssembly ? "เข้าหอประชุม" : (hmMeet.label||"Homeroom");
+    return "โฮมรูม";
+  };
+
+  // ── ข้อความห้องสั้น (เช่น "1.7") ──
+  const roomShort = (room) => {
+    if (!room) return "";
+    // ใช้ชื่อห้องตรงๆ
+    return room.name || "";
+  };
+
+  // ── สร้าง header ──
+  // columns: วัน | 08:00-08:30 | คาบ1 | คาบ2 | [พัก] | คาบ3 | คาบ4 | [พัก] | คาบ5 | คาบ6 | [พัก] | คาบ7
+  const vert = (txt, fs="6pt") =>
+    `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};letter-spacing:2px;text-align:center;">${txt}</div>`;
+
+  const thStyle = `border:1px solid #555;text-align:center;vertical-align:middle;font-size:8pt;font-weight:bold;padding:2px;`;
+  const brkStyle = `border:1px solid #555;background:#f9f9e8;padding:0;vertical-align:middle;text-align:center;width:18px;`;
+
+  const hdr = `<tr style="background:#f0f0f0;">
+    <th rowspan="2" style="${thStyle}width:52px;position:relative;">
+      <svg style="position:absolute;top:0;left:0;width:100%;height:100%;" preserveAspectRatio="none">
+        <line x1="0" y1="0" x2="100%" y2="100%" stroke="#888" stroke-width="0.8"/>
+      </svg>
+      <span style="position:absolute;top:3px;right:4px;font-size:5.5pt;font-weight:normal;">เวลา</span>
+      <span style="position:absolute;bottom:3px;left:4px;font-size:5.5pt;font-weight:normal;">วัน</span>
+    </th>
+    <th rowspan="2" style="${thStyle}width:60px;">08:00<br/>08:30</th>
+    <th style="${thStyle}">คาบ 1</th>
+    <th style="${thStyle}">คาบ 2</th>
+    <th rowspan="2" style="${brkStyle}">${vert("10.10-10.25")}</th>
+    <th style="${thStyle}">คาบ 3</th>
+    <th style="${thStyle}">คาบ 4</th>
+    <th rowspan="2" style="${brkStyle}">${vert("12.05-13.00")}</th>
+    <th style="${thStyle}">คาบ 5</th>
+    <th style="${thStyle}">คาบ 6</th>
+    <th rowspan="2" style="${brkStyle}">${vert("13.50-14.00")}</th>
+    <th style="${thStyle}">คาบ 7</th>
+  </tr>
+  <tr style="background:#f0f0f0;">
+    <td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;">08.30-09.20</td>
+    <td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;">09.20-10.10</td>
+    <td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;">10.25-11.15</td>
+    <td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;">11.15-12.05</td>
+    <td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;">13.00-13.50</td>
+    <td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;">13.50-14.40</td>
+    <td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;">14.50-15.40</td>
+  </tr>`;
+
+  // ── helper render cell ──
+  const tdCell = (cells, multi=false) => {
+    const bg = multi ? "background:#eeeeee;" : "";
+    if (!cells.length) return `<td style="border:1px solid #ccc;${bg}"></td>`;
+    // แสดงชื่อห้องสั้น เช่น 1.7
+    const inner = cells.map(c => {
+      const rs = roomShort(c.room);
+      // ถ้าเป็น Lock หรือ meeting
+      if (c.entry?.isLock) return `<span style="color:#cc0000;font-size:8pt;font-weight:bold;">Lock</span>`;
+      return `<span style="font-size:9pt;font-weight:bold;">${rs}</span>`;
+    }).join("<br>");
+    return `<td style="border:1px solid #ccc;text-align:center;vertical-align:middle;padding:2px;${bg}">${inner}</td>`;
+  };
+
+  // ── body rows ──
+  let body = "";
+  DAYS.forEach((day, di) => {
+    const bg = di % 2 === 0 ? "" : "background:#fafafa;";
+    const cells = PIDS.map(pid => getCell(day, pid));
+    const multi = PIDS.map((pid,i) => cells[i].length > 1);
+    const hmText = getHomeroom(day);
+    const isFirstDay = di === 0;
+
+    // check meetings/lock per cell
+    const meetings = (S.meetings||[]).filter(m => m.teacherId === teacher.id && m.day === day);
+    const getMeet = (pid) => meetings.find(m => (m.periods||[]).includes(pid));
+
+    const renderCell = (pid) => {
+      const idx = pid - 1;
+      const c = cells[idx];
+      const m = getMeet(pid);
+      const isMulti = multi[idx];
+      const bg2 = isMulti ? "background:#eeeeee;" : "";
+      if (m && !c.length) {
+        return `<td style="border:1px solid #ccc;text-align:center;vertical-align:middle;padding:2px;${bg2}"><span style="font-size:8pt;color:#1a237e;">${m.label||"Lock"}</span></td>`;
+      }
+      if (!c.length) return `<td style="border:1px solid #ccc;${bg2}"></td>`;
+      const inner = c.map(x => {
+        if (x.entry?.isLock) return `<b style="color:#cc0000;font-size:8pt;">Lock</b>`;
+        return `<b style="font-size:9.5pt;">${roomShort(x.room)}</b>`;
+      }).join("<br>");
+      return `<td style="border:1px solid #ccc;text-align:center;vertical-align:middle;padding:2px;${bg2}">${inner}</td>`;
+    };
+
+    body += `<tr style="height:32px;${bg}">
+      <td style="border:1px solid #888;text-align:center;font-weight:bold;font-size:9pt;vertical-align:middle;background:#f5f5f5;">${day}</td>
+      <td style="border:1px solid #888;text-align:center;vertical-align:middle;font-size:8.5pt;padding:2px;">${hmText}</td>
+      ${renderCell(1)}${renderCell(2)}
+      ${isFirstDay?`<td rowspan="${DAYS.length}" style="${brkStyle}">${vert("พักน้อย 15 นาที","6pt")}</td>`:""}
+      ${renderCell(3)}${renderCell(4)}
+      ${isFirstDay?`<td rowspan="${DAYS.length}" style="${brkStyle}">${vert("พักกลางวัน 55 นาที","6pt")}</td>`:""}
+      ${renderCell(5)}${renderCell(6)}
+      ${isFirstDay?`<td rowspan="${DAYS.length}" style="${brkStyle}">${vert("พักน้อย 10 นาที","6pt")}</td>`:""}
+      ${renderCell(7)}
+    </tr>`;
+  });
+
+  // ── ส่วนสรุปวิชา (ด้านล่าง) ──
+  // รวบรวมวิชาที่ครูสอนทั้งหมด
+  const subMap = {}; // subId → {sub, rooms: Set, periods: count}
+  DAYS.forEach(day => {
+    PIDS.forEach(pid => {
+      getCell(day, pid).forEach(({sub, room}) => {
+        if (!sub) return;
+        if (!subMap[sub.id]) subMap[sub.id] = {sub, roomSet: new Set(), totalPeriods: 0};
+        subMap[sub.id].roomSet.add(room.id);
+        subMap[sub.id].totalPeriods++;
+      });
+    });
+  });
+
+  // นับจาก assigns จริง
+  const assigns = (S.assigns||[]).filter(a => a.teacherId === teacher.id);
+
+  // extra: meetings ที่ครูมี (ลูกเสือ ชุมนุม ฯ)
+  const specialMeets = [...new Set(
+    (S.meetings||[])
+      .filter(m => m.teacherId === teacher.id && m.label && !m.isAssembly && !m.isHomeroom)
+      .map(m => m.label)
+  )];
+
+  // สร้างแถวสรุปวิชา
+  let summaryRows = "";
+  let grandTotal = 0;
+  assigns.forEach(a => {
+    const sub = S.subjects.find(s => s.id === a.subjectId);
+    if (!sub) return;
+    const rooms = (a.roomIds||[]).map(rid => S.rooms.find(r=>r.id===rid)).filter(Boolean);
+    const rCount = rooms.length;
+    const pPerRoom = sub.periodsPerWeek || Math.round((a.totalPeriods||0) / Math.max(rCount,1));
+    const total = a.totalPeriods || (pPerRoom * rCount);
+    grandTotal += total;
+    const roomNames = rooms.map(r=>r.name).join(", ");
+    const codes = sub.code ? `(${sub.code})` : "";
+    summaryRows += `<tr>
+      <td style="padding:1px 4px;font-size:9.5pt;">${sub.name||""} ${codes}</td>
+      <td style="padding:1px 4px;font-size:9.5pt;text-align:center;color:#1a237e;">${roomNames}</td>
+      <td style="padding:1px 4px;font-size:9.5pt;text-align:right;">${rCount} ห้อง</td>
+      <td style="padding:1px 4px;font-size:9.5pt;text-align:center;">×</td>
+      <td style="padding:1px 4px;font-size:9.5pt;text-align:right;">${pPerRoom} คาบ</td>
+      <td style="padding:1px 4px;font-size:9.5pt;text-align:center;">=</td>
+      <td style="padding:1px 4px;font-size:9.5pt;text-align:right;font-weight:bold;">${total}</td>
+      <td style="padding:1px 4px;font-size:9.5pt;">คาบ</td>
+    </tr>`;
+  });
+  specialMeets.forEach(label => {
+    summaryRows += `<tr>
+      <td colspan="8" style="padding:1px 4px;font-size:9.5pt;">${label}</td>
+    </tr>`;
+  });
+  summaryRows += `<tr>
+    <td colspan="5" style="padding:1px 4px;font-size:9.5pt;text-align:right;border-top:1px solid #999;">รวม</td>
+    <td style="padding:1px 4px;font-size:9.5pt;text-align:center;border-top:1px solid #999;">=</td>
+    <td style="padding:1px 4px;font-size:9.5pt;text-align:right;font-weight:bold;border-top:2px double #333;">${grandTotal}</td>
+    <td style="padding:1px 4px;font-size:9.5pt;border-top:1px solid #999;">คาบ</td>
+  </tr>`;
+
+  const totalPeriods = teacher.totalPeriods || grandTotal;
+
+  return `<div style="font-family:'TH SarabunNew','Sarabun',sans-serif;page-break-inside:avoid;">
+    <div style="text-align:center;margin-bottom:6px;">
+      ${logoImg}<span style="font-size:13pt;font-weight:bold;">ตารางสอน ปีการศึกษา ${yr}</span>
+    </div>
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-bottom:4px;">
+      <colgroup>
+        <col style="width:52px;"><col style="width:60px;">
+        <col><col>
+        <col style="width:18px;">
+        <col><col>
+        <col style="width:18px;">
+        <col><col>
+        <col style="width:18px;">
+        <col>
+      </colgroup>
+      <thead>${hdr}</thead>
+      <tbody>${body}</tbody>
+    </table>
+    <div style="margin-top:6px;font-size:9.5pt;">
+      <span style="color:#1a237e;font-weight:bold;">กลุ่มสาระการเรียนรู้</span>
+      &emsp;&emsp;
+      <span style="color:#1a237e;font-weight:bold;">${dept}</span>
+    </div>
+    <div style="display:flex;gap:20px;margin-top:4px;align-items:flex-start;">
+      <div style="flex:1;font-size:9.5pt;">
+        <div><b>อาจารย์ผู้สอน</b>&emsp;&emsp;${tName}</div>
+        ${assigns.map(a=>{
+          const sub=S.subjects.find(s=>s.id===a.subjectId);
+          if(!sub)return"";
+          return`<div>${sub.name||""} ${sub.code?`(${sub.code})`:""}</div>`;
+        }).join("")}
+        ${specialMeets.map(l=>`<div>${l}</div>`).join("")}
+      </div>
+      <div>
+        <table style="font-size:9.5pt;border-collapse:collapse;">
+          <tbody>${summaryRows}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
 }
 
 function pdfPage(title, subtitle, dayRows, footerText, logoBase64) {
