@@ -2128,8 +2128,8 @@ function Assigns({S,U,st,gc}){
               วิชา
               <span style={{fontSize:10,color:"#6B7280",fontWeight:400,marginLeft:5}}>
                 {modalDeptFilter===teacher?.departmentId
-                  ? `(${S.depts.find(d=>d.id===teacher?.departmentId)?.name||"สาระหลัก"})`
-                  : modalDeptFilter ? `(${S.depts.find(d=>d.id===modalDeptFilter)?.name})`
+                  ? "("+( S.depts.find(d=>d.id===teacher?.departmentId)?.name||"สาระหลัก")+")"
+                  : modalDeptFilter ? "("+S.depts.find(d=>d.id===modalDeptFilter)?.name+")"
                   : "(ทุกสาระ)"}
               </span>
             </label>
@@ -3681,7 +3681,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                           const bS=S.subjects.find(s=>s.id===bA?.subjectId);
                           const bT=S.teachers.find(t=>t.id===b.teacherId);
                           return<div key={bi} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3,background:"rgba(5,150,105,0.07)",borderRadius:4,padding:"2px 6px"}}>
-                            <span style={{fontSize:9,color:"#065F46"}}>{bS?.code||""}{bT?` (${bT.firstName})`:""}</span>
+                            <span style={{fontSize:9,color:"#065F46"}}>{(bS?.code||"")+(bT?" ("+bT.firstName+")":"")}</span>
                             <button onClick={()=>setBundleMap(p=>({...p,[a.id]:buns.filter((_,i)=>i!==bi)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,fontSize:10}}>✕</button>
                           </div>;
                         })}
