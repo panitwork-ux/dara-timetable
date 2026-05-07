@@ -980,10 +980,10 @@ export default function App() {
     `}</style>
 
     {/* Sidebar overlay backdrop (mobile) */}
-    <div className={`sidebar-overlay ${side?"open":""}`} onClick={()=>setSide(false)}/>
+    <div className={"sidebar-overlay"+(side?" open":"")} onClick={()=>setSide(false)}/>
 
     {/* Sidebar */}
-    <div className={`sidebar ${side?"open":""}`} style={{width:side?240:0}}>
+    <div className={"sidebar"+(side?" open":"")} style={{width:side?240:0}}>
       <div style={{padding:"20px 16px",borderBottom:"1px solid rgba(255,255,255,0.1)",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           {schoolHeader.logo
@@ -1005,7 +1005,7 @@ export default function App() {
         </div>
       </div>
       <nav style={{flex:1,padding:"12px 10px",overflowY:"auto"}}>
-        {nav.map(n=><div key={n.id} className={`ni ${page===n.id?"a":""}`}
+        {nav.map(n=><div key={n.id} className={"ni"+(page===n.id?" a":"")}
           onClick={()=>{setPage(n.id);if(window.innerWidth<=768)setSide(false);}}
           style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:10,cursor:"pointer",color:page===n.id?"#fff":"rgba(255,255,255,0.7)",fontSize:13,fontWeight:page===n.id?700:400,marginBottom:2,transition:"all 0.15s",background:page===n.id?"rgba(255,255,255,0.15)":"transparent"}}>
           <Icon name={n.icon} size={16}/>{n.label}
@@ -1090,7 +1090,7 @@ export default function App() {
         {id:"subjects",icon:"📚",label:"วิชา"},
         {id:"settings",icon:"⚙️",label:"ตั้งค่า"},
       ].map(n=>(
-        <div key={n.id} className={`bn-item ${page===n.id?"a":""}`} onClick={()=>setPage(n.id)}>
+        <div key={n.id} className={"bn-item"+(page===n.id?" a":"")} onClick={()=>setPage(n.id)}>
           <span style={{fontSize:18,lineHeight:1}}>{n.icon}</span>
           <span>{n.label}</span>
         </div>
@@ -3388,19 +3388,18 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                     });
                     return (
                       <td key={p.id} style={{textAlign:"center",padding:"5px 3px",borderLeft:"1px solid #F0F0F0",verticalAlign:"middle",minHeight:48}}>
-                        {blk
-                          ? <div style={{background:"#FEF9C3",color:"#92400E",fontSize:10,borderRadius:6,padding:"3px 5px",fontWeight:700}}>
-                              🔒{S.meetings.some(m=>m.day===day&&m.periods?.includes(p.id)&&m.departmentId===teacher?.departmentId)?"ประชุม":blocked(selT).find(b=>b.day===day&&b.period===p.id)?.reason||"ล็อค"}
-                            </div>
-                          : roomsThisPeriod.length>0
-                            ? roomsThisPeriod.map((r,i)=>(
+                        {(()=>{
+                          if(blk) return <div style={{background:"#FEF9C3",color:"#92400E",fontSize:10,borderRadius:6,padding:"3px 5px",fontWeight:700}}>
+                              {"🔒"+(S.meetings.some(m=>m.day===day&&m.periods?.includes(p.id)&&m.departmentId===teacher?.departmentId)?"ประชุม":blocked(selT).find(b=>b.day===day&&b.period===p.id)?.reason||"ล็อค")}
+                            </div>;
+                          if(roomsThisPeriod.length>0) return roomsThisPeriod.map((r,i)=>(
                                 <div key={i} style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:6,padding:"4px 6px",marginBottom:i<roomsThisPeriod.length-1?2:0}}>
                                   <div style={{fontSize:11,fontWeight:800,color:"#1E40AF"}}>{r.rmName}</div>
                                   <div style={{fontSize:10,color:"#374151",fontWeight:600}}>{r.subName}</div>
                                 </div>
-                              ))
-                            : <span style={{color:"#D1D5DB",fontSize:12}}>—</span>
-                        }
+                              ));
+                          return <span style={{color:"#D1D5DB",fontSize:12}}>—</span>;
+                        })()}
                       </td>
                     );
                   })}
@@ -3408,8 +3407,8 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
               ))}
             </tbody>
           </table>
-            </div>
           </div>
+        </div>
         )}
       </div>
     );
@@ -3594,7 +3593,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                       title="ครูร่วม / วิชาคู่"
                       style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.07)",border:"none",borderRadius:6,width:22,height:22,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",color:rem<=0?"#9CA3AF":lc.tx}}>⚙</button>
 
-                    {coAsgnsIds.has(a.id)&&<div style={{fontSize:9,color:"#7C3AED",fontWeight:700,marginBottom:3}}>👥 ครูร่วม ({S.teachers.find(t=>t.id===a.teacherId)?.firstName||""})</div>}
+                    {coAsgnsIds.has(a.id)&&<div style={{fontSize:9,color:"#7C3AED",fontWeight:700,marginBottom:3}}>{"👥 ครูร่วม ("+(S.teachers.find(t=>t.id===a.teacherId)?.firstName||"")+")"}</div>}
 
                     <div
                       className="drag-card"
@@ -3773,7 +3772,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                 return<div key={bi} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:"#F0FDF4",borderRadius:10,border:"1px solid #BBF7D0"}}>
                   <div>
                     <div style={{fontSize:13,fontWeight:700,color:"#065F46"}}>{bS?.code} — {subDisplayName(bS)}</div>
-                    <div style={{fontSize:11,color:"#6B7280"}}>ครู: {bT?`${bT.prefix}${bT.firstName} ${bT.lastName}`:"(ครูหลัก)"}</div>
+                    <div style={{fontSize:11,color:"#6B7280"}}>{"ครู: "+(bT?(bT.prefix+bT.firstName+" "+bT.lastName):"(ครูหลัก)")}</div>
                   </div>
                   <button onClick={()=>setBundleMap(p=>({...p,[showBundleM]:(p[showBundleM]||[]).filter((_,i)=>i!==bi)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",fontSize:16}}>✕</button>
                 </div>;
@@ -3805,7 +3804,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                 return eligibleTeachers.length>1?<div>
                   <label style={LS}>ครูผู้สอน</label>
                   <SearchSelect value={bundleSelTeacher} onChange={v=>setBundleSelTeacher(v)}
-                    options={[{value:"",label:"-- ใช้ครูหลักของ assignment --"},...eligibleTeachers.map(t=>({value:t.id,label:`${t.prefix}${t.firstName} ${t.lastName}`}))]}
+                    options={[{value:"",label:"-- ใช้ครูหลักของ assignment --"},...eligibleTeachers.map(t=>({value:t.id,label:t.prefix+t.firstName+" "+t.lastName}))]}
                     placeholder="-- ใช้ครูหลัก --"/>
                 </div>:null;
               })()}
@@ -3941,8 +3940,8 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                 <div style={{fontSize:12,fontWeight:700,color:"#1E40AF",marginBottom:6}}>📋 สรุปการตั้งค่า</div>
                 <div style={{fontSize:12,color:"#374151",display:"flex",flexDirection:"column",gap:3}}>
                   <span>{autoOpts.mode==="remaining"?"✅ เติมเฉพาะคาบที่ยังขาด":"⚠️ รีเซ็ตแล้วจัดใหม่ทั้งหมด"}</span>
-                  <span>📚 จัดวิชา: {[autoOpts.allowNormal&&"ปกติ",autoOpts.allowConsec&&"คาบติด",autoOpts.allowNP&&"NP",autoOpts.allowSR&&"ห้องพิเศษ"].filter(Boolean).join(", ")||"— ยังไม่ได้เลือก"}</span>
-                  <span>🔁 {autoOpts.runs} รอบ — ใช้ผลที่ดีที่สุด</span>
+                  <span>{"📚 จัดวิชา: "+([autoOpts.allowNormal&&"ปกติ",autoOpts.allowConsec&&"คาบติด",autoOpts.allowNP&&"NP",autoOpts.allowSR&&"ห้องพิเศษ"].filter(Boolean).join(", ")||"— ยังไม่ได้เลือก")}</span>
+                  <span>{"🔁 "+autoOpts.runs+" รอบ — ใช้ผลที่ดีที่สุด"}</span>
                   {autoOpts.maxConsecTeacher>0&&<span>⏱ ครูสอนติดกันไม่เกิน {autoOpts.maxConsecTeacher} คาบ</span>}
                   {autoOpts.maxPerDayTeacher&&<span>📅 ครูสอน 1 คาบ/วัน</span>}
                   {autoOpts.noConsecTeacher&&<span>🚫 ห้ามครูสอนติดกันเลย</span>}
@@ -4696,7 +4695,7 @@ function Reports({S,U,st,gc,ay,sh}){
     for(let i=0;i<list.length;i+=2) pages.push(list.slice(i,i+2));
     const pagesHTML=pages.map((pair,pi)=>`
       <div style="page-break-after:${pi<pages.length-1?"always":"avoid"};padding:6mm 8mm;box-sizing:border-box;">
-        ${pair.map(t=>buildTeacherTableHTML(t,S,ay,sh)).join(`<div style="border-top:1px dashed #ccc;margin:8px 0;"></div>`)}
+        ${pair.map(t=>buildTeacherTableHTML(t,S,ay,sh)).join('<div style="border-top:1px dashed #ccc;margin:8px 0;"></div>')}
       </div>`).join("");
     const html=`<!DOCTYPE html><html><head><meta charset="utf-8"/>
       <style>
@@ -5001,7 +5000,7 @@ function Reports({S,U,st,gc,ay,sh}){
     // col: วัน | 08.00-08.30 | คาบ1 | คาบ2 | 10.10-10.25 | คาบ3 | คาบ4 | 12.05-13.00 | คาบ5 | คาบ6 | 14.40-14.50 | คาบ7
     const BRK=[["08.00-","08.30"],["10.10-","10.25"],["12.05-","13.00"],["14.40-","14.50"]];
     const vertBRK=(parts,fs="7.5pt")=>
-      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:${fs};font-weight:normal;letter-spacing:3px;text-align:center;display:flex;flex-direction:column;align-items:center;">${parts.map(p=>`<span style="white-space:nowrap;">${p}</span>`).join("")}</div>`;
+      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:${fs};font-weight:normal;letter-spacing:3px;text-align:center;display:flex;flex-direction:column;align-items:center;">${parts.map(p=>'<span style="white-space:nowrap;">'+p+'</span>').join("")}</div>`;
     const BRKV=["08.00-08.30","Morning Break","Lunch Time","Afternoon Break"];
 
     // Header row1 — ชื่อคาบ (break columns มี rowspan=2)
@@ -5028,7 +5027,7 @@ function Reports({S,U,st,gc,ay,sh}){
       <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[6].label}</th>
     </tr>
     <tr style="background:#f0f0f0;height:16px;max-height:16px;">
-      ${[0,1,2,3,4,5,6].map(i=>`<td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;height:16px;">${HDR[i].time}</td>`).join("")}
+      ${[0,1,2,3,4,5,6].map(i=>'<td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;height:16px;">'+HDR[i].time+'</td>').join("")}
     </tr>`;
 
     const DAYS_TH=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
@@ -5130,7 +5129,7 @@ function Reports({S,U,st,gc,ay,sh}){
       for(let i=0;i<allCopies.length;i+=2) pages.push(allCopies.slice(i,i+2));
       pagesHTML=pages.map((pair,pi)=>`
         <div style="page-break-after:${pi<pages.length-1?"always":"avoid"};padding:6mm 8mm;box-sizing:border-box;">
-          ${pair.join(`<div style="border-top:1px dashed #ccc;margin:6px 0;"></div>`)}
+          ${pair.join('<div style="border-top:1px dashed #ccc;margin:6px 0;"></div>')}
         </div>`).join("");
     }
 
@@ -5243,7 +5242,7 @@ function Reports({S,U,st,gc,ay,sh}){
               <span style={{fontSize:12,color:"#6B7280"}}>รายคน:</span>
               <div style={{flex:"1 1 200px",maxWidth:280}}>
                 <SearchSelect value={selTeacherPDF} onChange={v=>setSelTeacherPDF(v)}
-                  options={[{value:"",label:"-- เลือกครู --"},...S.teachers.map(t=>({value:t.id,label:`${t.prefix}${t.firstName} ${t.lastName}`}))]}
+                  options={[{value:"",label:"-- เลือกครู --"},...S.teachers.map(t=>({value:t.id,label:t.prefix+t.firstName+" "+t.lastName}))]}
                   placeholder="-- เลือกครู --"/>
               </div>
               <button onClick={()=>{const t=S.teachers.find(x=>x.id===selTeacherPDF);if(t)printTeacherPDF(t);else st("เลือกครูก่อน","error");}}
@@ -5302,7 +5301,7 @@ function Reports({S,U,st,gc,ay,sh}){
                   ].map(opt=>{
                     const sel=newRoomPDFOpts.layout===opt.val;
                     return<button key={opt.val} onClick={()=>setNewRoomPDFOpts(p=>({...p,layout:opt.val}))}
-                      style={{flex:1,padding:"10px 8px",borderRadius:12,border:`2px solid ${sel?"#7C3AED":"#E5E7EB"}`,background:sel?"#F5F3FF":"#fff",cursor:"pointer",textAlign:"center"}}>
+                      style={{flex:1,padding:"10px 8px",borderRadius:12,border:(sel?"2px solid #7C3AED":"2px solid #E5E7EB"),background:sel?"#F5F3FF":"#fff",cursor:"pointer",textAlign:"center"}}>
                       <div style={{fontSize:18}}>{opt.icon}</div>
                       <div style={{fontSize:12,fontWeight:700,color:sel?"#7C3AED":"#374151"}}>{opt.label}</div>
                       <div style={{fontSize:10,color:"#6B7280"}}>{opt.sub}</div>
@@ -5323,7 +5322,7 @@ function Reports({S,U,st,gc,ay,sh}){
                     const sel=(newRoomPDFOpts.selectedRooms||[]).includes(r.id);
                     return<button key={r.id}
                       onClick={()=>setNewRoomPDFOpts(p=>({...p,selectedRooms:sel?p.selectedRooms.filter(id=>id!==r.id):[...p.selectedRooms,r.id]}))}
-                      style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${sel?"#7C3AED":"#E5E7EB"}`,background:sel?"#7C3AED":"#fff",color:sel?"#fff":"#374151",fontSize:12,fontWeight:sel?700:400,cursor:"pointer"}}>
+                      style={{padding:"4px 12px",borderRadius:20,border:(sel?"2px solid #7C3AED":"2px solid #E5E7EB"),background:sel?"#7C3AED":"#fff",color:sel?"#fff":"#374151",fontSize:12,fontWeight:sel?700:400,cursor:"pointer"}}>
                       {r.name}
                     </button>;
                   })}
@@ -5405,7 +5404,7 @@ function Reports({S,U,st,gc,ay,sh}){
                   const sel=excelSelectedRooms.includes(r.id);
                   return<button key={r.id}
                     onClick={()=>setExcelSelectedRooms(p=>sel?p.filter(id=>id!==r.id):[...p,r.id])}
-                    style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${sel?"#059669":"#E5E7EB"}`,background:sel?"#059669":"#fff",color:sel?"#fff":"#374151",fontSize:12,fontWeight:sel?700:400,cursor:"pointer"}}>
+                    style={{padding:"4px 12px",borderRadius:20,border:(sel?"2px solid #059669":"2px solid #E5E7EB"),background:sel?"#059669":"#fff",color:sel?"#fff":"#374151",fontSize:12,fontWeight:sel?700:400,cursor:"pointer"}}>
                     {r.name}
                   </button>;
                 })}
@@ -5433,6 +5432,7 @@ function Reports({S,U,st,gc,ay,sh}){
           </div>
         </div>
       )}
+
       {showNewTeacherPDF&&(
         <div style={{position:"fixed",inset:0,zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.5)"}}>
           <div style={{background:"#fff",borderRadius:16,boxShadow:"0 20px 60px rgba(0,0,0,0.3)",width:"min(560px,94%)",maxHeight:"90vh",overflowY:"auto",padding:24,fontFamily:"inherit"}}>
@@ -5463,7 +5463,7 @@ function Reports({S,U,st,gc,ay,sh}){
                   const dept=S.depts.find(d=>d.id===t.departmentId)?.name||"";
                   return<button key={t.id}
                     onClick={()=>setSelectedTeachersPDF(p=>sel?p.filter(id=>id!==t.id):[...p,t.id])}
-                    style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${sel?"#7C3AED":"#E5E7EB"}`,background:sel?"#7C3AED":"#fff",color:sel?"#fff":"#374151",fontSize:12,fontWeight:sel?700:400,cursor:"pointer"}}>
+                    style={{padding:"4px 12px",borderRadius:20,border:(sel?"2px solid #7C3AED":"2px solid #E5E7EB"),background:sel?"#7C3AED":"#fff",color:sel?"#fff":"#374151",fontSize:12,fontWeight:sel?700:400,cursor:"pointer"}}>
                     {t.prefix}{t.firstName} {t.lastName}
                     {dept&&<span style={{fontSize:10,opacity:0.7,marginLeft:4}}>[{dept}]</span>}
                   </button>;
@@ -5509,7 +5509,7 @@ function Reports({S,U,st,gc,ay,sh}){
         <div style={{marginTop:8,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
           <div style={{flex:"1 1 200px",maxWidth:260}}>
             <SearchSelect value={selTeacherXL} onChange={v=>setSelTeacherXL(v)}
-              options={[{value:"",label:"-- ครูรายคน (Excel) --"},...S.teachers.map(t=>({value:t.id,label:`${t.prefix}${t.firstName} ${t.lastName}`}))]}
+              options={[{value:"",label:"-- ครูรายคน (Excel) --"},...S.teachers.map(t=>({value:t.id,label:t.prefix+t.firstName+" "+t.lastName}))]}
               placeholder="-- ครูรายคน (Excel) --"/>
           </div>
           <button onClick={()=>{const t=S.teachers.find(x=>x.id===selTeacherXL);if(t)exportTeacherXL(t);else st("เลือกครูก่อน","error");}}
@@ -5539,14 +5539,18 @@ function Reports({S,U,st,gc,ay,sh}){
     {/* ── สถานะห้องเรียน ── */}
     <h3 style={{fontSize:18,fontWeight:700}}>สถานะห้องเรียน</h3>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:12}}>
-      {roomSt.map(({room,filled,total,pct})=><div key={room.id} style={{padding:14,borderRadius:10,background:pct===100?"#F0FDF4":pct>0?"#FFFBEB":"#FEF2F2",border:`1px solid ${pct===100?"#BBF7D0":pct>0?"#FDE68A":"#FECACA"}`,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
-        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:700,fontSize:13}}>{room.name}</span><span style={{fontSize:12,fontWeight:700,color:pct===100?"#059669":pct>0?"#D97706":"#DC2626"}}>{pct}%</span></div>
-        <div style={{height:5,background:"rgba(0,0,0,0.08)",borderRadius:3,marginTop:6,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:pct===100?"#059669":pct>0?"#D97706":"#DC2626",borderRadius:3}}/></div>
+      {roomSt.map(({room,filled,total,pct})=>{
+        const cardBg=pct===100?"#F0FDF4":pct>0?"#FFFBEB":"#FEF2F2";
+        const cardBorder=pct===100?"#BBF7D0":pct>0?"#FDE68A":"#FECACA";
+        const pctColor=pct===100?"#059669":pct>0?"#D97706":"#DC2626";
+        return(<div key={room.id} style={{padding:14,borderRadius:10,background:cardBg,border:"1px solid "+cardBorder,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
+        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:700,fontSize:13}}>{room.name}</span><span style={{fontSize:12,fontWeight:700,color:pctColor}}>{pct}%</span></div>
+        <div style={{height:5,background:"rgba(0,0,0,0.08)",borderRadius:3,marginTop:6,overflow:"hidden"}}><div style={{width:pct+"%",height:"100%",background:pctColor,borderRadius:3}}/></div>
         <div style={{display:"flex",gap:5,marginTop:8}}>
           <button onClick={()=>exportRoomXL(room)} style={{background:"none",border:"1.5px solid #2563EB",borderRadius:6,padding:"2px 8px",color:"#2563EB",fontSize:10,fontWeight:600,cursor:"pointer"}}>Excel</button>
           <button onClick={()=>printRoomPDF(room)} style={{background:"none",border:"1.5px solid #DC2626",borderRadius:6,padding:"2px 8px",color:"#DC2626",fontSize:10,fontWeight:600,cursor:"pointer"}}>PDF</button>
         </div>
-      </div>)}
+      </div>);})}
       {!roomSt.length&&<div style={{padding:20,color:"#9CA3AF"}}>ยังไม่มีห้องเรียน</div>}
     </div>
 
@@ -5770,7 +5774,7 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
   ];
   const BRK=[["08.00-","08.30"],["10.10-","10.25"],["12.05-","13.00"],["14.40-","14.50"]];
   const vertBRK=(parts,fs="6.5pt")=>
-    `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:${fs};font-weight:normal;letter-spacing:3px;text-align:center;display:flex;flex-direction:column;align-items:center;">${parts.map(p=>`<span style="white-space:nowrap;">${p}</span>`).join("")}</div>`;
+    `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:${fs};font-weight:normal;letter-spacing:3px;text-align:center;display:flex;flex-direction:column;align-items:center;">${parts.map(p=>'<span style="white-space:nowrap;">'+p+'</span>').join("")}</div>`;
 
   const hdrRow=`<tr style="background:#f0f0f0;height:22px;max-height:22px;">
     <th rowspan="2" style="border:1px solid #666;padding:0;position:relative;vertical-align:middle;font-size:7pt;height:38px;">
@@ -5795,7 +5799,7 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
     <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[6].label}</th>
   </tr>
   <tr style="background:#f0f0f0;height:16px;max-height:16px;">
-    ${HDR.map(h=>`<td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;height:16px;">${h.time}</td>`).join("")}
+    ${HDR.map(h=>'<td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;height:16px;">'+h.time+'</td>').join("")}
   </tr>`;
 
   // หา assemblyDay จากห้องที่ครูสอน (ใช้ level ของห้องแรก)
@@ -6103,7 +6107,7 @@ function buildTeacherTableHTML3(teacher, S, ay, sh) {
           const codeStr=sub.code?"("+sub.code+")":"";
           return"<div>"+(sub.name||"")+" "+codeStr+"</div>";
         }).join("")}
-        ${specialMeets.map(l=>`<div>${l}</div>`).join("")}
+        ${specialMeets.map(l=>"<div>"+l+"</div>").join("")}
       </div>
       <div>
         <table style="font-size:9.5pt;border-collapse:collapse;">
