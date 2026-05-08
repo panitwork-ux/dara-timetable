@@ -117,28 +117,30 @@ function AdminPanel({user,onBack,refreshPerms}){
   const [saving,setSaving]=useState(false);
   const [toast,setToast]=useState(null);
 
-  // เพิ่มอีเมลทีละคน
+  // เพิ่มอีเมลล่วงหน้า
   const [addEmail,setAddEmail]=useState("");
-  const [addPerms,setAddPerms]=useState({p1:false,p2:false,m1:false,m2:false,canEdit:false,isTeacher:false});
+  const [addPerms,setAddPerms]=useState({p1:false,p2:false,m1:false,m2:false,canEdit:false});
   const [addLoading,setAddLoading]=useState(false);
-
   // Bulk import
+  const [bulkMode,setBulkMode]=useState(false);
   const [bulkText,setBulkText]=useState("");
-  const [bulkPerms,setBulkPerms]=useState({p1:false,p2:false,m1:false,m2:false,canEdit:false,isTeacher:false});
+  const [bulkPerms,setBulkPerms]=useState({p1:false,p2:false,m1:false,m2:false,canEdit:false});
   const [bulkLoading,setBulkLoading]=useState(false);
   const [bulkResult,setBulkResult]=useState(null);
 
-  // Edit
+  // Edit existing user
   const [editUid,setEditUid]=useState(null);
   const [editPerms,setEditPerms]=useState({});
 
   const divNames={p1:"ประถมต้น",p2:"ประถมปลาย",m1:"มัธยมต้น",m2:"มัธยมปลาย"};
-  const showToast=(msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),3500);};
+
+  const showToast=(msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),3000);};
 
   const tryPin=()=>{
     if(pin===ADMIN_PIN){setUnlocked(true);loadUsers();}
     else{setPinErr("รหัสไม่ถูกต้อง");setPin("");}
   };
+
   const loadUsers=async()=>{
     setLoading(true);
     const {db}=getFB();if(!db){setLoading(false);return;}
@@ -146,82 +148,64 @@ function AdminPanel({user,onBack,refreshPerms}){
     setUsers(snap.docs.map(d=>({uid:d.id,...d.data()})));
     setLoading(false);
   };
-  const makePreKey=(email)=>"pre_"+email.trim().toLowerCase().replace(/[@.]/g,"_");
 
-  const saveOneEmail=async(db,email,perms,currentUsers)=>{
-    const existing=currentUsers.find(u=>u.email===email&&!u.preAdded);
-    const uid=existing?existing.uid:makePreKey(email);
-    await setDoc(doc(db,"permissions",uid),{email,displayName:existing?.displayName||"",divisions:perms,preAdded:!existing,merged:false},{merge:true});
-    return{uid,existing};
-  };
+  // เพิ่ม / อัปเดตผู้ใช้จากอีเมล (ใช้อีเมลเป็น uid placeholder)
+  const makePreKey=(email)=>"pre_"+email.trim().toLowerCase().replace(/[@.]/g,"_");
 
   const handleAddEmail=async()=>{
     const email=addEmail.trim().toLowerCase();
-    if(!email||!email.includes("@")){showToast("รูปแบบอีเมลไม่ถูกต้อง","error");return;}
+    if(!email){showToast("กรุณากรอกอีเมล","error");return;}
+    if(!email.includes("@")){showToast("รูปแบบอีเมลไม่ถูกต้อง","error");return;}
     setAddLoading(true);
-    const {db}=getFB();if(!db){showToast("Firebase ไม่พร้อม","error");setAddLoading(false);return;}
-    const {uid,existing}=await saveOneEmail(db,email,addPerms,users);
-    if(existing){setUsers(p=>p.map(u=>u.uid===uid?{...u,divisions:addPerms}:u));}
-    else{setUsers(p=>[...p.filter(u=>u.uid!==uid),{uid,email,displayName:"",divisions:addPerms,preAdded:true}]);}
-    setAddEmail("");setAddPerms({p1:false,p2:false,m1:false,m2:false,canEdit:false,isTeacher:false});
-    showToast("บันทึกสิทธิ์สำเร็จ: "+email);setAddLoading(false);
-    if(refreshPerms)refreshPerms();
-  };
+    const {db}=getFB();
+    if(!db){showToast("Firebase ไม่พร้อม","error");setAddLoading(false);return;}
 
-  const handleBulkImport=async()=>{
-    const emails=bulkText.split(/[\n,;]+/).map(e=>e.trim().toLowerCase()).filter(e=>e.includes("@"));
-    if(!emails.length){showToast("ไม่พบอีเมลที่ถูกต้อง","error");return;}
-    setBulkLoading(true);
-    const {db}=getFB();if(!db){showToast("Firebase ไม่พร้อม","error");setBulkLoading(false);return;}
-    const ok=[],skip=[];
-    for(const email of emails){
-      try{
-        const {uid,existing}=await saveOneEmail(db,email,bulkPerms,users);
-        if(existing){setUsers(p=>p.map(u=>u.uid===uid?{...u,divisions:bulkPerms}:u));}
-        else{setUsers(p=>[...p.filter(u=>u.uid!==uid),{uid,email,displayName:"",divisions:bulkPerms,preAdded:true}]);}
-        ok.push(email);
-      }catch{skip.push(email);}
+    // ค้นหาว่ามี doc ที่มี email นี้อยู่แล้วไหม (จาก users ที่โหลดมา = login จริงแล้ว)
+    const existing=users.find(u=>u.email===email&&!u.preAdded);
+    const uid=existing?existing.uid:makePreKey(email);
+
+    await setDoc(doc(db,"permissions",uid),{
+      email,
+      displayName:existing?.displayName||"",
+      divisions:addPerms,
+      preAdded:!existing,
+      merged:false,
+    },{merge:true});
+
+    if(existing){
+      setUsers(p=>p.map(u=>u.uid===uid?{...u,divisions:addPerms}:u));
+    } else {
+      // ลบ pre doc เก่าถ้ามี แล้วเพิ่มใหม่
+      setUsers(p=>{
+        const filtered=p.filter(u=>u.uid!==uid);
+        return [...filtered,{uid,email,displayName:"",divisions:addPerms,preAdded:true}];
+      });
     }
-    setBulkResult({ok,skip});setBulkLoading(false);
+    setAddEmail("");
+    setAddPerms({p1:false,p2:false,m1:false,m2:false});
+    showToast("บันทึกสิทธิ์สำเร็จ: "+email);
+    setAddLoading(false);
     if(refreshPerms)refreshPerms();
   };
 
   const savePerms=async()=>{
-    if(!editUid)return;setSaving(true);
+    if(!editUid)return;
+    setSaving(true);
     await fsSetPermissions(editUid,{divisions:editPerms});
     setUsers(p=>p.map(u=>u.uid===editUid?{...u,divisions:editPerms}:u));
-    setSaving(false);setEditUid(null);setEditPerms({});
-    showToast("บันทึกสิทธิ์สำเร็จ");if(refreshPerms)refreshPerms();
+    setSaving(false);
+    setEditUid(null);setEditPerms({});
+    showToast("บันทึกสิทธิ์สำเร็จ");
+    if(refreshPerms)refreshPerms();
   };
 
   const deleteUser=async(uid)=>{
-    if(!confirm("ถอนสิทธิ์ผู้ใช้นี้?"))return;
+    if(!confirm("ลบผู้ใช้นี้ออกจากระบบ?"))return;
     const {db}=getFB();if(!db)return;
-    const empty={p1:false,p2:false,m1:false,m2:false,canEdit:false,isTeacher:false};
-    await setDoc(doc(db,"permissions",uid),{divisions:empty},{merge:true});
-    setUsers(p=>p.map(u=>u.uid===uid?{...u,divisions:empty}:u));
+    await setDoc(doc(db,"permissions",uid),{divisions:{p1:false,p2:false,m1:false,m2:false}},{merge:true});
+    setUsers(p=>p.map(u=>u.uid===uid?{...u,divisions:{p1:false,p2:false,m1:false,m2:false}}:u));
     showToast("ถอนสิทธิ์แล้ว","warning");
   };
-
-  // ── PermChecks: checkbox group สิทธิ์ทั้งหมด ──
-  const PermChecks=({perms,onChange})=>(
-    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-      {Object.entries(divNames).map(([k,name])=>(
-        <label key={k} style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",padding:"6px 10px",borderRadius:8,border:`2px solid ${perms[k]?"#DC2626":"#D1D5DB"}`,background:perms[k]?"#FEE2E2":"#F9FAFB",userSelect:"none",fontSize:12}}>
-          <input type="checkbox" checked={!!perms[k]} onChange={e=>onChange({...perms,[k]:e.target.checked})} style={{width:13,height:13,accentColor:"#DC2626"}}/>
-          <span style={{fontWeight:perms[k]?700:400,color:perms[k]?"#991B1B":"#374151"}}>{name}</span>
-        </label>
-      ))}
-      <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",padding:"6px 10px",borderRadius:8,border:`2px solid ${perms.canEdit?"#7C3AED":"#D1D5DB"}`,background:perms.canEdit?"#F5F3FF":"#F9FAFB",userSelect:"none",fontSize:12}}>
-        <input type="checkbox" checked={!!perms.canEdit} onChange={e=>onChange({...perms,canEdit:e.target.checked})} style={{width:13,height:13,accentColor:"#7C3AED"}}/>
-        <span style={{fontWeight:perms.canEdit?700:400,color:perms.canEdit?"#5B21B6":"#374151"}}>✏️ แก้ตารางได้</span>
-      </label>
-      <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",padding:"6px 10px",borderRadius:8,border:`2px solid ${perms.isTeacher?"#0891B2":"#D1D5DB"}`,background:perms.isTeacher?"#ECFEFF":"#F9FAFB",userSelect:"none",fontSize:12}}>
-        <input type="checkbox" checked={!!perms.isTeacher} onChange={e=>onChange({...perms,isTeacher:e.target.checked})} style={{width:13,height:13,accentColor:"#0891B2"}}/>
-        <span style={{fontWeight:perms.isTeacher?700:400,color:perms.isTeacher?"#0E7490":"#374151"}}>👨‍🏫 ครูทั่วไป</span>
-      </label>
-    </div>
-  );
 
   if(!unlocked) return(
     <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#F3F4F6"}}>
@@ -229,7 +213,15 @@ function AdminPanel({user,onBack,refreshPerms}){
         <div style={{fontSize:36,marginBottom:12}}>🔐</div>
         <h2 style={{fontSize:18,fontWeight:700,marginBottom:4}}>Admin Panel</h2>
         <p style={{color:"#6B7280",fontSize:12,marginBottom:24}}>ใส่รหัสผู้ดูแลระบบ</p>
-        <input type="password" style={{...IS,textAlign:"center",letterSpacing:6,fontSize:20,marginBottom:12}} value={pin} onChange={e=>setPin(e.target.value)} onKeyDown={e=>e.key==="Enter"&&tryPin()} placeholder="• • • • • •" maxLength={10}/>
+        <input
+          type="password"
+          style={{...IS,textAlign:"center",letterSpacing:6,fontSize:20,marginBottom:12}}
+          value={pin}
+          onChange={e=>setPin(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&tryPin()}
+          placeholder="• • • • • •"
+          maxLength={10}
+        />
         {pinErr&&<div style={{color:"#DC2626",fontSize:12,marginBottom:8}}>{pinErr}</div>}
         <button onClick={tryPin} style={{...BS(),width:"100%",justifyContent:"center"}}>ยืนยัน</button>
         <button onClick={onBack} style={{marginTop:10,background:"none",border:"none",color:"#6B7280",cursor:"pointer",fontSize:13}}>← กลับ</button>
@@ -242,112 +234,128 @@ function AdminPanel({user,onBack,refreshPerms}){
   return(
     <div style={{minHeight:"100vh",background:"#F3F4F6",padding:24,fontFamily:"'Sarabun','Noto Sans Thai',sans-serif"}}>
       {toast&&<div style={{position:"fixed",top:20,right:20,zIndex:9999,background:toast.type==="error"?"#DC2626":toast.type==="warning"?"#D97706":"#059669",color:"#fff",padding:"12px 20px",borderRadius:10,fontSize:14,fontWeight:600,boxShadow:"0 4px 20px rgba(0,0,0,0.2)"}}>{toast.msg}</div>}
-      <div style={{maxWidth:1000,margin:"0 auto"}}>
+      <div style={{maxWidth:960,margin:"0 auto"}}>
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24}}>
           <button onClick={onBack} style={{background:"none",border:"none",cursor:"pointer",color:"#6B7280"}}><Icon name="x" size={20}/></button>
           <h1 style={{fontSize:20,fontWeight:700}}>Admin Panel — จัดการสิทธิ์</h1>
         </div>
 
-        {/* ── เพิ่มทีละคน ── */}
-        <div style={{background:"#fff",borderRadius:14,padding:20,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:14}}>
-          <h2 style={{fontSize:14,fontWeight:700,marginBottom:10}}>➕ เพิ่มอีเมลทีละคน</h2>
+        {/* ── เพิ่มอีเมลล่วงหน้า ── */}
+        <div style={{background:"#fff",borderRadius:14,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:20}}>
+          <h2 style={{fontSize:15,fontWeight:700,marginBottom:4}}>➕ กำหนดสิทธิ์ล่วงหน้า (Admin พิมพ์อีเมลเอง)</h2>
+          <p style={{fontSize:12,color:"#6B7280",marginBottom:16}}>เพิ่มอีเมลพร้อมสิทธิ์ได้เลย — เมื่อผู้ใช้ login ครั้งแรกระบบจะจำสิทธิ์ที่ตั้งไว้</p>
           <div style={{display:"flex",gap:10,alignItems:"flex-end",flexWrap:"wrap"}}>
-            <div style={{flex:"1 1 240px"}}>
+            <div style={{flex:"1 1 280px"}}>
               <label style={LS}>อีเมล</label>
-              <input style={IS} value={addEmail} onChange={e=>setAddEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleAddEmail()} placeholder="teacher@web1.dara.ac.th" type="email"/>
+              <input
+                style={IS}
+                value={addEmail}
+                onChange={e=>setAddEmail(e.target.value)}
+                onKeyDown={e=>e.key==="Enter"&&handleAddEmail()}
+                placeholder="teacher@web1.dara.ac.th"
+                type="email"
+              />
             </div>
             <div style={{flex:"1 1 auto"}}>
-              <label style={LS}>สิทธิ์</label>
-              <PermChecks perms={addPerms} onChange={setAddPerms}/>
+              <label style={LS}>ระดับที่เข้าได้</label>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {Object.entries(divNames).map(([k,name])=>(
+                  <label key={k} style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",padding:"8px 12px",borderRadius:8,border:`2px solid ${addPerms[k]?"#DC2626":"#D1D5DB"}`,background:addPerms[k]?"#FEE2E2":"#F9FAFB",userSelect:"none"}}>
+                    <input type="checkbox" checked={!!addPerms[k]} onChange={e=>setAddPerms(p=>({...p,[k]:e.target.checked}))} style={{width:15,height:15,accentColor:"#DC2626"}}/>
+                    <span style={{fontSize:13,fontWeight:addPerms[k]?700:400,color:addPerms[k]?"#991B1B":"#374151"}}>{name}</span>
+                  </label>
+                ))}
+              </div>
             </div>
-            <button onClick={handleAddEmail} disabled={addLoading} style={{...BS(),flexShrink:0,opacity:addLoading?0.6:1}}>{addLoading?"กำลังบันทึก...":"บันทึก"}</button>
+            <button
+              onClick={handleAddEmail}
+              disabled={addLoading}
+              style={{...BS(),flexShrink:0,opacity:addLoading?0.6:1}}
+            >
+              {addLoading?"กำลังบันทึก...":"บันทึกสิทธิ์"}
+            </button>
           </div>
-        </div>
-
-        {/* ── Bulk Import ── */}
-        <div style={{background:"#fff",borderRadius:14,padding:20,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:14}}>
-          <h2 style={{fontSize:14,fontWeight:700,marginBottom:6}}>📋 Import อีเมลหลายคนพร้อมกัน</h2>
-          <p style={{fontSize:12,color:"#6B7280",marginBottom:12}}>วางอีเมลทีละบรรทัด หรือคั่นด้วย , ; — ระบบบันทึกให้อัตโนมัติ</p>
-          <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
-            <div style={{flex:"1 1 280px"}}>
-              <label style={LS}>รายชื่ออีเมล ({bulkText.split(/[\n,;]+/).map(e=>e.trim()).filter(e=>e.includes("@")).length} คน)</label>
-              <textarea style={{...IS,height:110,resize:"vertical",fontFamily:"inherit",fontSize:12}} value={bulkText} onChange={e=>setBulkText(e.target.value)} placeholder={"teacher1@web1.dara.ac.th\nteacher2@web1.dara.ac.th"}/>
-            </div>
-            <div style={{flex:"1 1 auto",display:"flex",flexDirection:"column",gap:10}}>
-              <div><label style={LS}>สิทธิ์ (ใช้กับทุกคนในรายการ)</label><PermChecks perms={bulkPerms} onChange={setBulkPerms}/></div>
-              <button onClick={handleBulkImport} disabled={bulkLoading} style={{...BS("#2563EB"),opacity:bulkLoading?0.6:1}}>{bulkLoading?"กำลัง import...":"🚀 Import ทั้งหมด"}</button>
-            </div>
-          </div>
-          {bulkResult&&(
-            <div style={{marginTop:12,padding:"10px 14px",borderRadius:10,background:"#F0FDF4",border:"1px solid #BBF7D0"}}>
-              <div style={{fontSize:13,fontWeight:700,color:"#065F46"}}>✅ สำเร็จ {bulkResult.ok.length} คน {bulkResult.skip.length>0&&`/ ⚠️ ล้มเหลว ${bulkResult.skip.length} คน`}</div>
-              {bulkResult.skip.length>0&&<div style={{fontSize:11,color:"#991B1B",marginTop:4}}>ล้มเหลว: {bulkResult.skip.join(", ")}</div>}
-              <button onClick={()=>{setBulkResult(null);setBulkText("");}} style={{fontSize:11,color:"#6B7280",background:"none",border:"none",cursor:"pointer",marginTop:4}}>ล้างผลลัพธ์</button>
-            </div>
-          )}
         </div>
 
         {/* ── ค้นหา ── */}
-        <div style={{background:"#fff",borderRadius:12,padding:14,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:14}}>
+        <div style={{background:"#fff",borderRadius:12,padding:16,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:16}}>
           <div style={{position:"relative"}}>
             <input style={{...IS,paddingLeft:36}} value={search} onChange={e=>setSearch(e.target.value)} placeholder="ค้นหาชื่อหรืออีเมล..."/>
             <div style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"#9CA3AF"}}><Icon name="search" size={14}/></div>
           </div>
         </div>
+
         {loading&&<div style={{textAlign:"center",padding:40,color:"#6B7280"}}>กำลังโหลด...</div>}
 
         {/* ── ตารางผู้ใช้ ── */}
         <div style={{background:"#fff",borderRadius:12,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",overflow:"hidden"}}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-            <thead><tr style={{background:"#F9FAFB"}}>
-              {["ชื่อ / อีเมล","สถานะ","ระดับที่เข้าได้","บทบาท","จัดการ"].map(h=>(
-                <th key={h} style={{padding:"10px 14px",textAlign:"left",fontWeight:600,color:"#6B7280",fontSize:12}}>{h}</th>
-              ))}
-            </tr></thead>
+            <thead>
+              <tr style={{background:"#F9FAFB"}}>
+                {["ชื่อ / อีเมล","สถานะ","ระดับที่เข้าได้","จัดการ"].map(h=>(
+                  <th key={h} style={{padding:"12px 16px",textAlign:"left",fontWeight:600,color:"#6B7280",fontSize:12}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
             <tbody>
               {filtered.map(u=>(
                 <tr key={u.uid} style={{borderTop:"1px solid #F3F4F6"}}>
-                  <td style={{padding:"10px 14px"}}><div style={{fontWeight:600}}>{u.displayName||"—"}</div><div style={{fontSize:11,color:"#6B7280"}}>{u.email||u.uid}</div></td>
-                  <td style={{padding:"10px 14px"}}>
-                    {u.preAdded?<span style={{background:"#FEF3C7",color:"#92400E",padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:600}}>⏳ รอ Login</span>
-                    :<span style={{background:"#D1FAE5",color:"#065F46",padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:600}}>✓ ใช้งานแล้ว</span>}
+                  <td style={{padding:"12px 16px"}}>
+                    <div style={{fontWeight:600}}>{u.displayName||"—"}</div>
+                    <div style={{fontSize:11,color:"#6B7280"}}>{u.email||u.uid}</div>
                   </td>
-                  <td style={{padding:"10px 14px"}}>
+                  <td style={{padding:"12px 16px"}}>
+                    {u.preAdded
+                      ?<span style={{background:"#FEF3C7",color:"#92400E",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>⏳ รอ Login</span>
+                      :<span style={{background:"#D1FAE5",color:"#065F46",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>✓ ใช้งานแล้ว</span>
+                    }
+                  </td>
+                  <td style={{padding:"12px 16px"}}>
                     <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                      {Object.entries(u.divisions||{}).filter(([k,v])=>v&&divNames[k]).map(([k])=>(
-                        <span key={k} style={{background:"#FEE2E2",color:"#991B1B",padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:600}}>{divNames[k]}</span>
+                      {Object.entries(u.divisions||{}).filter(([,v])=>v).map(([k])=>(
+                        <span key={k} style={{background:"#FEE2E2",color:"#991B1B",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>{divNames[k]||k}</span>
                       ))}
+                      {!Object.values(u.divisions||{}).some(Boolean)&&<span style={{color:"#9CA3AF",fontSize:12}}>ไม่มีสิทธิ์</span>}
                     </div>
                   </td>
-                  <td style={{padding:"10px 14px"}}>
-                    <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                      {u.divisions?.canEdit&&<span style={{background:"#F5F3FF",color:"#5B21B6",padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:600}}>✏️ แก้ตาราง</span>}
-                      {u.divisions?.isTeacher&&<span style={{background:"#ECFEFF",color:"#0E7490",padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:600}}>👨‍🏫 ครูทั่วไป</span>}
-                      {!u.divisions?.canEdit&&!u.divisions?.isTeacher&&<span style={{color:"#9CA3AF",fontSize:11}}>—</span>}
-                    </div>
-                  </td>
-                  <td style={{padding:"10px 14px"}}>
+                  <td style={{padding:"12px 16px"}}>
                     <div style={{display:"flex",gap:6}}>
-                      <button onClick={()=>{setEditUid(u.uid);setEditPerms(u.divisions||{p1:false,p2:false,m1:false,m2:false,canEdit:false,isTeacher:false});}} style={{background:"none",border:"1px solid #D1D5DB",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontSize:12}}>แก้ไข</button>
-                      <button onClick={()=>deleteUser(u.uid)} style={{background:"none",border:"1px solid #FECACA",borderRadius:8,padding:"4px 8px",cursor:"pointer",fontSize:12,color:"#DC2626"}}>✕</button>
+                      <button
+                        onClick={()=>{setEditUid(u.uid);setEditPerms(u.divisions||{p1:false,p2:false,m1:false,m2:false});}}
+                        style={{background:"none",border:"1px solid #D1D5DB",borderRadius:8,padding:"4px 12px",cursor:"pointer",fontSize:12}}
+                      >แก้ไขสิทธิ์</button>
+                      <button
+                        onClick={()=>deleteUser(u.uid)}
+                        style={{background:"none",border:"1px solid #FECACA",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontSize:12,color:"#DC2626"}}
+                        title="ถอนสิทธิ์ทั้งหมด"
+                      >✕</button>
                     </div>
                   </td>
                 </tr>
               ))}
               {!loading&&!filtered.length&&(
-                <tr><td colSpan={5} style={{padding:32,textAlign:"center",color:"#9CA3AF"}}>{users.length===0?"ยังไม่มีผู้ใช้":"ไม่พบผู้ใช้ที่ค้นหา"}</td></tr>
+                <tr><td colSpan={4} style={{padding:32,textAlign:"center",color:"#9CA3AF"}}>
+                  {users.length===0?"ยังไม่มีผู้ใช้ — เพิ่มอีเมลได้ที่กล่องด้านบน":"ไม่พบผู้ใช้ที่ค้นหา"}
+                </td></tr>
               )}
             </tbody>
           </table>
         </div>
 
-        {/* ── Edit modal ── */}
+        {/* ── Edit permissions modal ── */}
         {editUid&&(
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
-            <div style={{background:"#fff",borderRadius:16,padding:28,width:480}}>
+            <div style={{background:"#fff",borderRadius:16,padding:28,width:420}}>
               <h3 style={{fontSize:16,fontWeight:700,marginBottom:4}}>แก้ไขสิทธิ์</h3>
               <p style={{fontSize:12,color:"#6B7280",marginBottom:16}}>{users.find(u=>u.uid===editUid)?.email||editUid}</p>
-              <div style={{marginBottom:20}}><PermChecks perms={editPerms} onChange={setEditPerms}/></div>
+              <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
+                {Object.entries(divNames).map(([k,name])=>(
+                  <label key={k} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",padding:"10px 14px",borderRadius:10,background:editPerms[k]?"#FEE2E2":"#F9FAFB",border:`1.5px solid ${editPerms[k]?"#DC2626":"#E5E7EB"}`}}>
+                    <input type="checkbox" checked={!!editPerms[k]} onChange={e=>setEditPerms(p=>({...p,[k]:e.target.checked}))} style={{width:16,height:16,accentColor:"#DC2626"}}/>
+                    <span style={{fontWeight:editPerms[k]?700:400,color:editPerms[k]?"#991B1B":"#374151",fontSize:14}}>{name}</span>
+                  </label>
+                ))}
+              </div>
               <div style={{display:"flex",gap:8}}>
                 <button onClick={savePerms} disabled={saving} style={{...BS(),opacity:saving?0.6:1}}>{saving?"กำลังบันทึก...":"บันทึก"}</button>
                 <button onClick={()=>{setEditUid(null);setEditPerms({});}} style={BO()}>ยกเลิก</button>
@@ -907,93 +915,20 @@ export default function App() {
   const divHasAccess=!firebaseConfigured||userPerms?.divisions?.[divId]===true;
 
   return <div style={{display:"flex",height:"100vh",fontFamily:"'Sarabun','Noto Sans Thai',sans-serif",background:"linear-gradient(145deg,#EEF2FF 0%,#F8F9FF 40%,#FFF5F5 100%)",overflow:"hidden"}}>
-    <style>{`
-      @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800&display=swap');
-      *{box-sizing:border-box;margin:0;padding:0}
-      ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#D4C5BA;border-radius:4px}::-webkit-scrollbar-track{background:transparent}
-      @keyframes slideIn{from{transform:translateX(100px);opacity:0}to{transform:translateX(0);opacity:1}}
-      @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-      @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
-      @keyframes slideFromLeft{from{transform:translateX(-100%)}to{transform:translateX(0)}}
-      .ni:hover{background:rgba(255,255,255,0.12)!important;border-radius:10px}
-      .ni.a{background:rgba(255,255,255,0.15)!important;border-radius:10px}
-      input:focus,select:focus{border-color:#991B1B!important;box-shadow:0 0 0 3px rgba(153,27,27,0.12)!important}
-      input,select{transition:border-color 0.15s,box-shadow 0.15s}
-      .drag-card{cursor:grab;user-select:none}.drag-card:active{cursor:grabbing}
-      .dz{transition:background 0.15s,outline 0.15s}.dz.over{background:#FEE2E2!important;outline:2px dashed #DC2626}
-      button:hover{opacity:0.88;transition:opacity 0.15s}
-      select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:36px!important}
-      .div-sel{appearance:none!important;background:rgba(0,0,0,0.2)!important;background-image:none!important;border:1px solid rgba(255,255,255,0.25)!important;border-radius:10px!important;color:#fff!important;font-size:13px!important;font-weight:600!important;font-family:inherit!important;padding:8px 32px 8px 12px!important;width:100%!important;cursor:pointer!important;outline:none!important;transition:border-color 0.15s}
-      .div-sel:focus{box-shadow:0 0 0 2px rgba(255,255,255,0.2)!important;border-color:rgba(255,255,255,0.5)!important}
-      .div-sel option{background:#991B1B;color:#fff}
+    <style>{`@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#D4C5BA;border-radius:4px}::-webkit-scrollbar-track{background:transparent}@keyframes slideIn{from{transform:translateX(100px);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}.ni:hover{background:rgba(255,255,255,0.12)!important;border-radius:10px}.ni.a{background:rgba(255,255,255,0.15)!important;border-radius:10px}input:focus,select:focus{border-color:#991B1B!important;box-shadow:0 0 0 3px rgba(153,27,27,0.12)!important}input,select{transition:border-color 0.15s,box-shadow 0.15s}.drag-card{cursor:grab;user-select:none}.drag-card:active{cursor:grabbing}.dz{transition:background 0.15s,outline 0.15s}.dz.over{background:#FEE2E2!important;outline:2px dashed #DC2626}button:hover{opacity:0.88;transition:opacity 0.15s}select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:36px!important}.div-sel{appearance:none!important;background:rgba(0,0,0,0.2)!important;background-image:none!important;border:1px solid rgba(255,255,255,0.25)!important;border-radius:10px!important;color:#fff!important;font-size:13px!important;font-weight:600!important;font-family:inherit!important;padding:8px 32px 8px 12px!important;width:100%!important;cursor:pointer!important;outline:none!important;transition:border-color 0.15s}.div-sel:focus{box-shadow:0 0 0 2px rgba(255,255,255,0.2)!important;border-color:rgba(255,255,255,0.5)!important}.div-sel option{background:#991B1B;color:#fff}`}</style>
 
-      /* ── Sidebar overlay on mobile ── */
-      .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:199}
-      .sidebar{position:relative;z-index:200;flex-shrink:0;display:flex;flex-direction:column;background:linear-gradient(180deg,#B91C1C 0%,#991B1B 100%);box-shadow:2px 0 12px rgba(185,28,28,0.2);transition:width 0.3s,transform 0.3s;overflow:hidden}
-
-      /* ── Responsive breakpoints ── */
-      @media(max-width:768px){
-        .sidebar{position:fixed!important;top:0;left:0;height:100vh;width:260px!important;transform:translateX(-100%);z-index:200}
-        .sidebar.open{transform:translateX(0)!important;animation:slideFromLeft 0.25s ease}
-        .sidebar-overlay.open{display:block}
-        .main-content{margin-left:0!important}
-        .header-bar{padding:0 12px!important}
-        .header-breadcrumb{display:none!important}
-        .main-pad{padding:12px!important;padding-bottom:72px!important}
-        /* ── Bottom nav ── */
-        .bottom-nav{display:flex!important}
-        /* ── Cards responsive ── */
-        .resp-grid{grid-template-columns:1fr!important}
-        /* ── Swap table scroll ── */
-        .swap-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-      }
-      @media(min-width:769px) and (max-width:1024px){
-        .sidebar{width:200px!important}
-        .main-pad{padding:14px 16px!important}
-      }
-      /* ── Bottom nav (hidden on desktop) ── */
-      .bottom-nav{
-        display:none;position:fixed;bottom:0;left:0;right:0;
-        background:linear-gradient(180deg,#B91C1C,#991B1B);
-        z-index:198;height:62px;
-        box-shadow:0 -2px 12px rgba(185,28,28,0.25);
-        overflow-x:auto;overflow-y:hidden;
-        -webkit-overflow-scrolling:touch;
-        white-space:nowrap;
-        padding:0 4px;
-        align-items:center;
-        gap:0;
-      }
-      .bn-item{
-        display:inline-flex;flex-direction:column;align-items:center;justify-content:center;
-        min-width:60px;padding:6px 8px;cursor:pointer;
-        color:rgba(255,255,255,0.65);font-size:9px;font-weight:500;gap:3px;
-        border-radius:10px;transition:all 0.15s;font-family:inherit;
-      }
-      .bn-item.a{color:#fff;background:rgba(255,255,255,0.15);font-weight:700}
-      .bn-item:hover{color:#fff;background:rgba(255,255,255,0.1)}
-      /* ── Typography scale down on mobile ── */
-      @media(max-width:480px){
-        .resp-card-title{font-size:13px!important}
-        .resp-label{font-size:11px!important}
-      }
-    `}</style>
-
-    {/* Sidebar overlay backdrop (mobile) */}
-    <div className={"sidebar-overlay"+(side?" open":"")} onClick={()=>setSide(false)}/>
-
-    {/* Sidebar */}
-    <div className={"sidebar"+(side?" open":"")} style={{width:side?240:0}}>
-      <div style={{padding:"20px 16px",borderBottom:"1px solid rgba(255,255,255,0.1)",flexShrink:0}}>
+    <div style={{width:side?240:0,background:"linear-gradient(180deg,#B91C1C 0%,#991B1B 100%)",transition:"width 0.3s",overflow:"hidden",flexShrink:0,display:"flex",flexDirection:"column",boxShadow:"2px 0 12px rgba(185,28,28,0.2)"}}>
+      <div style={{padding:"20px 16px",borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           {schoolHeader.logo
             ?<img src={schoolHeader.logo} alt="logo" style={{width:38,height:38,borderRadius:10,objectFit:"cover",flexShrink:0}}/>
             :<div style={{width:38,height:38,borderRadius:10,background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:800,color:"#fff",flexShrink:0}}>ด</div>
           }
-          <div style={{minWidth:0}}><div style={{color:"#fff",fontSize:14,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{schoolHeader.name||"ดาราวิทยาลัย"}</div><div style={{color:"rgba(255,255,255,0.6)",fontSize:10}}>ระบบจัดตารางสอน v3</div></div>
+          <div><div style={{color:"#fff",fontSize:14,fontWeight:700}}>{schoolHeader.name||"ดาราวิทยาลัย"}</div><div style={{color:"rgba(255,255,255,0.6)",fontSize:10}}>ระบบจัดตารางสอน v3</div></div>
         </div>
       </div>
-      <div style={{padding:"10px 12px",borderBottom:"1px solid rgba(255,255,255,0.1)",flexShrink:0}}>
+      {/* Division selector — dropdown */}
+      <div style={{padding:"10px 12px",borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
         <div style={{fontSize:10,color:"rgba(255,255,255,0.5)",marginBottom:5,paddingLeft:2,fontWeight:600}}>ระดับการศึกษา</div>
         <div style={{position:"relative"}}>
           <select className="div-sel" value={divId} onChange={e=>switchDivision(e.target.value)}>
@@ -1005,58 +940,52 @@ export default function App() {
         </div>
       </div>
       <nav style={{flex:1,padding:"12px 10px",overflowY:"auto"}}>
-        {nav.map(n=><div key={n.id} className={"ni"+(page===n.id?" a":"")}
-          onClick={()=>{setPage(n.id);if(window.innerWidth<=768)setSide(false);}}
-          style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:10,cursor:"pointer",color:page===n.id?"#fff":"rgba(255,255,255,0.7)",fontSize:13,fontWeight:page===n.id?700:400,marginBottom:2,transition:"all 0.15s",background:page===n.id?"rgba(255,255,255,0.15)":"transparent"}}>
-          <Icon name={n.icon} size={16}/>{n.label}
-        </div>)}
+        {nav.map(n=><div key={n.id} className={`ni ${page===n.id?"a":""}`} onClick={()=>setPage(n.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:10,cursor:"pointer",color:page===n.id?"#fff":"rgba(255,255,255,0.7)",fontSize:13,fontWeight:page===n.id?700:400,marginBottom:2,transition:"all 0.15s",background:page===n.id?"rgba(255,255,255,0.15)":"transparent"}}><Icon name={n.icon} size={16}/>{n.label}</div>)}
       </nav>
-      <div style={{padding:"12px 16px",borderTop:"1px solid rgba(255,255,255,0.1)",flexShrink:0}}>
-        {firebaseConfigured&&authUser&&<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,padding:"8px 10px",background:"rgba(255,255,255,0.1)",borderRadius:10}}>
-          <div style={{width:32,height:32,borderRadius:"50%",background:"rgba(255,255,255,0.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#fff",flexShrink:0}}>
+      <div style={{padding:"12px 16px",borderTop:"1px solid #F3F4F6"}}>
+        {firebaseConfigured&&authUser&&<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,padding:"8px 10px",background:"#F9FAFB",borderRadius:10}}>
+          <div style={{width:32,height:32,borderRadius:"50%",background:"linear-gradient(135deg,#B91C1C,#991B1B)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#fff",flexShrink:0}}>
             {(authUser.displayName||authUser.email||"U")[0].toUpperCase()}
           </div>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{color:"#fff",fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{authUser.displayName||authUser.email}</div>
-            <div style={{color:"rgba(255,255,255,0.6)",fontSize:10,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{authUser.email}</div>
+            <div style={{color:"#111",fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{authUser.displayName||authUser.email}</div>
+            <div style={{color:"#9CA3AF",fontSize:10,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{authUser.email}</div>
           </div>
         </div>}
         <div style={{display:"flex",gap:6,marginBottom:6}}>
-          {firebaseConfigured&&<button onClick={handleLogout} style={{flex:1,padding:"6px 0",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer"}}>ออกจากระบบ</button>}
-          {firebaseConfigured&&<button onClick={()=>setShowAdmin(true)} style={{flex:1,padding:"6px 0",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer"}}>🔐 Admin</button>}
+          {firebaseConfigured&&<button onClick={handleLogout} style={{flex:1,padding:"6px 0",background:"#F9FAFB",border:"1px solid #FECACA",borderRadius:8,color:CRED,fontSize:11,fontWeight:600,cursor:"pointer"}}>ออกจากระบบ</button>}
+          {firebaseConfigured&&<button onClick={()=>setShowAdmin(true)} style={{flex:1,padding:"6px 0",background:"#F9FAFB",border:"1px solid #E5E7EB",borderRadius:8,color:"#374151",fontSize:11,fontWeight:600,cursor:"pointer"}}>🔐 Admin</button>}
         </div>
-        <div style={{color:"rgba(255,255,255,0.4)",fontSize:10,textAlign:"center"}}>พัฒนาโดย พนิต เกิดมงคล</div>
+        <div style={{color:"#D1D5DB",fontSize:10,textAlign:"center"}}>พัฒนาโดย พนิต เกิดมงคล</div>
       </div>
     </div>
 
-    {/* Main content */}
-    <div className="main-content" style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0}}>
-      <header className="header-bar" style={{height:60,background:"rgba(255,255,255,0.85)",backdropFilter:"blur(12px)",borderBottom:"1px solid rgba(240,240,240,0.8)",display:"flex",alignItems:"center",padding:"0 20px",gap:12,flexShrink:0,boxShadow:"0 1px 8px rgba(0,0,0,0.05)"}}>
-        <button onClick={()=>setSide(!side)} style={{background:"none",border:"none",cursor:"pointer",color:"#9CA3AF",padding:4,borderRadius:8,display:"flex",flexShrink:0}}><Icon name="menu" size={20}/></button>
-        <div className="header-breadcrumb" style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:"#9CA3AF",minWidth:0}}>
-          <span style={{cursor:"pointer",color:"#9CA3AF",flexShrink:0}} onClick={()=>setPage("dashboard")}>🏠</span>
-          <span style={{flexShrink:0}}>/</span>
-          <span style={{color:"#111",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nav.find(n=>n.id===page)?.label}</span>
+    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <header style={{height:60,background:"rgba(255,255,255,0.85)",backdropFilter:"blur(12px)",borderBottom:"1px solid rgba(240,240,240,0.8)",display:"flex",alignItems:"center",padding:"0 20px",gap:12,flexShrink:0,boxShadow:"0 1px 8px rgba(0,0,0,0.05)"}}>
+        <button onClick={()=>setSide(!side)} style={{background:"none",border:"none",cursor:"pointer",color:"#9CA3AF",padding:4,borderRadius:8,display:"flex"}}><Icon name="menu" size={20}/></button>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:"#9CA3AF"}}>
+          <span style={{cursor:"pointer",color:"#9CA3AF"}} onClick={()=>setPage("dashboard")}>🏠</span>
+          <span>/</span>
+          <span style={{color:"#111",fontWeight:600}}>{nav.find(n=>n.id===page)?.label}</span>
         </div>
-        {/* Mobile page title */}
-        <span style={{color:"#111",fontWeight:700,fontSize:14,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"none"}} className="mobile-title">{nav.find(n=>n.id===page)?.label}</span>
-        <span style={{fontSize:10,background:"#F9FAFB",color:CRED,padding:"2px 10px",borderRadius:20,fontWeight:700,border:"1px solid #FECACA",flexShrink:0}}>{div.short}</span>
-        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+        <span style={{fontSize:10,background:"#F9FAFB",color:CRED,padding:"2px 10px",borderRadius:20,fontWeight:700,border:"1px solid #FECACA"}}>{div.short}</span>
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:10}}>
           {syncing
-            ?<span style={{fontSize:11,color:"#D97706",background:"#FFFBEB",padding:"3px 8px",borderRadius:20,border:"1px solid #FDE68A",fontWeight:600,whiteSpace:"nowrap"}}>⏳ sync...</span>
-            :<span style={{fontSize:11,color:"#059669",background:"#F0FDF4",padding:"3px 8px",borderRadius:20,border:"1px solid #BBF7D0",fontWeight:600,whiteSpace:"nowrap"}}>● sync</span>
+            ?<span style={{fontSize:11,color:"#D97706",background:"#FFFBEB",padding:"3px 10px",borderRadius:20,border:"1px solid #FDE68A",fontWeight:600}}>⏳ กำลัง sync...</span>
+            :<span style={{fontSize:11,color:"#059669",background:"#F0FDF4",padding:"3px 10px",borderRadius:20,border:"1px solid #BBF7D0",fontWeight:600}}>● sync แล้ว</span>
           }
           {firebaseConfigured&&authUser?.photoURL&&(
-            <img src={authUser.photoURL} alt="avatar" style={{width:32,height:32,borderRadius:"50%",objectFit:"cover",border:"2px solid #E5E7EB",flexShrink:0}}/>
+            <img src={authUser.photoURL} alt="avatar" style={{width:32,height:32,borderRadius:"50%",objectFit:"cover",border:"2px solid #E5E7EB"}}/>
           )}
         </div>
       </header>
-      <main className="main-pad" style={{flex:1,overflow:"auto",padding:"20px 24px",background:"#F3F4F6"}}>
+      <main style={{flex:1,overflow:"auto",padding:"20px 24px",background:"#F3F4F6"}}>
+        {/* No access guard */}
         {firebaseConfigured&&!divHasAccess
           ?<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:16}}>
               <div style={{fontSize:48}}>🔒</div>
               <h2 style={{fontSize:20,fontWeight:700,color:"#374151"}}>ไม่มีสิทธิ์เข้าระดับนี้</h2>
-              <p style={{color:"#6B7280",fontSize:14,textAlign:"center"}}>กรุณาติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์ {div.name}</p>
+              <p style={{color:"#6B7280",fontSize:14}}>กรุณาติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์ {div.name}</p>
             </div>
           :<>
             {page==="dashboard"&&<Dash S={S} setPage={setPage}/>}
@@ -1071,35 +1000,12 @@ export default function App() {
             {page==="meetings"&&<Meetings S={S} U={U} st={st} gc={gc}/>}
             {page==="scheduler"&&<Scheduler S={S} U={U} st={st} gc={gc} isSavingRef={isSavingRef} fsReadyRef={fsReadyRef} fsSave={(s)=>fsSaveTimetable(divId,{...stateRef.current,schedule:s})}/>}
             {page==="swap"&&<SwapPage S={S} st={st} ay={academicYear} sh={schoolHeader}/>}
-            {page==="reports"&&<Reports S={S} st={st} gc={gc} ay={academicYear} sh={schoolHeader}/>}
+            {page==="reports"&&<Reports S={S} U={U} st={st} gc={gc} ay={academicYear} sh={schoolHeader}/>}
             {page==="settings"&&<Settings S={S} U={U} st={st} ay={academicYear} setAY={setAcademicYear} sh={schoolHeader} setSH={setSchoolHeader} div={div}/>}
           </>
         }
       </main>
     </div>
-
-    {/* Bottom nav (mobile only) */}
-    <nav className="bottom-nav">
-      {[
-        {id:"dashboard",icon:"🏠",label:"หน้าแรก"},
-        {id:"assignments",icon:"📋",label:"มอบหมาย"},
-        {id:"scheduler",icon:"🗓️",label:"ตาราง"},
-        {id:"swap",icon:"🔄",label:"แลกคาบ"},
-        {id:"reports",icon:"📥",label:"Export"},
-        {id:"teachers",icon:"👨‍🏫",label:"ครู"},
-        {id:"subjects",icon:"📚",label:"วิชา"},
-        {id:"settings",icon:"⚙️",label:"ตั้งค่า"},
-      ].map(n=>(
-        <div key={n.id} className={"bn-item"+(page===n.id?" a":"")} onClick={()=>setPage(n.id)}>
-          <span style={{fontSize:18,lineHeight:1}}>{n.icon}</span>
-          <span>{n.label}</span>
-        </div>
-      ))}
-      <div className="bn-item" onClick={()=>setSide(true)}>
-        <span style={{fontSize:18,lineHeight:1}}>☰</span>
-        <span>เมนู</span>
-      </div>
-    </nav>
     {toast&&<Toast {...toast} onClose={()=>setToast(null)}/>}
   </div>;
 }
@@ -1824,6 +1730,8 @@ function Assigns({S,U,st,gc}){
   const [modalDeptFilter,setModalDeptFilter]=useState("");
   const [basket,setBasket]=useState([]); // [{subjectId, roomIds, totalPeriods}] รอบันทึก
   const fileRefA=useRef(null);
+  const [editAssign,setEditAssign]=useState(null);
+  const [editForm,setEditForm]=useState({roomIds:[],totalPeriods:0});
   const deptTeachers=selDept?S.teachers.filter(t=>t.departmentId===selDept):[];
   const teacher=S.teachers.find(t=>t.id===sel);
   const asgns=S.assigns.filter(a=>a.teacherId===sel);
@@ -2052,7 +1960,7 @@ function Assigns({S,U,st,gc}){
             </div>
           </div>
             <div style={{display:"flex",gap:6}}>
-              <button onClick={()=>{const n=prompt("แก้ไขจำนวนคาบ:",a.totalPeriods);if(n!==null){U.setAssigns(p=>p.map(x=>x.id===a.id?{...x,totalPeriods:parseInt(n)||1}:x));st("แก้ไขสำเร็จ")}}} style={{background:"none",border:"none",cursor:"pointer",color:"#2563EB"}}><Icon name="edit" size={14}/></button>
+              <button onClick={()=>{setEditAssign(a);setEditForm({roomIds:[...(a.roomIds||[])],totalPeriods:a.totalPeriods});}} style={{background:"none",border:"none",cursor:"pointer",color:"#2563EB",padding:2}}><Icon name="edit" size={14}/></button>
               <button onClick={()=>{
                 if(!window.confirm("ลบวิชานี้?\n\n⚠️ คาบที่ลงตารางไว้จะถูกลบออกด้วย"))return;
                 // ลบ assignment
@@ -2088,6 +1996,50 @@ function Assigns({S,U,st,gc}){
         </>}
       </div>
     </div>}
+    {editAssign&&(()=>{
+      const eSub=S.subjects.find(s=>s.id===editAssign.subjectId);
+      const eRooms=eSub?.levelId?S.rooms.filter(r=>r.levelId===eSub.levelId):S.rooms;
+      const autoTP=(eSub?.periodsPerWeek||1)*Math.max(editForm.roomIds.length,1);
+      return(
+        <Modal open={!!editAssign} onClose={()=>setEditAssign(null)} title={"✏️ แก้ไข — "+(eSub?.code||"")+" "+(eSub?.name||"")}>
+          <div style={{display:"flex",flexDirection:"column",gap:16}}>
+            <div style={{background:"#F9FAFB",borderRadius:10,padding:"10px 14px"}}>
+              <div style={{fontSize:14,fontWeight:700}}>{eSub?.code} — {eSub?.name}</div>
+            </div>
+            <div>
+              <label style={LS}>ห้องเรียน <span style={{fontSize:11,color:"#9CA3AF"}}>(กดเลือก/ยกเลิก)</span></label>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,maxHeight:180,overflowY:"auto"}}>
+                {eRooms.map(rm=>{
+                  const on=editForm.roomIds.includes(rm.id);
+                  return <button key={rm.id} onClick={()=>setEditForm(p=>({...p,roomIds:on?p.roomIds.filter(r=>r!==rm.id):[...p.roomIds,rm.id]}))}
+                    style={{padding:"5px 14px",borderRadius:20,border:"2px solid "+(on?"#DC2626":"#D1D5DB"),background:on?"#FEE2E2":"#fff",color:on?"#991B1B":"#374151",fontSize:12,fontWeight:on?700:400,cursor:"pointer"}}>{on?"✓ ":""}{rm.name}</button>;
+                })}
+              </div>
+              <div style={{display:"flex",gap:6,marginTop:8}}>
+                <button onClick={()=>setEditForm(p=>({...p,roomIds:eRooms.map(r=>r.id)}))} style={{fontSize:11,color:"#DC2626",background:"none",border:"1px solid #FECACA",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>เลือกทั้งหมด</button>
+                <button onClick={()=>setEditForm(p=>({...p,roomIds:[]}))} style={{fontSize:11,color:"#6B7280",background:"none",border:"1px solid #E5E7EB",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>ล้าง</button>
+                <span style={{fontSize:11,color:"#6B7280"}}>เลือก {editForm.roomIds.length} ห้อง</span>
+              </div>
+            </div>
+            <div>
+              <label style={LS}>จำนวนคาบ/สัปดาห์</label>
+              <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                <input type="number" min="0" style={{...IS,width:100}} value={editForm.totalPeriods} onChange={e=>setEditForm(p=>({...p,totalPeriods:parseInt(e.target.value)||0}))}/>
+                {eSub?.periodsPerWeek&&editForm.roomIds.length>0&&<button onClick={()=>setEditForm(p=>({...p,totalPeriods:autoTP}))} style={{fontSize:11,background:"#EFF6FF",color:"#1D4ED8",border:"1px solid #BFDBFE",borderRadius:8,padding:"4px 12px",cursor:"pointer"}}>อัตโนมัติ: {eSub.periodsPerWeek}×{editForm.roomIds.length}={autoTP}</button>}
+              </div>
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setEditAssign(null)} style={{...BO(),flex:1}}>ยกเลิก</button>
+              <button disabled={editForm.roomIds.length===0} onClick={()=>{
+                const finalTP=editForm.totalPeriods||autoTP||1;
+                U.setAssigns(p=>p.map(x=>x.id===editAssign.id?{...x,roomIds:editForm.roomIds,totalPeriods:finalTP}:x));
+                setEditAssign(null);st("แก้ไขสำเร็จ ✓");
+              }} style={{...BS(),flex:2,opacity:editForm.roomIds.length===0?0.4:1}}>💾 บันทึก</button>
+            </div>
+          </div>
+        </Modal>
+      );
+    })()}
     {teacher&&<PersonalLockPanel teacher={teacher} U={U} st={st} sel={sel}/>}
     <Modal open={modal} onClose={()=>{setModal(false);setBasket([]);}} title={`มอบหมายวิชา — ${teacher?.prefix||""}${teacher?.firstName||""}`}>
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
@@ -2096,7 +2048,7 @@ function Assigns({S,U,st,gc}){
         {basket.length>0&&(
           <div style={{background:"#F0FDF4",border:"1.5px solid #BBF7D0",borderRadius:12,padding:"10px 14px"}}>
             <div style={{fontSize:12,fontWeight:700,color:"#065F46",marginBottom:8}}>
-              {"🛒 วิชาที่รอบันทึก ("+basket.length+" รายการ)"}
+              🛒 วิชาที่รอบันทึก ({basket.length} รายการ)
             </div>
             {basket.map((b,bi)=>{
               const bs=S.subjects.find(s=>s.id===b.subjectId);
@@ -2107,7 +2059,7 @@ function Assigns({S,U,st,gc}){
                     <span style={{color:"#374151",marginLeft:6}}>{bs?.name}</span>
                     <span style={{color:"#9CA3AF",marginLeft:6,fontSize:11}}>
                       {b.roomIds.map(rid=>S.rooms.find(r=>r.id===rid)?.name).join(", ")}
-                      {b.totalPeriods>0?" · "+b.totalPeriods+" คาบ":""}
+                      {b.totalPeriods>0?` · ${b.totalPeriods} คาบ`:""}
                     </span>
                   </div>
                   <button onClick={()=>setBasket(p=>p.filter((_,i)=>i!==bi))}
@@ -2128,8 +2080,8 @@ function Assigns({S,U,st,gc}){
               วิชา
               <span style={{fontSize:10,color:"#6B7280",fontWeight:400,marginLeft:5}}>
                 {modalDeptFilter===teacher?.departmentId
-                  ? "("+( S.depts.find(d=>d.id===teacher?.departmentId)?.name||"สาระหลัก")+")"
-                  : modalDeptFilter ? "("+S.depts.find(d=>d.id===modalDeptFilter)?.name+")"
+                  ? `(${S.depts.find(d=>d.id===teacher?.departmentId)?.name||"สาระหลัก"})`
+                  : modalDeptFilter ? `(${S.depts.find(d=>d.id===modalDeptFilter)?.name})`
                   : "(ทุกสาระ)"}
               </span>
             </label>
@@ -2236,7 +2188,7 @@ function Assigns({S,U,st,gc}){
               st(`มอบหมาย ${newAssigns.length} วิชาสำเร็จ`);
             }}
             style={{...BS(),flex:2,opacity:basket.length===0?0.4:1}}>
-            {"💾 บันทึก "+(basket.length>0?"("+basket.length+" วิชา)":"")}
+            💾 บันทึก {basket.length>0?`(${basket.length} วิชา)`:""}
           </button>
         </div>
 
@@ -3388,18 +3340,19 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                     });
                     return (
                       <td key={p.id} style={{textAlign:"center",padding:"5px 3px",borderLeft:"1px solid #F0F0F0",verticalAlign:"middle",minHeight:48}}>
-                        {(()=>{
-                          if(blk) return <div style={{background:"#FEF9C3",color:"#92400E",fontSize:10,borderRadius:6,padding:"3px 5px",fontWeight:700}}>
-                              {"🔒"+(S.meetings.some(m=>m.day===day&&m.periods?.includes(p.id)&&m.departmentId===teacher?.departmentId)?"ประชุม":blocked(selT).find(b=>b.day===day&&b.period===p.id)?.reason||"ล็อค")}
-                            </div>;
-                          if(roomsThisPeriod.length>0) return roomsThisPeriod.map((r,i)=>(
+                        {blk
+                          ? <div style={{background:"#FEF9C3",color:"#92400E",fontSize:10,borderRadius:6,padding:"3px 5px",fontWeight:700}}>
+                              🔒{S.meetings.some(m=>m.day===day&&m.periods?.includes(p.id)&&m.departmentId===teacher?.departmentId)?"ประชุม":blocked(selT).find(b=>b.day===day&&b.period===p.id)?.reason||"ล็อค"}
+                            </div>
+                          : roomsThisPeriod.length>0
+                            ? roomsThisPeriod.map((r,i)=>(
                                 <div key={i} style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:6,padding:"4px 6px",marginBottom:i<roomsThisPeriod.length-1?2:0}}>
                                   <div style={{fontSize:11,fontWeight:800,color:"#1E40AF"}}>{r.rmName}</div>
                                   <div style={{fontSize:10,color:"#374151",fontWeight:600}}>{r.subName}</div>
                                 </div>
-                              ));
-                          return <span style={{color:"#D1D5DB",fontSize:12}}>—</span>;
-                        })()}
+                              ))
+                            : <span style={{color:"#D1D5DB",fontSize:12}}>—</span>
+                        }
                       </td>
                     );
                   })}
@@ -3407,8 +3360,8 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
               ))}
             </tbody>
           </table>
+            </div>
           </div>
-        </div>
         )}
       </div>
     );
@@ -3521,7 +3474,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
           </div>
           {autoResult.details.length>0&&(
             <div style={{fontSize:11,color:"#92400E",flex:1}}>
-              {"❌ ไม่สามารถจัดได้: "+autoResult.details.slice(0,5).join(", ")+(autoResult.details.length>5?" และอีก "+(autoResult.details.length-5)+" รายการ":"")}
+              ❌ ไม่สามารถจัดได้: {autoResult.details.slice(0,5).join(", ")}{autoResult.details.length>5?` และอีก ${autoResult.details.length-5} รายการ`:""}
             </div>
           )}
           <button onClick={()=>setAutoResult(null)} style={{background:"none",border:"none",cursor:"pointer",color:"#9CA3AF",fontSize:16}}>✕</button>
@@ -3593,7 +3546,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                       title="ครูร่วม / วิชาคู่"
                       style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.07)",border:"none",borderRadius:6,width:22,height:22,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",color:rem<=0?"#9CA3AF":lc.tx}}>⚙</button>
 
-                    {coAsgnsIds.has(a.id)&&<div style={{fontSize:9,color:"#7C3AED",fontWeight:700,marginBottom:3}}>{"👥 ครูร่วม ("+(S.teachers.find(t=>t.id===a.teacherId)?.firstName||"")+")"}</div>}
+                    {coAsgnsIds.has(a.id)&&<div style={{fontSize:9,color:"#7C3AED",fontWeight:700,marginBottom:3}}>👥 ครูร่วม ({S.teachers.find(t=>t.id===a.teacherId)?.firstName||""})</div>}
 
                     <div
                       className="drag-card"
@@ -3670,7 +3623,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                         })}
                         {coTeachers2.length<4&&(
                           <button onClick={()=>{ setShowGearId(null); setCardCoM(a.id); }} style={{fontSize:10,color:lc.head,background:"rgba(0,0,0,0.06)",border:`1px solid ${lc.border}`,borderRadius:6,padding:"3px 8px",cursor:"pointer",width:"100%",textAlign:"left",marginBottom:6}}>
-                            {"+ เพิ่มครูร่วม ("+coTeachers2.length+"/4)"}
+                            + เพิ่มครูร่วม ({coTeachers2.length}/4)
                           </button>
                         )}
                         {/* วิชาคู่ */}
@@ -3680,7 +3633,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                           const bS=S.subjects.find(s=>s.id===bA?.subjectId);
                           const bT=S.teachers.find(t=>t.id===b.teacherId);
                           return<div key={bi} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3,background:"rgba(5,150,105,0.07)",borderRadius:4,padding:"2px 6px"}}>
-                            <span style={{fontSize:9,color:"#065F46"}}>{(bS?.code||"")+(bT?" ("+bT.firstName+")":"")}</span>
+                            <span style={{fontSize:9,color:"#065F46"}}>{bS?.code||""}{bT?` (${bT.firstName})`:""}</span>
                             <button onClick={()=>setBundleMap(p=>({...p,[a.id]:buns.filter((_,i)=>i!==bi)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:0,fontSize:10}}>✕</button>
                           </div>;
                         })}
@@ -3772,7 +3725,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                 return<div key={bi} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:"#F0FDF4",borderRadius:10,border:"1px solid #BBF7D0"}}>
                   <div>
                     <div style={{fontSize:13,fontWeight:700,color:"#065F46"}}>{bS?.code} — {subDisplayName(bS)}</div>
-                    <div style={{fontSize:11,color:"#6B7280"}}>{"ครู: "+(bT?(bT.prefix+bT.firstName+" "+bT.lastName):"(ครูหลัก)")}</div>
+                    <div style={{fontSize:11,color:"#6B7280"}}>ครู: {bT?`${bT.prefix}${bT.firstName} ${bT.lastName}`:"(ครูหลัก)"}</div>
                   </div>
                   <button onClick={()=>setBundleMap(p=>({...p,[showBundleM]:(p[showBundleM]||[]).filter((_,i)=>i!==bi)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",fontSize:16}}>✕</button>
                 </div>;
@@ -3804,7 +3757,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                 return eligibleTeachers.length>1?<div>
                   <label style={LS}>ครูผู้สอน</label>
                   <SearchSelect value={bundleSelTeacher} onChange={v=>setBundleSelTeacher(v)}
-                    options={[{value:"",label:"-- ใช้ครูหลักของ assignment --"},...eligibleTeachers.map(t=>({value:t.id,label:t.prefix+t.firstName+" "+t.lastName}))]}
+                    options={[{value:"",label:"-- ใช้ครูหลักของ assignment --"},...eligibleTeachers.map(t=>({value:t.id,label:`${t.prefix}${t.firstName} ${t.lastName}`}))]}
                     placeholder="-- ใช้ครูหลัก --"/>
                 </div>:null;
               })()}
@@ -3940,8 +3893,8 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                 <div style={{fontSize:12,fontWeight:700,color:"#1E40AF",marginBottom:6}}>📋 สรุปการตั้งค่า</div>
                 <div style={{fontSize:12,color:"#374151",display:"flex",flexDirection:"column",gap:3}}>
                   <span>{autoOpts.mode==="remaining"?"✅ เติมเฉพาะคาบที่ยังขาด":"⚠️ รีเซ็ตแล้วจัดใหม่ทั้งหมด"}</span>
-                  <span>{"📚 จัดวิชา: "+([autoOpts.allowNormal&&"ปกติ",autoOpts.allowConsec&&"คาบติด",autoOpts.allowNP&&"NP",autoOpts.allowSR&&"ห้องพิเศษ"].filter(Boolean).join(", ")||"— ยังไม่ได้เลือก")}</span>
-                  <span>{"🔁 "+autoOpts.runs+" รอบ — ใช้ผลที่ดีที่สุด"}</span>
+                  <span>📚 จัดวิชา: {[autoOpts.allowNormal&&"ปกติ",autoOpts.allowConsec&&"คาบติด",autoOpts.allowNP&&"NP",autoOpts.allowSR&&"ห้องพิเศษ"].filter(Boolean).join(", ")||"— ยังไม่ได้เลือก"}</span>
+                  <span>🔁 {autoOpts.runs} รอบ — ใช้ผลที่ดีที่สุด</span>
                   {autoOpts.maxConsecTeacher>0&&<span>⏱ ครูสอนติดกันไม่เกิน {autoOpts.maxConsecTeacher} คาบ</span>}
                   {autoOpts.maxPerDayTeacher&&<span>📅 ครูสอน 1 คาบ/วัน</span>}
                   {autoOpts.noConsecTeacher&&<span>🚫 ห้ามครูสอนติดกันเลย</span>}
@@ -3957,7 +3910,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                 disabled={!autoOpts.allowNormal&&!autoOpts.allowConsec&&!autoOpts.allowNP&&!autoOpts.allowSR}
                 style={{...BS("#059669"),opacity:(!autoOpts.allowNormal&&!autoOpts.allowConsec&&!autoOpts.allowNP&&!autoOpts.allowSR)?0.4:1,cursor:(!autoOpts.allowNormal&&!autoOpts.allowConsec&&!autoOpts.allowNP&&!autoOpts.allowSR)?"not-allowed":"pointer"}}
               >
-                {"⚡ เริ่มจัดตาราง ("+autoOpts.runs+" รอบ)"}
+                ⚡ เริ่มจัดตาราง ({autoOpts.runs} รอบ)
               </button>
             </div>
           </div>
@@ -4129,532 +4082,252 @@ function buildLevelTableHTML(S, ay, sh, filterLevelId) {
     +'</body></html>';
 }
 
-/* ===== SWAP PAGE — แลกคาบสอน / สอนแทน ===== */
+/* ===== SWAP PAGE ===== */
 function SwapPage({S,st,ay,sh}){
-  const DAYS=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
-  const PERIODS=[
-    {id:1,time:"08.30–09.20"},{id:2,time:"09.20–10.10"},
-    {id:3,time:"10.25–11.15"},{id:4,time:"11.15–12.05"},
-    {id:5,time:"13.00–13.50"},{id:6,time:"13.50–14.40"},
-    {id:7,time:"14.50–15.40"},
-  ];
+  const DAYS_SW=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
+  const PERIODS_SW=[{id:1,time:"08.30–09.20"},{id:2,time:"09.20–10.10"},{id:3,time:"10.25–11.15"},{id:4,time:"11.15–12.05"},{id:5,time:"13.00–13.50"},{id:6,time:"13.50–14.40"},{id:7,time:"14.50–15.40"}];
   const REASON_OPTS=["ติดธุระ","ลาป่วย","ลากิจ","ไปราชการ","ไปอบรม","อื่นๆ"];
-
+  const DAY_IDX={จันทร์:1,อังคาร:2,พุธ:3,พฤหัสบดี:4,ศุกร์:5};
   const [teacherA,setTeacherA]=useState("");
-  const [absentDays,setAbsentDays]=useState([]);
-  const [absentDateFrom,setAbsentDateFrom]=useState(""); // วันที่เริ่มต้น
-  const [absentDateTo,setAbsentDateTo]=useState("");     // วันที่สิ้นสุด
-  const [returnDate,setReturnDate]=useState("");
+  const [absentDateFrom,setAbsentDateFrom]=useState("");
+  const [absentDateTo,setAbsentDateTo]=useState("");
   const [reason,setReason]=useState("ติดธุระ");
   const [reasonOther,setReasonOther]=useState("");
+  const [absentSlots,setAbsentSlots]=useState([]);
   const [searched,setSearched]=useState(false);
   const [results,setResults]=useState([]);
   const [selected,setSelected]=useState({});
-  const [printReady,setPrintReady]=useState(false);
-
-  // ── แปลง YYYY-MM-DD → dd/mm/พ.ศ. ──
-  const fmtDate=(d)=>{
-    if(!d)return"___________";
-    const [y,m,day2]=d.split("-");
-    return`${day2}/${m}/${parseInt(y)+543}`;
-  };
-
-  const DAY_NAMES=["อาทิตย์","จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์","เสาร์"];
-
-  // คืน array ของ {dateStr, dayName} ทุกวันจันทร์-ศุกร์ในช่วง from→to
-  const getAbsentDateRange=(from,to)=>{
-    if(!from)return[];
-    const end=to||from; // ถ้าไม่ได้เลือก to → ใช้แค่วันเดียว
-    const result=[];
-    const cur=new Date(from);
-    const endD=new Date(end);
-    while(cur<=endD){
-      const dow=cur.getDay();
-      if(dow>=1&&dow<=5){ // จันทร์-ศุกร์
-        result.push({dateStr:cur.toISOString().split("T")[0],dayName:DAY_NAMES[dow]});
-      }
-      cur.setDate(cur.getDate()+1);
-    }
+  const fmtDate=(d)=>{if(!d)return"___________";const[y,m,d2]=d.split("-");return d2+"/"+m+"/"+(parseInt(y)+543);};
+  const getDayRange=(from,to)=>{
+    if(!from)return[];const end=to||from;const result=[];const cur=new Date(from);const endD=new Date(end);
+    while(cur<=endD){const dow=cur.getDay();if(dow>=1&&dow<=5)result.push({dateStr:cur.toISOString().split("T")[0],dayName:["อาทิตย์","จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์","เสาร์"][dow]});cur.setDate(cur.getDate()+1);}
     return result;
   };
-
-  // วันใน range (จันทร์-ศุกร์)
-  const absentRange=getAbsentDateRange(absentDateFrom,absentDateTo);
-  // set ของชื่อวันที่อยู่ใน range (อาจมีซ้ำ เช่น จันทร์ 2 สัปดาห์)
-  const absentDayNamesInRange=new Set(absentRange.map(r=>r.dayName));
-
-  // ── helper: ดึง entries ของครูในคาบที่กำหนด ──
+  const absentRange=getDayRange(absentDateFrom,absentDateTo);
+  const absentDayNames=new Set(absentRange.map(r=>r.dayName));
   const getEntries=(tid,day,pid)=>{
     const out=[];
     Object.entries(S.schedule).forEach(([k,en])=>{
-      if(!en?.length)return;
-      const pts=k.split("_");
+      if(!en?.length)return;const pts=k.split("_");
       if(pts[pts.length-2]!==day||parseInt(pts[pts.length-1])!==pid)return;
       en.forEach(e=>{
         const coIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
         if(e.teacherId!==tid&&!coIds.includes(tid))return;
-        const sub=S.subjects.find(s=>s.id===e.subjectId);
-        const rid=pts.slice(0,-2).join("_");
-        const rm=S.rooms.find(r=>r.id===rid);
-        // ใช้ subDisplayName (shortName ก่อน → name → code)
-        const dispName=sub?.shortName||sub?.name||sub?.code||"—";
-        out.push({subId:e.subjectId,subName:dispName,subFullName:sub?.name||sub?.code||"—",roomId:rid,roomName:rm?.name||"—",assignId:e.assignmentId});
+        const sub=S.subjects.find(s=>s.id===e.subjectId);const rid=pts.slice(0,-2).join("_");const rm=S.rooms.find(r=>r.id===rid);
+        out.push({subId:e.subjectId,subName:sub?.shortName||sub?.name||sub?.code||"—",subFullName:sub?.name||sub?.code||"—",roomId:rid,roomName:rm?.name||"—"});
       });
     });
     return out;
   };
-
-  // ── helper: ตรวจว่าครูคนนั้นว่างในคาบนั้นไหม ──
   const isFree=(tid,day,pid)=>{
     if((S.meetings||[]).some(m=>m.teacherId===tid&&m.day===day&&(m.periods||[]).includes(pid)))return false;
     return Object.entries(S.schedule).every(([k,en])=>{
-      if(!en?.length)return true;
-      const pts=k.split("_");
+      if(!en?.length)return true;const pts=k.split("_");
       if(pts[pts.length-2]!==day||parseInt(pts[pts.length-1])!==pid)return true;
-      return en.every(e=>{
-        const coIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
-        return e.teacherId!==tid&&!coIds.includes(tid);
-      });
+      return en.every(e=>{const coIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);return e.teacherId!==tid&&!coIds.includes(tid);});
     });
   };
-
-  // ── toggle วัน/คาบที่ครู A ไม่อยู่ ──
-  const toggleAbsent=(day,pid)=>{
-    setAbsentDays(prev=>{
-      const idx=prev.findIndex(d=>d.day===day);
-      if(idx===-1)return[...prev,{day,periods:[pid]}];
-      const cur=prev[idx];
-      const hasP=cur.periods.includes(pid);
-      const newP=hasP?cur.periods.filter(p=>p!==pid):[...cur.periods,pid];
-      if(!newP.length)return prev.filter((_,i)=>i!==idx);
-      return prev.map((d,i)=>i===idx?{...d,periods:newP}:d);
-    });
-    setSearched(false);setPrintReady(false);
-  };
-
-  const isAbsent=(day,pid)=>absentDays.some(d=>d.day===day&&d.periods.includes(pid));
-
-  // ── คำนวณวันที่จริงจากวันในสัปดาห์ + absentDate เป็น anchor ──
-  // คืนวันที่ใกล้ที่สุด (ก่อนหรือหลัง absentDate ก็ได้) ที่ตรงกับ dayName
-  const DAY_IDX={"จันทร์":1,"อังคาร":2,"พุธ":3,"พฤหัสบดี":4,"ศุกร์":5};
-
-  // คืน array ของวันที่ทั้งหมดใน window ที่ตรงกับ dayName (anchor = absentDateFrom)
+  const toggleSlot=(day,pid)=>{setAbsentSlots(prev=>{const has=prev.some(s=>s.day===day&&s.period===pid);return has?prev.filter(s=>!(s.day===day&&s.period===pid)):[...prev,{day,period:pid}];});setSearched(false);};
   const calcReturnDates=(returnDayName,anchorDate)=>{
     if(!anchorDate||!returnDayName)return[];
-    const base=new Date(anchorDate);
-    const baseIdx=base.getDay();
-    const targetIdx=DAY_IDX[returnDayName]??1;
-    const minDate=new Date(anchorDate); minDate.setDate(minDate.getDate()-14);
+    const base=new Date(anchorDate);const baseIdx=base.getDay();const targetIdx=DAY_IDX[returnDayName]??1;
+    const minDate=new Date(anchorDate);minDate.setDate(minDate.getDate()-14);
     const dates=[];
-    for(let w=-2;w<=4;w++){
-      const d=new Date(base);
-      d.setDate(base.getDate()+(targetIdx-baseIdx)+w*7);
-      if(d>=minDate) dates.push(d.toISOString().split("T")[0]);
-    }
+    for(let w=-2;w<=4;w++){const d=new Date(base);d.setDate(base.getDate()+(targetIdx-baseIdx)+w*7);if(d>=minDate)dates.push(d.toISOString().split("T")[0]);}
     return dates;
   };
-
-  // ── ค้นหาครูที่สอนแทนได้ ──
   const doSearch=()=>{
     if(!teacherA){st("เลือกครู A ก่อน","error");return;}
-    if(!absentDays.length){st("เลือกคาบที่ครู A ไม่อยู่ก่อน","error");return;}
-
+    if(!absentSlots.length){st("เลือกคาบที่ครู A ไม่อยู่ก่อน","error");return;}
     const res=[];
-    absentDays.forEach(({day,periods})=>{
-      periods.forEach(pid=>{
-        const entriA=getEntries(teacherA,day,pid);
-        if(!entriA.length)return;
-        entriA.forEach(({subName,subFullName,roomId,roomName})=>{
-          const candidates=S.teachers.filter(t=>{
-            if(t.id===teacherA)return false;
-            const hasRoom=S.assigns.some(a=>a.teacherId===t.id&&(a.roomIds||[]).includes(roomId));
-            if(!hasRoom)return false;
-            return isFree(t.id,day,pid);
-          }).map(t=>{
-            const returnSlots=[];
-            DAYS.forEach(rd=>{
-              PERIODS.forEach(rp=>{
-                if(rd===day&&rp.id===pid)return;
-                // ครู B สอนห้องเดียวกันในคาบนั้น
-                const bEntries=getEntries(t.id,rd,rp.id).filter(e=>e.roomId===roomId);
-                const bHasSlot=bEntries.length>0;
-                const aFree=isFree(teacherA,rd,rp.id);
-                const aHasRoom=S.assigns.some(a=>a.teacherId===teacherA&&(a.roomIds||[]).includes(roomId));
-                if(bHasSlot&&aFree&&aHasRoom){
-                  // ชื่อวิชาของครู B ในห้องนั้น
-                  const subB=bEntries[0];
-                  // แสดงทุกวันที่ใน window ±2 สัปดาห์
-                  const calcDates=calcReturnDates(rd,absentDateFrom);
-                  calcDates.forEach(calcDate=>{
-                    returnSlots.push({day:rd,period:rp.id,time:rp.time,calcDate,subBName:subB.subFullName||subB.subName,subBRoom:subB.roomName});
-                  });
-                }
-              });
+    absentSlots.forEach(({day,period:pid})=>{
+      const entriA=getEntries(teacherA,day,pid);if(!entriA.length)return;
+      entriA.forEach(({subName,subFullName,roomId,roomName})=>{
+        const candidates=S.teachers.filter(t=>{
+          if(t.id===teacherA)return false;
+          if(!S.assigns.some(a=>a.teacherId===t.id&&(a.roomIds||[]).includes(roomId)))return false;
+          return isFree(t.id,day,pid);
+        }).map(t=>{
+          const returnSlots=[];
+          DAYS_SW.forEach(rd=>{PERIODS_SW.forEach(rp=>{
+            const bEntries=getEntries(t.id,rd,rp.id).filter(e=>e.roomId===roomId);
+            if(!bEntries.length)return;
+            if(!isFree(teacherA,rd,rp.id))return;
+            if(!S.assigns.some(a=>a.teacherId===teacherA&&(a.roomIds||[]).includes(roomId)))return;
+            const subB=bEntries[0];
+            calcReturnDates(rd,absentDateFrom).forEach(calcDate=>{
+              if(rd===day&&rp.id===pid&&calcDate===absentDateFrom)return;
+              returnSlots.push({day:rd,period:rp.id,time:rp.time,calcDate,subBName:subB.subFullName||subB.subName,subBRoom:subB.roomName});
             });
-            // deduplicate: กัน slot ซ้ำกัน (day+period+calcDate เดียวกัน)
-            const seen=new Set();
-            const uniq=returnSlots.filter(s=>{const k=`${s.day}_${s.period}_${s.calcDate}`;if(seen.has(k))return false;seen.add(k);return true;});
-            return{teacher:t,returnSlots:uniq};
-          }).filter(c=>c.returnSlots.length>0);
-
-          res.push({day,period:pid,time:PERIODS.find(p=>p.id===pid)?.time,subName,subFullName,roomId,roomName,candidates});
-        });
+          });});
+          const seen=new Set();
+          return{teacher:t,returnSlots:returnSlots.filter(s=>{const k=s.day+"_"+s.period+"_"+s.calcDate;if(seen.has(k))return false;seen.add(k);return true;})};
+        }).filter(c=>c.returnSlots.length>0);
+        res.push({day,period:pid,time:PERIODS_SW.find(p=>p.id===pid)?.time,subName,subFullName,roomId,roomName,candidates});
       });
     });
-
-    setResults(res);
-    setSelected({});
-    setSearched(true);
-    setPrintReady(false);
-    if(!res.length)st("ไม่พบคาบที่ครู A ต้องสอน หรือไม่มีครูที่สอนแทนได้","warning");
+    setResults(res);setSelected({});setSearched(true);
+    if(!res.length)st("ไม่พบครูที่สอนแทนได้","warning");
   };
-
-  // ── เลือกครูสอนแทน + คาบคืน ──
-  const selectSub=(key,subTeacherId,subDay,subPeriod,calcDate,subBName,subBRoom)=>{
-    setSelected(p=>({...p,[key]:{subTeacherId,subDay,subPeriod,calcDate,subBName,subBRoom}}));
-    setPrintReady(false);
-  };
-
-  // ── Print ──
   const printForm=()=>{
-    const filledKeys=results.map(r=>`${r.day}_${r.period}_${r.roomId}`).filter(k=>selected[k]);
+    const filledKeys=results.map(r=>r.day+"_"+r.period+"_"+r.roomId).filter(k=>selected[k]);
     if(!filledKeys.length){st("เลือกครูสอนแทนอย่างน้อย 1 คาบก่อน","error");return;}
-    const tA=S.teachers.find(t=>t.id===teacherA);
-    const school=sh?.name||"โรงเรียนดาราวิทยาลัย";
+    const tA=S.teachers.find(t=>t.id===teacherA);const school=sh?.name||"โรงเรียนดาราวิทยาลัย";
     const yr=ay?.year||"2568";const sem=ay?.semester||"1";
     const finalReason=reason==="อื่นๆ"?(reasonOther||"อื่นๆ"):reason;
-    const absentRangeStr=absentDateTo&&absentDateTo!==absentDateFrom
-      ?`${fmtDate(absentDateFrom)} — ${fmtDate(absentDateTo)}`
-      :fmtDate(absentDateFrom);
-
-    const rows=filledKeys.map(k=>{
-      const r=results.find(r=>`${r.day}_${r.period}_${r.roomId}`===k);
-      const sel=selected[k];
-      const tB=S.teachers.find(t=>t.id===sel.subTeacherId);
-      return{r,sel,tA,tB};
-    });
-
-    const tableRows=rows.map(({r,sel,tB},i)=>`
-      <tr>
-        <td class="ctr">${i+1}</td>
-        <td class="ctr">
-          <span class="badge">${r.day}</span><br/>
-          <b>${absentRangeStr}</b><br/>
-          คาบ ${r.period} <span style="font-size:10pt;color:#555">(${r.time})</span>
-        </td>
-        <td>${sel.subBName||r.subFullName||r.subName}<br/><span style="font-size:10pt;color:#555">ห้อง ${sel.subBRoom||r.roomName}</span></td>
-        <td><b>${tB?.prefix||""}${tB?.firstName||""} ${tB?.lastName||""}</b></td>
-        <td class="ctr">
-          <span class="badge badge-green">${sel.subDay}</span><br/>
-          <b>${fmtDate(sel.calcDate||returnDate)}</b><br/>
-          คาบ ${sel.subPeriod} <span style="font-size:10pt;color:#555">(${PERIODS.find(p=>p.id===sel.subPeriod)?.time||""})</span>
-        </td>
-        <td>${r.subFullName||r.subName}<br/><span style="font-size:10pt;color:#555">ห้อง ${r.roomName}</span></td>
-        <td></td>
-      </tr>`).join("");
-
-    // หัวหน้ากลุ่มสาระของครู A
-    const deptA=S.depts.find(d=>d.id===S.teachers.find(t=>t.id===teacherA)?.departmentId);
-
-    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"/>
-    <style>
-      @page{size:A4 landscape;margin:10mm 12mm}
-      *{box-sizing:border-box}
-      body{font-family:'TH SarabunNew','Sarabun',sans-serif;font-size:13pt;color:#000;margin:0;padding:0}
-      /* ── Header ── */
-      .hdr{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:4px}
-      .hdr img{height:52px}
-      .hdr-text{text-align:center}
-      .hdr-text h1{font-size:17pt;font-weight:700;margin:0}
-      .hdr-text .school{font-size:11pt;color:#444;margin:0}
-      /* ── Info grid ── */
-      .info{display:grid;grid-template-columns:repeat(4,1fr);gap:2px 12px;margin:8px 0;font-size:12pt}
-      .info .lbl{font-weight:700;color:#333}
-      .info .val{color:#000}
-      /* ── Table ── */
-      table{width:100%;border-collapse:collapse;font-size:12pt;margin:6px 0}
-      thead tr{background:#B91C1C;color:#fff}
-      thead th{padding:6px 8px;font-weight:700;text-align:center;border:1px solid #8B0000;font-size:12pt}
-      tbody tr:nth-child(even){background:#FFF5F5}
-      tbody tr:nth-child(odd){background:#fff}
-      td{padding:5px 8px;border:1px solid #D1D5DB;vertical-align:middle;font-size:12pt}
-      td.ctr{text-align:center}
-      td b{font-size:13pt}
-      .badge{display:inline-block;background:#FEE2E2;color:#991B1B;padding:1px 7px;border-radius:12px;font-size:10pt;font-weight:700}
-      .badge-green{background:#D1FAE5;color:#065F46}
-      /* ── Signatures ── */
-      .sigs{display:flex;justify-content:space-around;margin-top:16px;gap:10px}
-      .sig{flex:1;text-align:center}
-      .sig-line{display:block;width:85%;margin:0 auto 4px;border-bottom:1px solid #000}
-      .sig-name{font-size:12pt}
-      .sig-role{font-size:10pt;color:#555;margin-top:2px}
-      @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-    </style></head><body>
-    <!-- Header -->
-    <div class="hdr">
-      ${sh?.logo?`<img src="${sh.logo}"/>`:""}
-      <div class="hdr-text">
-        <h1>แบบฟอร์มขอแลกเปลี่ยนคาบสอน / สอนแทน</h1>
-        <p class="school">${school} &nbsp;|&nbsp; ภาคเรียนที่ ${sem}/${yr}</p>
-      </div>
-    </div>
-    <!-- Info -->
-    <div class="info">
-      <div><span class="lbl">ครูผู้ขอแลก: </span><span class="val">${tA?.prefix||""}${tA?.firstName||""} ${tA?.lastName||""}</span></div>
-      <div><span class="lbl">กลุ่มสาระ: </span><span class="val">${deptA?.name||"—"}</span></div>
-      <div><span class="lbl">วันที่ไม่อยู่: </span><span class="val">${absentRangeStr}</span></div>
-      <div><span class="lbl">วันที่สอนคืน: </span><span class="val">${rows.map(({sel})=>fmtDate(sel.calcDate||returnDate)).filter((v,i,a)=>a.indexOf(v)===i).join(", ")||fmtDate(returnDate)}</span></div>
-      <div style="grid-column:1/-1"><span class="lbl">เหตุผล: </span><span class="val">${finalReason}</span></div>
-    </div>
-    <!-- Table -->
-    <table>
-      <thead><tr>
-        <th style="width:3%">#</th>
-        <th style="width:14%">คาบที่ขอ<br/>(วัน / วันที่ / คาบ)</th>
-        <th style="width:18%">วิชา / ห้อง<br/><span style="font-weight:400;font-size:10pt">(ที่ครูสอนแทนจะสอน)</span></th>
-        <th style="width:16%">ครูสอนแทน</th>
-        <th style="width:14%">คาบที่ครู A สอนคืน<br/>(วัน / วันที่ / คาบ)</th>
-        <th style="width:18%">วิชา / ห้อง<br/><span style="font-weight:400;font-size:10pt">(ที่ครู A จะสอนคืน)</span></th>
-        <th style="width:17%">หมายเหตุ</th>
-      </tr></thead>
-      <tbody>${tableRows}</tbody>
-    </table>
-    <!-- Signatures -->
-    <div class="sigs">
-      <div class="sig">
-        <span class="sig-line"></span>
-        <div class="sig-name">(${tA?.prefix||""}${tA?.firstName||""} ${tA?.lastName||""})</div>
-        <div class="sig-role">ผู้ขอแลก &nbsp; วันที่ ___________</div>
-      </div>
-      <div class="sig">
-        <span class="sig-line"></span>
-        <div class="sig-name">(....................................)</div>
-        <div class="sig-role">หัวหน้ากลุ่มสาระ${deptA?.name?`<br/>${deptA.name}`:""}</div>
-      </div>
-      <div class="sig">
-        <span class="sig-line"></span>
-        <div class="sig-name">(....................................)</div>
-        <div class="sig-role">รองฯ ฝ่ายวิชาการ</div>
-      </div>
-    </div>
-    </body></html>`;
-    const w=window.open("","_blank");
-    if(!w){st("Browser บล็อก popup","error");return;}
-    w.document.write(html);w.document.close();
-    setTimeout(()=>w.print(),500);
-    st("กำลังเปิดหน้า print...");
+    const logo=sh?.logo?'<img src="'+sh.logo+'" style="height:50px;vertical-align:middle;margin-right:10px;"/>':"";
+    const deptA=S.depts.find(d=>d.id===tA?.departmentId);
+    const absentRangeStr=absentDateTo&&absentDateTo!==absentDateFrom?fmtDate(absentDateFrom)+" — "+fmtDate(absentDateTo):fmtDate(absentDateFrom);
+    const rows=filledKeys.map(k=>{const r=results.find(r=>r.day+"_"+r.period+"_"+r.roomId===k);const sel=selected[k];const tB=S.teachers.find(t=>t.id===sel.subTeacherId);return{r,sel,tB};});
+    const tableRows=rows.map(({r,sel,tB},i)=>'<tr><td style="text-align:center">'+(i+1)+'</td><td style="text-align:center">'+r.day+'<br/><b>'+fmtDate(absentDateFrom)+'</b><br/>คาบ '+r.period+'<br/><span style="font-size:10pt;color:#555;">('+r.time+')</span></td><td>'+(sel.subBName||r.subFullName||r.subName)+'<br/><span style="font-size:10pt;color:#555;">ห้อง '+(sel.subBRoom||r.roomName)+'</span></td><td><b>'+(tB?.prefix||"")+(tB?.firstName||"")+" "+(tB?.lastName||"")+'</b></td><td style="text-align:center">'+sel.subDay+'<br/><b>'+fmtDate(sel.calcDate||"")+'</b><br/>คาบ '+sel.subPeriod+'<br/><span style="font-size:10pt;color:#555;">('+( PERIODS_SW.find(p=>p.id===sel.subPeriod)?.time||"")+')</span></td><td>'+(r.subFullName||r.subName)+'<br/><span style="font-size:10pt;color:#555;">ห้อง '+r.roomName+'</span></td><td></td></tr>').join("");
+    const html='<!DOCTYPE html><html><head><meta charset="utf-8"/><style>@page{size:A4 landscape;margin:10mm 12mm}*{box-sizing:border-box}body{font-family:\'TH SarabunNew\',\'Sarabun\',sans-serif;font-size:13pt;color:#000;margin:0}.hdr{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:4px}.hdr h1{font-size:17pt;font-weight:700;margin:0}.info{display:grid;grid-template-columns:repeat(4,1fr);gap:2px 12px;margin:8px 0;font-size:12pt}.info .lbl{font-weight:700}table{width:100%;border-collapse:collapse;font-size:12pt;margin:6px 0}thead tr{background:#B91C1C;color:#fff}thead th{padding:6px 8px;font-weight:700;text-align:center;border:1px solid #8B0000}tbody tr:nth-child(even){background:#FFF5F5}td{padding:5px 8px;border:1px solid #D1D5DB;vertical-align:middle}.sigs{display:flex;justify-content:space-around;margin-top:14px}.sig{flex:1;text-align:center}.sig-line{display:block;width:85%;margin:0 auto 4px;border-bottom:1px solid #000}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="hdr">'+logo+'<div><h1>แบบฟอร์มขอแลกเปลี่ยนคาบสอน / สอนแทน</h1><div style="text-align:center;font-size:11pt;color:#444">'+school+' | ภาคเรียนที่ '+sem+'/'+yr+'</div></div></div><div class="info"><div><span class="lbl">ครูผู้ขอแลก: </span>'+(tA?.prefix||"")+(tA?.firstName||"")+" "+(tA?.lastName||"")+'</div><div><span class="lbl">กลุ่มสาระ: </span>'+(deptA?.name||"—")+'</div><div><span class="lbl">วันที่ไม่อยู่: </span>'+absentRangeStr+'</div><div><span class="lbl">เหตุผล: </span>'+finalReason+'</div></div><table><thead><tr><th style="width:3%">#</th><th style="width:13%">คาบที่ขอ</th><th style="width:18%">วิชา/ห้อง (ที่ครูสอนแทน)</th><th style="width:15%">ครูสอนแทน</th><th style="width:13%">คาบที่ครู A สอนคืน</th><th style="width:18%">วิชา/ห้อง (ที่ครู A สอนคืน)</th><th style="width:20%">หมายเหตุ</th></tr></thead><tbody>'+tableRows+'</tbody></table><div class="sigs"><div class="sig"><span class="sig-line"></span><div>'+(tA?.prefix||"")+(tA?.firstName||"")+" "+(tA?.lastName||"")+'</div><div style="font-size:10pt;color:#555">ผู้ขอแลก วันที่ ___________</div></div><div class="sig"><span class="sig-line"></span><div>(............................)</div><div style="font-size:10pt;color:#555">หัวหน้ากลุ่มสาระ'+(deptA?.name?"<br/>"+deptA.name:"")+'</div></div></div></body></html>';
+    const w=window.open("","_blank");if(!w){st("Browser บล็อก popup","error");return;}
+    w.document.write(html);w.document.close();setTimeout(()=>w.print(),500);st("กำลังเปิดหน้า print...");
   };
-
-  const tAObj=S.teachers.find(t=>t.id===teacherA);
-
   return(
-    <div style={{animation:"fadeIn 0.3s",display:"flex",flexDirection:"column",gap:16}}>
-
-      {/* ── Step 1: เลือกครู A + วัน/คาบที่ไม่อยู่ ── */}
-      <div style={{background:"#fff",borderRadius:14,padding:20,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
-        <h2 style={{fontSize:15,fontWeight:700,marginBottom:14}}>📋 ขั้นตอนที่ 1 — ครูที่ขอแลกคาบ และคาบที่ไม่อยู่</h2>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
-          <div>
-            <label style={LS}>ครู A (ผู้ขอแลก)</label>
-            <SearchSelect value={teacherA} onChange={v=>{setTeacherA(v);setAbsentDays([]);setSearched(false);setPrintReady(false);}}
-              options={[{value:"",label:"-- เลือกครู --"},...S.teachers.map(t=>({value:t.id,label:`${t.prefix}${t.firstName} ${t.lastName}`}))]}
-              placeholder="-- เลือกครู --"/>
-          </div>
-          <div>
-            <label style={LS}>เหตุผลที่ขอแลก</label>
-            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              {REASON_OPTS.map(r=>(
-                <button key={r} onClick={()=>setReason(r)}
-                  style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${reason===r?"#B91C1C":"#D1D5DB"}`,background:reason===r?"#FEE2E2":"#fff",fontSize:12,fontWeight:reason===r?700:400,color:reason===r?"#991B1B":"#374151",cursor:"pointer"}}>
-                  {r}
-                </button>
-              ))}
-            </div>
-            {reason==="อื่นๆ"&&(
-              <input style={{...IS,marginTop:8}} value={reasonOther} onChange={e=>setReasonOther(e.target.value)} placeholder="ระบุเหตุผล..."/>
-            )}
-          </div>
+    <div style={{animation:"fadeIn 0.3s",display:"flex",flexDirection:"column",gap:14}}>
+      <div style={{background:"#fff",borderRadius:14,padding:18,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
+        <h2 style={{fontSize:15,fontWeight:700,marginBottom:14}}>📋 ขั้นที่ 1 — ครูที่ขอแลก และคาบที่ไม่อยู่</h2>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+          <div><label style={LS}>ครู A (ผู้ขอแลก)</label><SearchSelect value={teacherA} onChange={v=>{setTeacherA(v);setAbsentSlots([]);setSearched(false);}} options={[{value:"",label:"-- เลือกครู --"},...S.teachers.map(t=>({value:t.id,label:t.prefix+t.firstName+" "+t.lastName}))]} placeholder="-- เลือกครู --"/></div>
+          <div><label style={LS}>เหตุผล</label><div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{REASON_OPTS.map(r=><button key={r} onClick={()=>setReason(r)} style={{padding:"5px 10px",borderRadius:20,border:"2px solid "+(reason===r?"#B91C1C":"#D1D5DB"),background:reason===r?"#FEE2E2":"#fff",fontSize:12,fontWeight:reason===r?700:400,cursor:"pointer"}}>{r}</button>)}</div>{reason==="อื่นๆ"&&<input style={{...IS,marginTop:6}} value={reasonOther} onChange={e=>setReasonOther(e.target.value)} placeholder="ระบุเหตุผล..."/>}</div>
         </div>
-
-        {/* วันที่ไม่อยู่ (ช่วง) */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16,marginBottom:16}}>
-          <div>
-            <label style={LS}>📅 วันที่เริ่มต้น (ไม่อยู่ตั้งแต่)</label>
-            <input type="date" style={IS} value={absentDateFrom}
-              onChange={e=>{setAbsentDateFrom(e.target.value);setAbsentDays([]);setSearched(false);}}/>
-            {absentDateFrom&&<div style={{fontSize:11,color:"#991B1B",marginTop:4,fontWeight:600}}>{fmtDate(absentDateFrom)}</div>}
-          </div>
-          <div>
-            <label style={LS}>📅 วันที่สิ้นสุด (จนถึง)</label>
-            <input type="date" style={IS} value={absentDateTo} min={absentDateFrom||undefined}
-              onChange={e=>{setAbsentDateTo(e.target.value);setAbsentDays([]);setSearched(false);}}/>
-            {absentDateTo&&<div style={{fontSize:11,color:"#991B1B",marginTop:4,fontWeight:600}}>{fmtDate(absentDateTo)}</div>}
-            {!absentDateTo&&absentDateFrom&&<div style={{fontSize:11,color:"#9CA3AF",marginTop:4}}>ไม่เลือก = วันเดียว</div>}
-          </div>
-          <div>
-            <label style={LS}>📅 วันที่ครู A จะสอนคืน</label>
-            <input type="date" style={IS} value={returnDate} onChange={e=>setReturnDate(e.target.value)}
-              min={absentDateFrom?(()=>{const d=new Date(absentDateFrom);d.setDate(d.getDate()-14);return d.toISOString().split("T")[0]})():undefined}/>
-            {returnDate&&<div style={{fontSize:11,color:"#059669",marginTop:4,fontWeight:600}}>{fmtDate(returnDate)}</div>}
-            <div style={{fontSize:11,color:"#9CA3AF",marginTop:3}}>ก่อนวันแลกได้ไม่เกิน 14 วัน / หลังไม่จำกัด</div>
-          </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+          <div><label style={LS}>📅 วันที่เริ่มต้น</label><input type="date" style={IS} value={absentDateFrom} onChange={e=>{setAbsentDateFrom(e.target.value);setAbsentSlots([]);setSearched(false);}}/>{absentDateFrom&&<div style={{fontSize:11,color:"#991B1B",marginTop:3,fontWeight:600}}>{fmtDate(absentDateFrom)}</div>}</div>
+          <div><label style={LS}>📅 วันที่สิ้นสุด (ถ้ามากกว่า 1 วัน)</label><input type="date" style={IS} value={absentDateTo} min={absentDateFrom||undefined} onChange={e=>{setAbsentDateTo(e.target.value);setAbsentSlots([]);setSearched(false);}}/></div>
         </div>
-        {/* แสดงสรุปช่วงวัน */}
-        {absentRange.length>0&&(
-          <div style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:10,padding:"8px 14px",marginBottom:14,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-            <span style={{fontSize:12,fontWeight:700,color:"#991B1B"}}>📌 ช่วงที่ไม่อยู่:</span>
-            {absentRange.map(r=>(
-              <span key={r.dateStr} style={{background:"#FEE2E2",color:"#991B1B",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>
-                {r.dayName} {fmtDate(r.dateStr)}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* ตารางเลือกคาบที่ครู A ไม่อยู่ */}
-        {teacherA&&(
-          <div>
-            <label style={{...LS,marginBottom:8}}>
-              เลือกคาบที่ครู A <b>ไม่อยู่</b>
-              <span style={{fontWeight:400,color:"#9CA3AF",marginLeft:6,fontSize:11}}>(กดที่คาบที่มีวิชา เพื่อขอแลก)</span>
-            </label>
-            <div style={{overflowX:"auto"}}>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:560}}>
-                <thead>
-                  <tr style={{background:"#F9FAFB"}}>
-                    <th style={{padding:"6px 10px",border:"1px solid #E5E7EB",textAlign:"left",width:80,fontSize:11}}>วัน</th>
-                    {PERIODS.map(p=>(
-                      <th key={p.id} style={{padding:"5px 3px",border:"1px solid #E5E7EB",textAlign:"center",fontSize:10,minWidth:68}}>
-                        คาบ {p.id}<br/><span style={{fontWeight:400,fontSize:9,color:"#6B7280"}}>{p.time}</span>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {DAYS.map(day=>{
-                    const isAbsentDay=absentRange.length===0||absentDayNamesInRange.has(day);
-                    return(
-                    <tr key={day} style={{opacity:absentRange.length>0&&!isAbsentDay?0.35:1}}>
-                      <td style={{padding:"4px 10px",border:"1px solid #E5E7EB",fontWeight:700,fontSize:11,background:isAbsentDay&&absentRange.length>0?"#FFF5F5":"#F9FAFB",color:isAbsentDay&&absentRange.length>0?"#991B1B":"#374151"}}>{day}</td>
-                      {PERIODS.map(p=>{
-                        const ents=getEntries(teacherA,day,p.id);
-                        const absent=isAbsent(day,p.id);
-                        const hasClass=ents.length>0;
-                        const canClick=hasClass&&isAbsentDay;
-                        return(
-                          <td key={p.id}
-                            onClick={()=>canClick&&toggleAbsent(day,p.id)}
-                            style={{
-                              padding:"3px 4px",border:"1px solid #E5E7EB",textAlign:"center",
-                              verticalAlign:"middle",height:46,
-                              background:absent?"#FEE2E2":hasClass&&isAbsentDay?"#FFF7ED":hasClass?"#F9FAFB":"",
-                              cursor:canClick?"pointer":"default",
-                              outline:absent?"2px solid #DC2626":"none",
-                              borderRadius:absent?4:0,
-                              transition:"all 0.1s",
-                            }}>
-                            {ents.map((e,i)=>(
-                              <div key={i} style={{fontSize:10,lineHeight:1.25}}>
-                                <div style={{fontWeight:700,color:absent?"#991B1B":isAbsentDay?"#1E40AF":"#9CA3AF"}}>{e.subName.length>6?e.subName.slice(0,6)+"…":e.subName}</div>
-                                <div style={{color:"#9CA3AF",fontSize:9}}>{e.roomName}</div>
-                              </div>
-                            ))}
-                            {absent&&<div style={{fontSize:9,color:"#DC2626",fontWeight:700,marginTop:2}}>✕ ขอแลก</div>}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                    );
+        {absentRange.length>0&&<div style={{background:"#FEF2F2",borderRadius:10,padding:"7px 12px",marginBottom:12,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+          <span style={{fontSize:12,fontWeight:700,color:"#991B1B"}}>📌 วันที่ไม่อยู่:</span>
+          {absentRange.map(r=><span key={r.dateStr} style={{background:"#FEE2E2",color:"#991B1B",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:600}}>{r.dayName} {fmtDate(r.dateStr)}</span>)}
+        </div>}
+        {teacherA&&<div>
+          <label style={{...LS,marginBottom:8}}>เลือกคาบที่ครู A <b>ไม่อยู่</b> <span style={{fontWeight:400,fontSize:11,color:"#9CA3AF"}}>(กดที่คาบที่มีวิชา)</span></label>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:500}}>
+              <thead><tr style={{background:"#F9FAFB"}}><th style={{padding:"5px 8px",border:"1px solid #E5E7EB",textAlign:"left",width:76}}>วัน</th>{PERIODS_SW.map(p=><th key={p.id} style={{padding:"4px 2px",border:"1px solid #E5E7EB",textAlign:"center",fontSize:10,minWidth:76}}>คาบ {p.id}<br/><span style={{fontWeight:400,fontSize:9,color:"#6B7280"}}>{p.time}</span></th>)}</tr></thead>
+              <tbody>{DAYS_SW.map(day=>{
+                const inRange=absentRange.length===0||absentDayNames.has(day);
+                return <tr key={day} style={{opacity:absentRange.length>0&&!inRange?0.3:1}}>
+                  <td style={{padding:"4px 8px",border:"1px solid #E5E7EB",fontWeight:700,fontSize:11,background:inRange&&absentRange.length>0?"#FFF5F5":"#F9FAFB",color:inRange&&absentRange.length>0?"#991B1B":"#374151"}}>{day}</td>
+                  {PERIODS_SW.map(p=>{
+                    const ents=getEntries(teacherA,day,p.id);const picked=absentSlots.some(s=>s.day===day&&s.period===p.id);const hasClass=ents.length>0;const canClick=hasClass&&inRange;
+                    return <td key={p.id} onClick={()=>canClick&&toggleSlot(day,p.id)} style={{padding:"2px",border:"1px solid #E5E7EB",textAlign:"center",verticalAlign:"middle",height:50,minWidth:76,background:picked?"#FEE2E2":hasClass&&inRange?"#FFF7ED":hasClass?"#F9FAFB":"",cursor:canClick?"pointer":"default",outline:picked?"2px solid #DC2626":"none"}}>
+                      {ents.map((e,i)=><div key={i} style={{fontSize:11,lineHeight:1.3}}><div style={{fontWeight:700,color:picked?"#991B1B":inRange?"#1E40AF":"#9CA3AF"}}>{e.subName.length>8?e.subName.slice(0,8)+"…":e.subName}</div><div style={{color:"#6B7280",fontSize:10}}>{e.roomName}</div></div>)}
+                      {picked&&<div style={{fontSize:9,color:"#DC2626",fontWeight:700}}>✕ ขอแลก</div>}
+                    </td>;
                   })}
-                </tbody>
-              </table>
-            </div>
-            {absentDays.length>0&&(
-              <div style={{marginTop:10,display:"flex",gap:6,flexWrap:"wrap"}}>
-                {absentDays.flatMap(d=>d.periods.map(p=>{
-                  const ents=getEntries(teacherA,d.day,p);
-                  return<span key={`${d.day}_${p}`} style={{background:"#FEE2E2",color:"#991B1B",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>
-                    {d.day} คาบ {p} — {ents.map(e=>e.subName).join(", ")||"?"}
-                  </span>;
-                }))}
-              </div>
-            )}
-            <button onClick={doSearch} style={{...BS(),marginTop:14}}>🔍 ค้นหาครูสอนแทน</button>
+                </tr>;
+              })}</tbody>
+            </table>
           </div>
-        )}
+          <button onClick={doSearch} style={{...BS(),marginTop:12}}>🔍 ค้นหาครูสอนแทน</button>
+        </div>}
       </div>
-
-      {/* ── Step 2: ผลการค้นหา ── */}
-      {searched&&(
-        <div style={{background:"#fff",borderRadius:14,padding:20,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
-          <h2 style={{fontSize:15,fontWeight:700,marginBottom:4}}>🔍 ขั้นตอนที่ 2 — เลือกครูสอนแทน และคาบที่ครู A สอนคืน</h2>
-          <p style={{fontSize:12,color:"#6B7280",marginBottom:14}}>
-            เงื่อนไข: ครูสอนแทนต้องสอนห้องเดียวกัน และต้องมีคาบว่างตรงกับที่ครู A จะสอนคืน (ห้องเดียวกัน)
-          </p>
-          {results.length===0
-            ?<div style={{textAlign:"center",padding:32,color:"#9CA3AF"}}>ไม่พบครูที่สอนแทนได้ในเงื่อนไขที่กำหนด</div>
-            :results.map(r=>{
-              const key=`${r.day}_${r.period}_${r.roomId}`;
-              const sel=selected[key];
-              return(
-                <div key={key} style={{marginBottom:14,border:"1.5px solid #E5E7EB",borderRadius:12,overflow:"hidden"}}>
-                  <div style={{background:"#FFF5F5",padding:"10px 14px",borderBottom:"1px solid #FECACA",display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
-                    <span style={{background:"#FEE2E2",color:"#991B1B",padding:"2px 10px",borderRadius:20,fontSize:12,fontWeight:700}}>{r.day} คาบ {r.period}</span>
-                    <span style={{fontSize:13,fontWeight:700}}>{r.subName}</span>
-                    <span style={{fontSize:12,color:"#6B7280"}}>ห้อง {r.roomName}</span>
-                    {sel&&<span style={{background:"#D1FAE5",color:"#065F46",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>✅ เลือกแล้ว</span>}
+      {searched&&<div style={{background:"#fff",borderRadius:14,padding:18,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
+        <h2 style={{fontSize:15,fontWeight:700,marginBottom:12}}>🔍 ขั้นที่ 2 — เลือกครูสอนแทน และคาบที่ครู A สอนคืน</h2>
+        {results.length===0?<div style={{textAlign:"center",padding:24,color:"#9CA3AF"}}>ไม่พบครูที่สอนแทนได้</div>:
+        results.map(r=>{
+          const key=r.day+"_"+r.period+"_"+r.roomId;const sel=selected[key];
+          return <div key={key} style={{marginBottom:12,border:"1.5px solid #E5E7EB",borderRadius:12,overflow:"hidden"}}>
+            <div style={{background:"#FFF5F5",padding:"8px 12px",borderBottom:"1px solid #FECACA",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+              <span style={{background:"#FEE2E2",color:"#991B1B",padding:"2px 9px",borderRadius:20,fontSize:12,fontWeight:700}}>{r.day} คาบ {r.period}</span>
+              <span style={{fontSize:13,fontWeight:700}}>{r.subName}</span><span style={{fontSize:12,color:"#6B7280"}}>ห้อง {r.roomName}</span>
+              {sel&&<span style={{background:"#D1FAE5",color:"#065F46",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:600}}>✅ เลือกแล้ว</span>}
+            </div>
+            {r.candidates.length===0?<div style={{padding:"10px 12px",color:"#9CA3AF",fontSize:12}}>ไม่มีครูว่างในเงื่อนไข</div>:
+            <div style={{padding:"10px 12px"}}>
+              {r.candidates.map(({teacher:tB,returnSlots})=>(
+                <div key={tB.id} style={{background:"#F9FAFB",borderRadius:10,padding:"10px 12px",border:"1px solid #E5E7EB",marginBottom:8}}>
+                  <div style={{fontWeight:700,fontSize:13,marginBottom:6}}>{tB.prefix}{tB.firstName} {tB.lastName}</div>
+                  <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                    {returnSlots.map((rs,ri)=>{
+                      const isAct=sel?.subTeacherId===tB.id&&sel?.subDay===rs.day&&sel?.subPeriod===rs.period&&sel?.calcDate===rs.calcDate;
+                      return <button key={ri} onClick={()=>setSelected(p=>({...p,[key]:{subTeacherId:tB.id,subDay:rs.day,subPeriod:rs.period,calcDate:rs.calcDate,subBName:rs.subBName,subBRoom:rs.subBRoom}}))}
+                        style={{padding:"5px 10px",borderRadius:8,border:"2px solid "+(isAct?"#059669":"#D1D5DB"),background:isAct?"#F0FDF4":"#fff",color:isAct?"#065F46":"#374151",fontSize:11,fontWeight:isAct?700:400,cursor:"pointer",minWidth:140,textAlign:"left"}}>
+                        <div style={{fontWeight:700}}>{isAct?"✓ ":""}{rs.day} คาบ {rs.period}</div>
+                        <div style={{fontSize:10,color:isAct?"#059669":"#6B7280"}}>📅 {fmtDate(rs.calcDate)}</div>
+                        {rs.subBName&&<div style={{fontSize:10,color:"#1E40AF"}}>📚 {rs.subBName}</div>}
+                      </button>;
+                    })}
                   </div>
-                  {r.candidates.length===0
-                    ?<div style={{padding:"12px 14px",color:"#9CA3AF",fontSize:12}}>❌ ไม่มีครูที่ว่างและสอนแทนได้ในเงื่อนไข</div>
-                    :<div style={{padding:"10px 14px"}}>
-                      <div style={{fontSize:12,fontWeight:600,color:"#374151",marginBottom:8}}>ครูที่สอนแทนได้:</div>
-                      <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                        {r.candidates.map(({teacher:tB,returnSlots})=>(
-                          <div key={tB.id} style={{background:"#F9FAFB",borderRadius:10,padding:"10px 14px",border:"1px solid #E5E7EB"}}>
-                            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,flexWrap:"wrap"}}>
-                              <span style={{fontWeight:700,fontSize:13}}>{tB.prefix}{tB.firstName} {tB.lastName}</span>
-                              <span style={{fontSize:11,color:"#6B7280"}}>{S.depts.find(d=>d.id===tB.departmentId)?.name||""}</span>
-                            </div>
-                            <div style={{fontSize:11,color:"#6B7280",marginBottom:6}}>คาบที่ครู A สอนคืนได้ (เฉพาะห้อง {r.roomName}):</div>
-                            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                              {returnSlots.map((rs,ri)=>{
-                                const isActive=sel?.subTeacherId===tB.id&&sel?.subDay===rs.day&&sel?.subPeriod===rs.period&&sel?.calcDate===rs.calcDate;
-                                return(
-                                  <button key={`${rs.day}_${rs.period}_${rs.calcDate}_${ri}`}
-                                    onClick={()=>selectSub(key,tB.id,rs.day,rs.period,rs.calcDate,rs.subBName,rs.subBRoom)}
-                                    style={{padding:"6px 12px",borderRadius:10,border:`2px solid ${isActive?"#059669":"#D1D5DB"}`,background:isActive?"#F0FDF4":"#fff",color:isActive?"#065F46":"#374151",fontSize:11,fontWeight:isActive?700:400,cursor:"pointer",textAlign:"left",minWidth:160}}>
-                                    <div style={{fontWeight:700}}>{isActive?"✓ ":""}{rs.day} คาบ {rs.period} ({rs.time})</div>
-                                    <div style={{fontSize:10,color:isActive?"#059669":"#6B7280",marginTop:2}}>📅 {fmtDate(rs.calcDate)}</div>
-                                    {rs.subBName&&<div style={{fontSize:10,color:"#1E40AF",marginTop:1}}>📚 {rs.subBName}</div>}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  }
                 </div>
-              );
-            })
-          }
-          {results.length>0&&(
-            <button onClick={printForm}
-              style={{...BS("#059669"),marginTop:8}}
-              disabled={!Object.keys(selected).length}>
-              {"🖨️ พิมพ์ฟอร์มแลกคาบ ("+Object.keys(selected).length+" คาบ)"}
-            </button>
-          )}
-        </div>
-      )}
+              ))}
+            </div>}
+          </div>;
+        })}
+        {results.length>0&&<button onClick={printForm} disabled={!Object.keys(selected).length} style={{...BS("#059669"),opacity:Object.keys(selected).length?1:0.4}}>{"🖨️ พิมพ์ฟอร์มแลกคาบ ("+Object.keys(selected).length+" คาบ)"}</button>}
+      </div>}
     </div>
   );
+}
+
+/* ===== TEACHER TABLE FORMAT 3 ===== */
+function buildTeacherTableHTML3(teacher,S,ay,sh){
+  const yr=ay?.year||"2568";
+  const logo=sh?.logo?'<img src="'+sh.logo+'" style="height:44px;vertical-align:middle;margin-right:8px;"/>':"";
+  const tName=(teacher.prefix||"")+(teacher.firstName||"")+" "+(teacher.lastName||"");
+  const dept=S.depts.find(d=>d.id===teacher.departmentId)?.name||"";
+  const DAYS_T=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
+  const PIDS_T=[1,2,3,4,5,6,7];
+  const PTIMES=["08.30-09.20","09.20-10.10","10.25-11.15","11.15-12.05","13.00-13.50","13.50-14.40","14.50-15.40"];
+  const getCell=(day,pid)=>{
+    const out=[];
+    S.rooms.forEach(room=>{
+      const key=room.id+"_"+day+"_"+pid;
+      (S.schedule[key]||[]).forEach(e=>{
+        if(e.teacherId!==teacher.id&&!(e.coTeacherIds||[]).includes(teacher.id))return;
+        if(e.isLock)out.push({type:"lock",roomName:room.name});
+        else out.push({type:"class",roomShort:room.name});
+      });
+    });
+    (S.meetings||[]).forEach(m=>{if(m.teacherId===teacher.id&&m.day===day&&(m.periods||[]).includes(pid))out.push({type:"meeting",label:m.label||"Lock"});});
+    return out;
+  };
+  const getHomeroom=(day)=>{
+    const meets=(S.meetings||[]).find(m=>m.teacherId===teacher.id&&m.day===day&&(m.isAssembly||m.isHomeroom||(m.periods||[]).includes(0)));
+    if(meets)return meets.isAssembly?"เข้าหอประชุม":(meets.label||"Homeroom");
+    return"โฮมรูม";
+  };
+  const vert=(txt,fs="9pt")=>'<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:'+fs+';font-weight:600;letter-spacing:1px;text-align:center;">'+txt+'</div>';
+  const thS="border:1px solid #555;text-align:center;vertical-align:middle;font-size:7pt;font-weight:bold;padding:1px;";
+  const brkS="border:1px solid #555;background:#f9f9e8;padding:0;vertical-align:middle;text-align:center;width:22px;";
+  const hdr='<tr style="background:#f0f0f0;"><th rowspan="2" style="'+thS+'width:52px;position:relative;min-height:40px;"><svg style="position:absolute;top:0;left:0;width:100%;height:100%;" preserveAspectRatio="none"><line x1="0" y1="0" x2="100%" y2="100%" stroke="#888" stroke-width="0.8"/></svg><span style="position:absolute;top:3px;right:4px;font-size:8pt;font-weight:600;color:#333;">เวลา</span><span style="position:absolute;bottom:3px;left:4px;font-size:8pt;font-weight:600;color:#333;">วัน</span></th><th rowspan="2" style="'+thS+'width:60px;">08:00<br/>08:30</th><th style="'+thS+'height:20px;">คาบ 1</th><th style="'+thS+'height:20px;">คาบ 2</th><th rowspan="2" style="'+brkS+'">'+vert("10.10-10.25")+'</th><th style="'+thS+'height:20px;">คาบ 3</th><th style="'+thS+'height:20px;">คาบ 4</th><th rowspan="2" style="'+brkS+'">'+vert("12.05-13.00")+'</th><th style="'+thS+'height:20px;">คาบ 5</th><th style="'+thS+'height:20px;">คาบ 6</th><th rowspan="2" style="'+brkS+'">'+vert("13.50-14.00")+'</th><th style="'+thS+'height:20px;">คาบ 7</th></tr><tr style="background:#f0f0f0;height:14px;max-height:14px;">'+PTIMES.map(t=>'<td style="border:1px solid #888;font-size:7pt;text-align:center;padding:0px 1px;height:14px;">'+t+'</td>').join("")+'</tr>';
+  const renderCell=(cells,multi)=>{
+    const bg=multi?"background:#eeeeee;":"";
+    if(!cells.length)return'<td style="border:1px solid #ccc;'+bg+'"></td>';
+    const inner=cells.map(c=>{if(c.type==="lock"||c.type==="meeting")return'<b style="color:#cc0000;font-size:7.5pt;">'+(c.label||"Lock")+'</b>';return'<b style="font-size:9pt;">'+c.roomShort+'</b>';}).join("<br>");
+    return'<td style="border:1px solid #ccc;text-align:center;vertical-align:middle;padding:2px;'+bg+'">'+inner+'</td>';
+  };
+  let body="";
+  DAYS_T.forEach((day,di)=>{
+    const hmTxt=getHomeroom(day);const hmBg="#fafff7";const bgRow=di%2===0?"":"background:#fafafa;";
+    const cells=PIDS_T.map(pid=>getCell(day,pid));
+    const multi=PIDS_T.map((pid,i)=>{let cnt=0;S.rooms.forEach(room=>{cnt+=(S.schedule[room.id+"_"+day+"_"+pid]||[]).filter(e=>e.teacherId===teacher.id||(e.coTeacherIds||[]).includes(teacher.id)).length;});return cnt>1;});
+    const dDisp=day==="พฤหัสบดี"?"พฤหัส":day;
+    body+='<tr style="height:38px;'+bgRow+'"><td style="border:1px solid #888;text-align:center;font-weight:bold;font-size:9pt;vertical-align:middle;background:#f5f5f5;">'+dDisp+'</td><td style="border:1px solid #888;background:'+hmBg+';text-align:center;vertical-align:middle;font-size:9pt;font-weight:bold;padding:2px;">'+hmTxt+'</td>'+renderCell(cells[0],multi[0])+renderCell(cells[1],multi[1])+(di===0?'<td rowspan="5" style="'+brkS+'">'+vert("พักน้อย 15 นาที")+'</td>':"")+renderCell(cells[2],multi[2])+renderCell(cells[3],multi[3])+(di===0?'<td rowspan="5" style="'+brkS+'">'+vert("พักกลางวัน 55 นาที")+'</td>':"")+renderCell(cells[4],multi[4])+renderCell(cells[5],multi[5])+(di===0?'<td rowspan="5" style="'+brkS+'">'+vert("พักน้อย 10 นาที")+'</td>':"")+renderCell(cells[6],multi[6])+'</tr>';
+  });
+  const assigns=S.assigns.filter(a=>a.teacherId===teacher.id);
+  const specialMeets=[...new Set((S.meetings||[]).filter(m=>m.teacherId===teacher.id&&m.label&&!m.isAssembly&&!m.isHomeroom).map(m=>m.label))];
+  let summaryRows="";let grandTotal=0;
+  assigns.forEach(a=>{
+    const sub=S.subjects.find(s=>s.id===a.subjectId);if(!sub)return;
+    const rooms=(a.roomIds||[]).map(rid=>S.rooms.find(r=>r.id===rid)).filter(Boolean);
+    const rCount=rooms.length;const pPerRoom=sub.periodsPerWeek||Math.round((a.totalPeriods||0)/Math.max(rCount,1));
+    const total=a.totalPeriods||(pPerRoom*rCount);grandTotal+=total;
+    const roomNames=rooms.map(r=>r.name).join(", ");
+    const codes=sub.code?"("+sub.code+")":"";
+    summaryRows+='<tr><td style="padding:1px 4px;font-size:9.5pt;">'+(sub.name||"")+" "+codes+'</td><td style="padding:1px 4px;font-size:9.5pt;text-align:center;color:#1a237e;">'+roomNames+'</td><td style="padding:1px 4px;font-size:9.5pt;text-align:right;">'+rCount+' ห้อง</td><td style="padding:1px 4px;font-size:9.5pt;text-align:center;">×</td><td style="padding:1px 4px;font-size:9.5pt;text-align:right;">'+pPerRoom+' คาบ</td><td style="padding:1px 4px;font-size:9.5pt;text-align:center;">=</td><td style="padding:1px 4px;font-size:9.5pt;text-align:right;font-weight:bold;">'+total+'</td><td style="padding:1px 4px;font-size:9.5pt;">คาบ</td></tr>';
+  });
+  specialMeets.forEach(l=>{summaryRows+='<tr><td colspan="8" style="padding:1px 4px;font-size:9.5pt;">'+l+'</td></tr>';});
+  summaryRows+='<tr><td colspan="5" style="padding:1px 4px;font-size:9.5pt;text-align:right;border-top:1px solid #999;">รวม</td><td style="padding:1px 4px;border-top:1px solid #999;text-align:center;">=</td><td style="padding:1px 4px;font-size:9.5pt;text-align:right;font-weight:bold;border-top:2px double #333;">'+grandTotal+'</td><td style="padding:1px 4px;font-size:9.5pt;border-top:1px solid #999;">คาบ</td></tr>';
+  return'<div style="font-family:\'TH SarabunNew\',\'Sarabun\',sans-serif;page-break-inside:avoid;"><div style="text-align:center;margin-bottom:4px;">'+logo+'<span style="font-size:11pt;font-weight:bold;">ตารางสอน ปีการศึกษา '+yr+'</span></div><table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-bottom:3px;"><colgroup><col style="width:44px;"><col style="width:52px;"><col><col><col style="width:22px;"><col><col><col style="width:22px;"><col><col><col style="width:22px;"><col></colgroup><thead>'+hdr+'</thead><tbody>'+body+'</tbody></table><div style="margin-top:3px;font-size:8pt;color:#1a237e;font-weight:bold;">กลุ่มสาระการเรียนรู้ &emsp;&emsp; '+dept+'</div><div style="display:flex;gap:16px;margin-top:3px;align-items:flex-start;"><div style="flex:1;font-size:8pt;"><div><b>อาจารย์ผู้สอน</b>&emsp;&emsp;'+tName+'</div>'+assigns.map(a=>{const sub=S.subjects.find(s=>s.id===a.subjectId);if(!sub)return"";return"<div>"+(sub.name||"")+" "+(sub.code?"("+sub.code+")":"")+"</div>";}).join("")+specialMeets.map(l=>"<div>"+l+"</div>").join("")+'</div><div><table style="font-size:8pt;border-collapse:collapse;"><tbody>'+summaryRows+'</tbody></table></div></div></div>';
 }
 
 /* ===== REPORTS ===== */
 function Reports({S,U,st,gc,ay,sh}){
   const fileRefSched=useRef(null);
+  const [printSettings,setPrintSettings]=useState(loadPrintSettings);
+  const [showPrintSettings,setShowPrintSettings]=useState(false);
   const [selTeacherPDF,setSelTeacherPDF]=useState("");
   const [selRoomPDF,setSelRoomPDF]=useState("");
   const [selTeacherXL,setSelTeacherXL]=useState("");
@@ -4695,7 +4368,7 @@ function Reports({S,U,st,gc,ay,sh}){
     for(let i=0;i<list.length;i+=2) pages.push(list.slice(i,i+2));
     const pagesHTML=pages.map((pair,pi)=>`
       <div style="page-break-after:${pi<pages.length-1?"always":"avoid"};padding:6mm 8mm;box-sizing:border-box;">
-        ${pair.map(t=>buildTeacherTableHTML(t,S,ay,sh)).join('<div style="border-top:1px dashed #ccc;margin:8px 0;"></div>')}
+        ${pair.map(t=>buildTeacherTableHTML(t,S,ay,sh,printSettings)).join(`<div style="border-top:1px dashed #ccc;margin:8px 0;"></div>`)}
       </div>`).join("");
     const html=`<!DOCTYPE html><html><head><meta charset="utf-8"/>
       <style>
@@ -4709,27 +4382,8 @@ function Reports({S,U,st,gc,ay,sh}){
     setTimeout(()=>w.print(),700);
   };
 
-  // พิมพ์ตารางสอนครูแบบที่ 3 (รหัสห้อง + สรุปวิชา)
-  const printTeacherPDF3=(teachers)=>{
-    const list=Array.isArray(teachers)?teachers:[teachers];
-    if(!list.length){st("ไม่มีครูที่เลือก","error");return;}
-    const w=window.open('','_blank');
-    if(!w){st("Browser บล็อก popup","error");return;}
-    const pagesHTML=list.map((t,i)=>`
-      <div style="page-break-after:${i<list.length-1?"always":"avoid"};padding:8mm 10mm;box-sizing:border-box;">
-        ${buildTeacherTableHTML3(t,S,ay,sh)}
-      </div>`).join("");
-    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"/>
-      <style>
-        @page{size:A4 portrait;margin:0}
-        body{font-family:'TH SarabunNew','Sarabun','Arial',sans-serif;margin:0;padding:0;}
-        td,th{word-wrap:break-word;overflow:hidden;line-height:1.3;}
-        @media print{body{margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
-      </style></head><body>${pagesHTML}</body></html>`;
-    w.document.write(html);w.document.close();
-    setTimeout(()=>w.print(),700);
-    st("กำลังเปิดหน้า print...");
-  };
+  // Export ตารางห้องเรียน ตาม format import_Schedule.xlsx
+  const exportScheduleJSON=()=>{
     const data={version:1,exportedAt:new Date().toISOString(),schedule:S.schedule,locks:S.locks,assigns:S.assigns,teachers:S.teachers,subjects:S.subjects,rooms:S.rooms,levels:S.levels,plans:S.plans,depts:S.depts,meetings:S.meetings,specialRooms:S.specialRooms};
     const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`backup_timetable_${new Date().toISOString().slice(0,10)}.json`;a.click();
@@ -4885,7 +4539,8 @@ function Reports({S,U,st,gc,ay,sh}){
         return sortParts(parts);
       })})),
       "",
-      sh?.logo||null
+      sh?.logo||null,
+      printSettings
     );
     w.document.write(html);w.document.close();setTimeout(()=>w.print(),600);
   };
@@ -4921,7 +4576,7 @@ function Reports({S,U,st,gc,ay,sh}){
     const pages=buildRoomPages(room);
     if(!pages.length){st("ยังไม่มีตารางในห้องนี้","error");return}
     const w=window.open('','_blank');
-    w.document.write(pdfMultiPage(pages,sh?.logo||null));
+    w.document.write(pdfMultiPage(pages,sh?.logo||null,printSettings));
     w.document.close();setTimeout(()=>w.print(),600);
   };
 
@@ -4964,7 +4619,7 @@ function Reports({S,U,st,gc,ay,sh}){
         const sub=S.subjects.find(s=>s.id===e.subjectId);
         const t=S.teachers.find(t=>t.id===e.teacherId);
         const cos=(e.coTeacherIds||[]).map(id=>S.teachers.find(x=>x.id===id)).filter(Boolean);
-        return[{th:sub?.name||sub?.code||"",en:sub?.shortName||"",tch:[t,...cos].filter(Boolean).map(x=>"ครู"+x.firstName).join(", ")}];
+        return[{th:sub?.name||sub?.code||"",en:sub?.shortName||"",tch:[t,...cos].filter(Boolean).map(x=>x.firstName).join(", ")}];
       };
 
     // colgroup — % based
@@ -4980,11 +4635,8 @@ function Reports({S,U,st,gc,ay,sh}){
     </colgroup>`;
 
     // vert cell: ข้อความแนวตั้ง
-    const vert=(txt,bg="#fffde7",fw="normal",fs="7.5pt")=>
-      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};font-weight:${fw};letter-spacing:3px;text-align:center;">${txt}</div>`;
-    // homeroom cell: ไม่มี letter-spacing, รองรับ 2 บรรทัด
-    const vertHM=(txt,fw="normal",fs="7pt")=>
-      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:${fs};font-weight:${fw};text-align:center;word-break:keep-all;">${txt}</div>`;
+    const vert=(txt,bg="#fffde7",fw="normal",fs="9pt")=>
+      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};font-weight:${fw};letter-spacing:1px;text-align:center;">${txt}</div>`;
 
     const HDR=[
       {label:"คาบ 1",time:"08.30 - 09.20"},
@@ -4999,8 +4651,8 @@ function Reports({S,U,st,gc,ay,sh}){
     // Header — แถว 1: ชื่อคาบ, แถว 2: เวลา
     // col: วัน | 08.00-08.30 | คาบ1 | คาบ2 | 10.10-10.25 | คาบ3 | คาบ4 | 12.05-13.00 | คาบ5 | คาบ6 | 14.40-14.50 | คาบ7
     const BRK=[["08.00-","08.30"],["10.10-","10.25"],["12.05-","13.00"],["14.40-","14.50"]];
-    const vertBRK=(parts,fs="7.5pt")=>
-      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:${fs};font-weight:normal;letter-spacing:3px;text-align:center;display:flex;flex-direction:column;align-items:center;">${parts.map(p=>'<span style="white-space:nowrap;">'+p+'</span>').join("")}</div>`;
+    const vertBRK=(parts,fs="9pt")=>
+      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:${fs};font-weight:600;letter-spacing:1px;text-align:center;display:flex;flex-direction:column;align-items:center;">${parts.map(p=>'<span style="white-space:nowrap;">'+p+'</span>').join("")}</div>`;
     const BRKV=["08.00-08.30","Morning Break","Lunch Time","Afternoon Break"];
 
     // Header row1 — ชื่อคาบ (break columns มี rowspan=2)
@@ -5027,7 +4679,7 @@ function Reports({S,U,st,gc,ay,sh}){
       <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[6].label}</th>
     </tr>
     <tr style="background:#f0f0f0;height:16px;max-height:16px;">
-      ${[0,1,2,3,4,5,6].map(i=>'<td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;height:16px;">'+HDR[i].time+'</td>').join("")}
+      ${[0,1,2,3,4,5,6].map(i=>`<td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;height:16px;">${HDR[i].time}</td>`).join("")}
     </tr>`;
 
     const DAYS_TH=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
@@ -5052,7 +4704,7 @@ function Reports({S,U,st,gc,ay,sh}){
       const cellBot=(arr,type,multi=false)=>cell(arr,type,multi).replace("border-bottom:none;","border-bottom:1px solid #888;");
 
       const BKcell=(rows,vtext,bg="#fffde7")=>
-        `<td rowspan="${rows}" style="border:1px solid #888;background:${bg};padding:0;vertical-align:middle;text-align:center;">${vert(vtext,bg,"normal","7.5pt")}</td>`;
+        `<td rowspan="${rows}" style="border:1px solid #888;background:${bg};padding:0;vertical-align:middle;text-align:center;min-width:26px;">${vert(vtext,bg,"600","9pt")}</td>`;
 
       // break columns ใส่เฉพาะวันแรก (di===0) ด้วย rowspan=15 (5วัน × 3แถว)
       const bk=di===0;
@@ -5060,8 +4712,8 @@ function Reports({S,U,st,gc,ay,sh}){
 
       body+=`
         <tr style="height:20px;max-height:20px;">
-          <td rowspan="3" style="border:1px solid #888;text-align:center;font-weight:bold;font-size:8.5pt;vertical-align:middle;background:#f5f5f5;">${day}</td>
-          <td rowspan="3" style="border:1px solid #888;background:${hmBg};padding:0;vertical-align:middle;text-align:center;overflow:hidden;max-width:20px;">${vertHM(hmTxt,"bold","7pt")}</td>
+          <td rowspan="3" style="border:1px solid #888;text-align:center;font-weight:bold;font-size:10pt;vertical-align:middle;background:#f5f5f5;padding:2px;">${day==="พฤหัสบดี"?"พฤหัส":day}</td>
+          <td rowspan="3" style="border:1px solid #888;background:${hmBg};padding:0;vertical-align:middle;text-align:center;min-width:26px;">${vert(hmTxt.replace('<br>','/').replace('<br/>','/'),hmBg,"600","9pt")}</td>
           ${cellTop(D[0],"th",isMulti[0])}${cellTop(D[1],"th",isMulti[1])}
           ${bk?BKcell(TOTAL_ROWS,"พักน้อย 15 นาที"):""}
           ${cellTop(D[2],"th",isMulti[2])}${cellTop(D[3],"th",isMulti[3])}
@@ -5129,7 +4781,7 @@ function Reports({S,U,st,gc,ay,sh}){
       for(let i=0;i<allCopies.length;i+=2) pages.push(allCopies.slice(i,i+2));
       pagesHTML=pages.map((pair,pi)=>`
         <div style="page-break-after:${pi<pages.length-1?"always":"avoid"};padding:6mm 8mm;box-sizing:border-box;">
-          ${pair.join('<div style="border-top:1px dashed #ccc;margin:6px 0;"></div>')}
+          ${pair.join(`<div style="border-top:1px dashed #ccc;margin:6px 0;"></div>`)}
         </div>`).join("");
     }
 
@@ -5178,7 +4830,7 @@ function Reports({S,U,st,gc,ay,sh}){
       })}))
     }));
     const w=window.open('','_blank');
-    w.document.write(pdfMultiPage(pages,sh?.logo||null));
+    w.document.write(pdfMultiPage(pages,sh?.logo||null,printSettings));
     w.document.close();setTimeout(()=>w.print(),800);
     st("กำลังพิมพ์ตารางสอน "+teachers.length+" คน ("+Math.ceil(teachers.length/2)+" หน้า)");
   };
@@ -5195,7 +4847,7 @@ function Reports({S,U,st,gc,ay,sh}){
     const pages=sorted.flatMap(room=>buildRoomPages(room));
     if(!pages.length){st("ยังไม่มีตารางในระบบ","error");return}
     const w=window.open('','_blank');
-    w.document.write(pdfMultiPage(pages,sh?.logo||null));
+    w.document.write(pdfMultiPage(pages,sh?.logo||null,printSettings));
     w.document.close();setTimeout(()=>w.print(),800);
     st("กำลังพิมพ์ตารางเรียน "+sorted.length+" ห้อง ("+pages.length+" ใบ)");
   };
@@ -5223,7 +4875,10 @@ function Reports({S,U,st,gc,ay,sh}){
 
     {/* ── PRINT CENTER ── */}
     <div style={{background:"#fff",borderRadius:16,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,0.07)"}}>
-      <h3 style={{fontSize:17,fontWeight:800,marginBottom:20,display:"flex",alignItems:"center",gap:8}}>🖨️ Print / Export Center</h3>
+      <h3 style={{fontSize:17,fontWeight:800,marginBottom:20,display:"flex",alignItems:"center",gap:8}}>🖨️ Print / Export Center
+        <button onClick={()=>setShowPrintSettings(true)} style={{marginLeft:"auto",fontSize:12,padding:"5px 14px",borderRadius:20,border:"2px solid #B91C1C",background:"#FEF2F2",color:"#B91C1C",cursor:"pointer",fontWeight:600}}>⚙️ ตั้งค่าการพิมพ์</button>
+      </h3>
+      <PrintSettingsPanel open={showPrintSettings} onClose={()=>setShowPrintSettings(false)} onApply={(s)=>{setPrintSettings(s);st("บันทึกการตั้งค่าแล้ว ✓");}} />
 
       {/* ─ Section 1: PDF ─ */}
       <div style={{marginBottom:20}}>
@@ -5242,7 +4897,7 @@ function Reports({S,U,st,gc,ay,sh}){
               <span style={{fontSize:12,color:"#6B7280"}}>รายคน:</span>
               <div style={{flex:"1 1 200px",maxWidth:280}}>
                 <SearchSelect value={selTeacherPDF} onChange={v=>setSelTeacherPDF(v)}
-                  options={[{value:"",label:"-- เลือกครู --"},...S.teachers.map(t=>({value:t.id,label:t.prefix+t.firstName+" "+t.lastName}))]}
+                  options={[{value:"",label:"-- เลือกครู --"},...S.teachers.map(t=>({value:t.id,label:`${t.prefix}${t.firstName} ${t.lastName}`}))]}
                   placeholder="-- เลือกครู --"/>
               </div>
               <button onClick={()=>{const t=S.teachers.find(x=>x.id===selTeacherPDF);if(t)printTeacherPDF(t);else st("เลือกครูก่อน","error");}}
@@ -5301,7 +4956,7 @@ function Reports({S,U,st,gc,ay,sh}){
                   ].map(opt=>{
                     const sel=newRoomPDFOpts.layout===opt.val;
                     return<button key={opt.val} onClick={()=>setNewRoomPDFOpts(p=>({...p,layout:opt.val}))}
-                      style={{flex:1,padding:"10px 8px",borderRadius:12,border:(sel?"2px solid #7C3AED":"2px solid #E5E7EB"),background:sel?"#F5F3FF":"#fff",cursor:"pointer",textAlign:"center"}}>
+                      style={{flex:1,padding:"10px 8px",borderRadius:12,border:`2px solid ${sel?"#7C3AED":"#E5E7EB"}`,background:sel?"#F5F3FF":"#fff",cursor:"pointer",textAlign:"center"}}>
                       <div style={{fontSize:18}}>{opt.icon}</div>
                       <div style={{fontSize:12,fontWeight:700,color:sel?"#7C3AED":"#374151"}}>{opt.label}</div>
                       <div style={{fontSize:10,color:"#6B7280"}}>{opt.sub}</div>
@@ -5322,7 +4977,7 @@ function Reports({S,U,st,gc,ay,sh}){
                     const sel=(newRoomPDFOpts.selectedRooms||[]).includes(r.id);
                     return<button key={r.id}
                       onClick={()=>setNewRoomPDFOpts(p=>({...p,selectedRooms:sel?p.selectedRooms.filter(id=>id!==r.id):[...p.selectedRooms,r.id]}))}
-                      style={{padding:"4px 12px",borderRadius:20,border:(sel?"2px solid #7C3AED":"2px solid #E5E7EB"),background:sel?"#7C3AED":"#fff",color:sel?"#fff":"#374151",fontSize:12,fontWeight:sel?700:400,cursor:"pointer"}}>
+                      style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${sel?"#7C3AED":"#E5E7EB"}`,background:sel?"#7C3AED":"#fff",color:sel?"#fff":"#374151",fontSize:12,fontWeight:sel?700:400,cursor:"pointer"}}>
                       {r.name}
                     </button>;
                   })}
@@ -5338,7 +4993,7 @@ function Reports({S,U,st,gc,ay,sh}){
               <div style={{padding:"10px 12px",background:"#F0F9FF",borderRadius:8,fontSize:11,color:"#0369A1"}}>
                 💡 ครูประจำชั้นจะถูกอ่านจากข้อมูลในเมนู <b>ครูประจำชั้น</b> โดยอัตโนมัติ
                 <div style={{marginTop:4,color:"#0284C7"}}>
-                  {"ตัวอย่าง: "+(S.rooms.filter(r=>(newRoomPDFOpts.selectedRooms||[]).includes(r.id)&&r.homeroom1).slice(0,2).map(r=>r.name+": "+r.homeroom1).join(" · ")||"(เลือกห้องก่อน)")}
+                  ตัวอย่าง: {S.rooms.filter(r=>(newRoomPDFOpts.selectedRooms||[]).includes(r.id)&&r.homeroom1).slice(0,2).map(r=>`${r.name}: ${r.homeroom1}`).join(" · ")||"(เลือกห้องก่อน)"}
                 </div>
               </div>
             </div>
@@ -5378,7 +5033,9 @@ function Reports({S,U,st,gc,ay,sh}){
                   setShowNewRoomPDF(false);
                 }}
                 style={{...BS("#7C3AED"),flex:2,opacity:newRoomPDFOpts.selectedRooms?.length?1:0.4}}>
-                {"🖨️ พิมพ์ ("+(newRoomPDFOpts.selectedRooms?.length||0)+"+ หน้า)"}
+                🖨️ พิมพ์ ({newRoomPDFOpts.layout==="1landscape"
+                  ?`${newRoomPDFOpts.selectedRooms?.length||0}+ หน้า`
+                  :`${newRoomPDFOpts.selectedRooms?.length||0}+ หน้า`})
               </button>
             </div>
           </div>
@@ -5404,7 +5061,7 @@ function Reports({S,U,st,gc,ay,sh}){
                   const sel=excelSelectedRooms.includes(r.id);
                   return<button key={r.id}
                     onClick={()=>setExcelSelectedRooms(p=>sel?p.filter(id=>id!==r.id):[...p,r.id])}
-                    style={{padding:"4px 12px",borderRadius:20,border:(sel?"2px solid #059669":"2px solid #E5E7EB"),background:sel?"#059669":"#fff",color:sel?"#fff":"#374151",fontSize:12,fontWeight:sel?700:400,cursor:"pointer"}}>
+                    style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${sel?"#059669":"#E5E7EB"}`,background:sel?"#059669":"#fff",color:sel?"#fff":"#374151",fontSize:12,fontWeight:sel?700:400,cursor:"pointer"}}>
                     {r.name}
                   </button>;
                 })}
@@ -5426,13 +5083,12 @@ function Reports({S,U,st,gc,ay,sh}){
                   await exportRoomScheduleXLSX(rooms);
                 }}
                 style={{...BS("#059669"),flex:2,opacity:excelSelectedRooms.length?1:0.4}}>
-                <Icon name="download" size={14}/>{" 📊 Export ("+excelSelectedRooms.length+" ห้อง)"}
+                <Icon name="download" size={14}/>📊 Export ({excelSelectedRooms.length} ห้อง)
               </button>
             </div>
           </div>
         </div>
       )}
-
       {showNewTeacherPDF&&(
         <div style={{position:"fixed",inset:0,zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.5)"}}>
           <div style={{background:"#fff",borderRadius:16,boxShadow:"0 20px 60px rgba(0,0,0,0.3)",width:"min(560px,94%)",maxHeight:"90vh",overflowY:"auto",padding:24,fontFamily:"inherit"}}>
@@ -5463,7 +5119,7 @@ function Reports({S,U,st,gc,ay,sh}){
                   const dept=S.depts.find(d=>d.id===t.departmentId)?.name||"";
                   return<button key={t.id}
                     onClick={()=>setSelectedTeachersPDF(p=>sel?p.filter(id=>id!==t.id):[...p,t.id])}
-                    style={{padding:"4px 12px",borderRadius:20,border:(sel?"2px solid #7C3AED":"2px solid #E5E7EB"),background:sel?"#7C3AED":"#fff",color:sel?"#fff":"#374151",fontSize:12,fontWeight:sel?700:400,cursor:"pointer"}}>
+                    style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${sel?"#7C3AED":"#E5E7EB"}`,background:sel?"#7C3AED":"#fff",color:sel?"#fff":"#374151",fontSize:12,fontWeight:sel?700:400,cursor:"pointer"}}>
                     {t.prefix}{t.firstName} {t.lastName}
                     {dept&&<span style={{fontSize:10,opacity:0.7,marginLeft:4}}>[{dept}]</span>}
                   </button>;
@@ -5472,7 +5128,7 @@ function Reports({S,U,st,gc,ay,sh}){
               <div style={{display:"flex",gap:6,marginTop:6}}>
                 <button onClick={()=>setSelectedTeachersPDF(S.teachers.map(t=>t.id))} style={{fontSize:11,color:"#7C3AED",background:"none",border:"1px solid #E5E7EB",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>เลือกทั้งหมด</button>
                 <button onClick={()=>setSelectedTeachersPDF([])} style={{fontSize:11,color:"#6B7280",background:"none",border:"1px solid #E5E7EB",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>ล้าง</button>
-                <span style={{fontSize:11,color:"#6B7280",alignSelf:"center"}}>{"เลือก "+selectedTeachersPDF.length+" คน → "+Math.ceil(selectedTeachersPDF.length/2)+" หน้า"}</span>
+                <span style={{fontSize:11,color:"#6B7280",alignSelf:"center"}}>เลือก {selectedTeachersPDF.length} คน → {Math.ceil(selectedTeachersPDF.length/2)} หน้า</span>
               </div>
             </div>
             <div style={{display:"flex",gap:10,marginTop:20}}>
@@ -5480,18 +5136,35 @@ function Reports({S,U,st,gc,ay,sh}){
               <button disabled={!selectedTeachersPDF.length}
                 onClick={()=>{
                   const teachers=S.teachers.filter(t=>selectedTeachersPDF.includes(t.id));
+                  const w=window.open('','_blank');
+                  if(!w){st("Browser บล็อก popup","error");return;}
+                  const saved=w.setTimeout;w.setTimeout=()=>{};
                   printTeacherPDFNew(teachers);
+                  setTimeout(()=>{if(w.setTimeout)w.setTimeout=saved;},100);
                 }}
                 style={{...BO("#7C3AED"),flex:1,opacity:selectedTeachersPDF.length?1:0.4,fontSize:12}}>
-                🖨️ พิมพ์แบบ 2
+                👁️ ดูตัวอย่าง
               </button>
               <button disabled={!selectedTeachersPDF.length}
                 onClick={()=>{
-                  printTeacherPDF3(S.teachers.filter(t=>selectedTeachersPDF.includes(t.id)));
+                  printTeacherPDFNew(S.teachers.filter(t=>selectedTeachersPDF.includes(t.id)));
                   setShowNewTeacherPDF(false);
                 }}
+                style={{...BS("#7C3AED"),flex:2,opacity:selectedTeachersPDF.length?1:0.4}}>
+                🖨️ แบบ 2 — 2คน/หน้า ({Math.ceil(selectedTeachersPDF.length/2)} หน้า)
+              </button>
+              <button disabled={!selectedTeachersPDF.length}
+                onClick={()=>{
+                  const list=S.teachers.filter(t=>selectedTeachersPDF.includes(t.id));
+                  if(!list.length){st("ไม่มีครูที่เลือก","error");return;}
+                  const w=window.open("","_blank");if(!w){st("Browser บล็อก popup","error");return;}
+                  const pages=list.map((t,i)=>'<div style="page-break-after:'+(((i+1)%3===0&&i<list.length-1)?"always":"avoid")+';padding:5mm 8mm;box-sizing:border-box;">'+buildTeacherTableHTML3(t,S,ay,sh)+'</div>').join('<div style="border-top:1px dashed #ccc;margin:3px 0;"></div>');
+                  const html='<!DOCTYPE html><html><head><meta charset="utf-8"/><style>@page{size:A4 portrait;margin:0}body{font-family:\'TH SarabunNew\',\'Sarabun\',sans-serif;margin:0;padding:0;}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}</style></head><body>'+pages+'</body></html>';
+                  w.document.write(html);w.document.close();setTimeout(()=>w.print(),700);
+                  setShowNewTeacherPDF(false);st("กำลังเปิดหน้า print...");
+                }}
                 style={{...BS("#B91C1C"),flex:2,opacity:selectedTeachersPDF.length?1:0.4}}>
-                {"🖨️ พิมพ์แบบ 3 — รหัสห้อง+สรุปวิชา ("+selectedTeachersPDF.length+" หน้า)"}
+                🖨️ แบบ 3 — รหัสห้อง+สรุปวิชา ({selectedTeachersPDF.length} หน้า)
               </button>
             </div>
           </div>
@@ -5509,7 +5182,7 @@ function Reports({S,U,st,gc,ay,sh}){
         <div style={{marginTop:8,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
           <div style={{flex:"1 1 200px",maxWidth:260}}>
             <SearchSelect value={selTeacherXL} onChange={v=>setSelTeacherXL(v)}
-              options={[{value:"",label:"-- ครูรายคน (Excel) --"},...S.teachers.map(t=>({value:t.id,label:t.prefix+t.firstName+" "+t.lastName}))]}
+              options={[{value:"",label:"-- ครูรายคน (Excel) --"},...S.teachers.map(t=>({value:t.id,label:`${t.prefix}${t.firstName} ${t.lastName}`}))]}
               placeholder="-- ครูรายคน (Excel) --"/>
           </div>
           <button onClick={()=>{const t=S.teachers.find(x=>x.id===selTeacherXL);if(t)exportTeacherXL(t);else st("เลือกครูก่อน","error");}}
@@ -5539,18 +5212,14 @@ function Reports({S,U,st,gc,ay,sh}){
     {/* ── สถานะห้องเรียน ── */}
     <h3 style={{fontSize:18,fontWeight:700}}>สถานะห้องเรียน</h3>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:12}}>
-      {roomSt.map(({room,filled,total,pct})=>{
-        const cardBg=pct===100?"#F0FDF4":pct>0?"#FFFBEB":"#FEF2F2";
-        const cardBorder=pct===100?"#BBF7D0":pct>0?"#FDE68A":"#FECACA";
-        const pctColor=pct===100?"#059669":pct>0?"#D97706":"#DC2626";
-        return(<div key={room.id} style={{padding:14,borderRadius:10,background:cardBg,border:"1px solid "+cardBorder,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
-        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:700,fontSize:13}}>{room.name}</span><span style={{fontSize:12,fontWeight:700,color:pctColor}}>{pct}%</span></div>
-        <div style={{height:5,background:"rgba(0,0,0,0.08)",borderRadius:3,marginTop:6,overflow:"hidden"}}><div style={{width:pct+"%",height:"100%",background:pctColor,borderRadius:3}}/></div>
+      {roomSt.map(({room,filled,total,pct})=><div key={room.id} style={{padding:14,borderRadius:10,background:pct===100?"#F0FDF4":pct>0?"#FFFBEB":"#FEF2F2",border:`1px solid ${pct===100?"#BBF7D0":pct>0?"#FDE68A":"#FECACA"}`,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
+        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:700,fontSize:13}}>{room.name}</span><span style={{fontSize:12,fontWeight:700,color:pct===100?"#059669":pct>0?"#D97706":"#DC2626"}}>{pct}%</span></div>
+        <div style={{height:5,background:"rgba(0,0,0,0.08)",borderRadius:3,marginTop:6,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:pct===100?"#059669":pct>0?"#D97706":"#DC2626",borderRadius:3}}/></div>
         <div style={{display:"flex",gap:5,marginTop:8}}>
           <button onClick={()=>exportRoomXL(room)} style={{background:"none",border:"1.5px solid #2563EB",borderRadius:6,padding:"2px 8px",color:"#2563EB",fontSize:10,fontWeight:600,cursor:"pointer"}}>Excel</button>
           <button onClick={()=>printRoomPDF(room)} style={{background:"none",border:"1.5px solid #DC2626",borderRadius:6,padding:"2px 8px",color:"#DC2626",fontSize:10,fontWeight:600,cursor:"pointer"}}>PDF</button>
         </div>
-      </div>);})}
+      </div>)}
       {!roomSt.length&&<div style={{padding:20,color:"#9CA3AF"}}>ยังไม่มีห้องเรียน</div>}
     </div>
 
@@ -5707,6 +5376,94 @@ function Settings({S,U,st,ay,setAY,sh,setSH,div}){
 /* ===== PDF HELPER — ตามแบบฟอร์มดาราวิทยาลัย (A4 แนวตั้ง) ===== */
 
 // Merge entries ที่วิชาเดียวกันในคาบเดียว → แสดงชื่อวิชาแค่ครั้งเดียว เรียงห้องลงมา
+
+/* ===== PRINT SETTINGS ===== */
+const PRINT_COLORS={
+  "แดง":{header:"#B91C1C",headerText:"#fff",rowAlt:"#FFF5F5",border:"#991B1B"},
+  "ดำ":{header:"#1F2937",headerText:"#fff",rowAlt:"#F9FAFB",border:"#374151"},
+  "เทา":{header:"#6B7280",headerText:"#fff",rowAlt:"#F9FAFB",border:"#9CA3AF"},
+  "เหลือง":{header:"#D97706",headerText:"#fff",rowAlt:"#FFFBEB",border:"#F59E0B"},
+  "ขาว":{header:"#F3F4F6",headerText:"#000",rowAlt:"#FAFAFA",border:"#D1D5DB"},
+};
+const PRINT_FONTS=["Sarabun","TH SarabunNew","Arial","Tahoma"];
+const DEFAULT_PRINT_SETTINGS={fontFamily:"TH SarabunNew",fontSize:100,color:"แดง",rowHeight:100,showAltRow:true,showBorder:true};
+const loadPrintSettings=()=>{try{const s=localStorage.getItem("dara_printSettings");return s?{...DEFAULT_PRINT_SETTINGS,...JSON.parse(s)}:DEFAULT_PRINT_SETTINGS;}catch{return DEFAULT_PRINT_SETTINGS;}};
+const savePrintSettings=(s)=>{try{localStorage.setItem("dara_printSettings",JSON.stringify(s));}catch{}};
+function PrintSettingsPanel({open,onClose,onApply}){
+  const [s,setS]=useState(loadPrintSettings);
+  if(!open)return null;
+  const u=(k,v)=>setS(p=>({...p,[k]:v}));
+  return(
+    <div style={{position:"fixed",inset:0,zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.5)"}}>
+      <div style={{background:"#fff",borderRadius:16,padding:28,width:"min(540px,95vw)",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.3)",fontFamily:"'Sarabun',sans-serif"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
+          <h2 style={{fontSize:18,fontWeight:700}}>⚙️ ตั้งค่าการพิมพ์</h2>
+          <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#6B7280"}}>✕</button>
+        </div>
+        <div style={{marginBottom:16}}>
+          <label style={{fontSize:13,fontWeight:600,display:"block",marginBottom:8}}>🔤 ฟอนต์</label>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {PRINT_FONTS.map(f=><button key={f} onClick={()=>u("fontFamily",f)} style={{padding:"6px 14px",borderRadius:8,border:"2px solid "+(s.fontFamily===f?"#B91C1C":"#D1D5DB"),background:s.fontFamily===f?"#FEE2E2":"#fff",fontFamily:f,fontSize:13,cursor:"pointer",fontWeight:s.fontFamily===f?700:400}}>{f}</button>)}
+          </div>
+        </div>
+        <div style={{marginBottom:16}}>
+          <label style={{fontSize:13,fontWeight:600,display:"block",marginBottom:8}}>📏 ขนาดตัวอักษร: <b style={{color:"#B91C1C"}}>{s.fontSize}%</b></label>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <button onClick={()=>u("fontSize",Math.max(60,s.fontSize-10))} style={{width:32,height:32,borderRadius:8,border:"1px solid #D1D5DB",background:"#F9FAFB",fontSize:16,cursor:"pointer"}}>−</button>
+            <input type="range" min={60} max={160} value={s.fontSize} onChange={e=>u("fontSize",parseInt(e.target.value))} style={{flex:1,accentColor:"#B91C1C"}}/>
+            <button onClick={()=>u("fontSize",Math.min(160,s.fontSize+10))} style={{width:32,height:32,borderRadius:8,border:"1px solid #D1D5DB",background:"#F9FAFB",fontSize:16,cursor:"pointer"}}>+</button>
+            <button onClick={()=>u("fontSize",100)} style={{fontSize:11,color:"#6B7280",background:"none",border:"1px solid #D1D5DB",borderRadius:6,padding:"3px 8px",cursor:"pointer"}}>รีเซ็ต</button>
+          </div>
+        </div>
+        <div style={{marginBottom:16}}>
+          <label style={{fontSize:13,fontWeight:600,display:"block",marginBottom:8}}>↕️ ความสูงแถว: <b style={{color:"#B91C1C"}}>{s.rowHeight}%</b></label>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <button onClick={()=>u("rowHeight",Math.max(60,s.rowHeight-10))} style={{width:32,height:32,borderRadius:8,border:"1px solid #D1D5DB",background:"#F9FAFB",fontSize:16,cursor:"pointer"}}>−</button>
+            <input type="range" min={60} max={160} value={s.rowHeight} onChange={e=>u("rowHeight",parseInt(e.target.value))} style={{flex:1,accentColor:"#B91C1C"}}/>
+            <button onClick={()=>u("rowHeight",Math.min(160,s.rowHeight+10))} style={{width:32,height:32,borderRadius:8,border:"1px solid #D1D5DB",background:"#F9FAFB",fontSize:16,cursor:"pointer"}}>+</button>
+            <button onClick={()=>u("rowHeight",100)} style={{fontSize:11,color:"#6B7280",background:"none",border:"1px solid #D1D5DB",borderRadius:6,padding:"3px 8px",cursor:"pointer"}}>รีเซ็ต</button>
+          </div>
+        </div>
+        <div style={{marginBottom:16}}>
+          <label style={{fontSize:13,fontWeight:600,display:"block",marginBottom:8}}>🎨 สีหัวตาราง</label>
+          <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+            {Object.entries(PRINT_COLORS).map(([name,c])=>(
+              <button key={name} onClick={()=>u("color",name)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,padding:"8px 12px",borderRadius:10,border:"2px solid "+(s.color===name?"#B91C1C":"#E5E7EB"),background:s.color===name?"#FEF2F2":"#fff",cursor:"pointer"}}>
+                <div style={{width:36,height:20,borderRadius:5,background:c.header,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:c.headerText,fontSize:9,fontWeight:700}}>วัน</span></div>
+                <div style={{width:36,height:10,borderRadius:4,background:c.rowAlt,border:"1px solid #eee"}}/>
+                <span style={{fontSize:11,fontWeight:s.color===name?700:400,color:s.color===name?"#B91C1C":"#374151"}}>{name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{marginBottom:18,display:"flex",gap:20}}>
+          <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13}}>
+            <input type="checkbox" checked={s.showAltRow} onChange={e=>u("showAltRow",e.target.checked)} style={{width:16,height:16,accentColor:"#B91C1C"}}/>สลับสีแถว
+          </label>
+          <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13}}>
+            <input type="checkbox" checked={s.showBorder} onChange={e=>u("showBorder",e.target.checked)} style={{width:16,height:16,accentColor:"#B91C1C"}}/>เส้นขอบ
+          </label>
+        </div>
+        <div style={{background:"#F9FAFB",borderRadius:10,padding:10,marginBottom:18}}>
+          <div style={{fontSize:11,color:"#6B7280",marginBottom:5}}>ตัวอย่าง:</div>
+          <table style={{width:"100%",borderCollapse:"collapse",fontFamily:s.fontFamily,fontSize:(11*s.fontSize/100)+"px"}}>
+            <thead><tr>{["วัน","คาบ 1","คาบ 2","คาบ 3"].map(h=><th key={h} style={{background:PRINT_COLORS[s.color].header,color:PRINT_COLORS[s.color].headerText,padding:"4px 6px",border:s.showBorder?"1px solid "+PRINT_COLORS[s.color].border:"none",fontWeight:700}}>{h}</th>)}</tr></thead>
+            <tbody>{[["จันทร์","คณิต ม.5/1","","ฟิสิกส์ ม.5/2"],["อังคาร","","ชีวะ ม.5/3",""]].map((row,ri)=>(
+              <tr key={ri} style={{background:s.showAltRow&&ri%2===1?PRINT_COLORS[s.color].rowAlt:"#fff"}}>
+                {row.map((cell,ci)=><td key={ci} style={{padding:(3*s.rowHeight/100)+"px 6px",border:s.showBorder?"1px solid #E5E7EB":"none",fontSize:(10*s.fontSize/100)+"px",textAlign:"center",height:(26*s.rowHeight/100)+"px"}}>{cell}</td>)}
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={()=>setS(DEFAULT_PRINT_SETTINGS)} style={{...BO(),flex:1}}>↩ ค่าเริ่มต้น</button>
+          <button onClick={()=>{savePrintSettings(s);onApply(s);onClose();}} style={{...BS(),flex:2}}>💾 บันทึก &amp; ใช้งาน</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function groupEntries(entries) {
   if (!entries || !entries.length) return [];
   const map = {};
@@ -5730,7 +5487,11 @@ function groupEntries(entries) {
   });
 }
 
-function buildTeacherTableHTML(teacher, S, ay, sh) {
+function buildTeacherTableHTML(teacher, S, ay, sh, ps) {
+  const P=ps||DEFAULT_PRINT_SETTINGS;
+  const C=PRINT_COLORS[P.color]||PRINT_COLORS["แดง"];
+  const fScale=P.fontSize/100;
+  const rScale=P.rowHeight/100;
   const yr=ay?.year||"2568";
   const logoImg=sh?.logo?`<img src="${sh.logo}" style="height:40px;vertical-align:middle;margin-right:8px;"/>` :"";
   const title=`ตารางสอน ${teacher.prefix||""}${teacher.firstName} ${teacher.lastName}`;
@@ -5773,8 +5534,8 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
     {label:"คาบ 7",time:"14.50 - 15.40"},
   ];
   const BRK=[["08.00-","08.30"],["10.10-","10.25"],["12.05-","13.00"],["14.40-","14.50"]];
-  const vertBRK=(parts,fs="6.5pt")=>
-    `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:${fs};font-weight:normal;letter-spacing:3px;text-align:center;display:flex;flex-direction:column;align-items:center;">${parts.map(p=>'<span style="white-space:nowrap;">'+p+'</span>').join("")}</div>`;
+  const vertBRK=(parts,fs="9pt")=>
+    `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:${fs};font-weight:600;letter-spacing:1px;text-align:center;display:flex;flex-direction:column;align-items:center;">${parts.map(p=>`<span style="white-space:nowrap;">${p}</span>`).join("")}</div>`;
 
   const hdrRow=`<tr style="background:#f0f0f0;height:22px;max-height:22px;">
     <th rowspan="2" style="border:1px solid #666;padding:0;position:relative;vertical-align:middle;font-size:7pt;height:38px;">
@@ -5799,7 +5560,7 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
     <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[6].label}</th>
   </tr>
   <tr style="background:#f0f0f0;height:16px;max-height:16px;">
-    ${HDR.map(h=>'<td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;height:16px;">'+h.time+'</td>').join("")}
+    ${HDR.map(h=>`<td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;height:16px;">${h.time}</td>`).join("")}
   </tr>`;
 
   // หา assemblyDay จากห้องที่ครูสอน (ใช้ level ของห้องแรก)
@@ -5825,23 +5586,23 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
     const cell1=(arr,multi=false)=>{
       const v=arr.map(c=>c.th).filter(Boolean).join("<br>");
       const bg=multi?`background:${MBG};`:"";
-      return`<td style="border:1px solid #ddd;border-bottom:none;text-align:center;vertical-align:middle;padding:2px 1px;font-size:8.5pt;font-weight:bold;${bg}">${v}</td>`;
+      return`<td style="border:1px solid #ddd;border-bottom:none;text-align:center;vertical-align:middle;padding:2px 1px;font-size:${(9.5*fScale).toFixed(1)}pt;font-weight:bold;${bg}">${v}</td>`;
     };
     const cell2=(arr,multi=false)=>{
       const v=arr.map(c=>c.room).filter(Boolean).join("<br>");
       const bg=multi?`background:${MBG};`:"";
-      return`<td style="border:1px solid #ddd;border-top:none;text-align:center;vertical-align:middle;padding:2px 1px;font-size:7.5pt;color:#1a237e;${bg}">${v}</td>`;
+      return`<td style="border:1px solid #ddd;border-top:none;text-align:center;vertical-align:middle;padding:2px 1px;font-size:${(8.5*fScale).toFixed(1)}pt;color:#1a237e;${bg}">${v}</td>`;
     };
     const BKcell=(rows,txt)=>
-      `<td rowspan="${rows}" style="border:1px solid #888;background:#fffde7;padding:0;vertical-align:middle;text-align:center;">${vert(txt)}</td>`;
+      `<td rowspan="${rows}" style="border:1px solid #888;background:#fffde7;padding:0;vertical-align:middle;text-align:center;min-width:24px;">${vert(txt,"#fffde7","600","9pt")}</td>`;
 
     const bk=di===0;
     const TOTAL_ROWS=DAYS_TH.length*2;
 
     body+=`
       <tr style="height:22px;${bgRow}">
-        <td rowspan="2" style="border:1px solid #888;text-align:center;font-weight:bold;font-size:8.5pt;vertical-align:middle;background:#f5f5f5;">${day}</td>
-        <td rowspan="2" style="border:1px solid #888;background:${hmBg};padding:0;vertical-align:middle;">${vert(hmTxt,hmBg,"bold","7pt")}</td>
+        <td rowspan="2" style="border:1px solid #888;text-align:center;font-weight:bold;font-size:10pt;vertical-align:middle;background:#f5f5f5;padding:2px;">${day==="พฤหัสบดี"?"พฤหัส":day}</td>
+        <td rowspan="2" style="border:1px solid #888;background:${hmBg};padding:3px 2px;vertical-align:middle;text-align:center;font-size:9pt;font-weight:bold;line-height:1.3;min-width:48px;">${hmTxt.replace('<br>','<br/>')}</td>
         ${cell1(D[0],isMulti[0])}${cell1(D[1],isMulti[1])}
         ${bk?BKcell(TOTAL_ROWS,"พักน้อย 15 นาที"):""}
         ${cell1(D[2],isMulti[2])}${cell1(D[3],isMulti[3])}
@@ -5870,255 +5631,12 @@ function buildTeacherTableHTML(teacher, S, ay, sh) {
     </table>`;
 }
 
-/* ===== ตารางสอนครู แบบที่ 3 (รหัสห้อง + ส่วนสรุปวิชา) ===== */
-function buildTeacherTableHTML3(teacher, S, ay, sh) {
-  const yr = ay?.year || "2568";
-  const logoImg = sh?.logo ? `<img src="${sh.logo}" style="height:44px;vertical-align:middle;margin-right:10px;"/>` : "";
-  const tName = `${teacher.prefix||""}${teacher.firstName} ${teacher.lastName}`;
-  const dept = S.depts.find(d => d.id === teacher.departmentId)?.name || "";
-
-  const DAYS = ["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
-  const PIDS = [1,2,3,4,5,6,7];
-  const PTIMES = ["08.30-09.20","09.20-10.10","10.25-11.15","11.15-12.05","13.00-13.50","13.50-14.00","14.50-15.40"];
-  const BRK_COLS = [
-    {time:"08.00-08.30", after:null},   // ก่อนคาบ 1 (homeroom)
-    {time:"10.10-10.25", afterPid:2},   // หลังคาบ 2
-    {time:"12.05-13.00", afterPid:4},   // หลังคาบ 4
-    {time:"13.50-14.00", afterPid:6},   // หลังคาบ 6
-  ];
-
-  // ── helper: ดึงข้อมูลเซลล์ ──
-  const getCell = (day, pid) => {
-    const results = [];
-    S.rooms.forEach(room => {
-      const key = room.id + "_" + day + "_" + pid;
-      (S.schedule[key] || []).forEach(e => {
-        if (e.teacherId !== teacher.id && !(e.coTeacherIds||[]).includes(teacher.id)) return;
-        const sub = S.subjects.find(s => s.id === e.subjectId);
-        results.push({ sub, room, entry: e });
-      });
-    });
-    return results;
-  };
-
-  // ── helper: ข้อความในเซลล์ homeroom row 1 ──
-  const getHomeroom = (day) => {
-    // เช็ค meetings ที่ครูมีในวันนั้น คาบ homeroom
-    const hmMeet = (S.meetings||[]).find(m =>
-      m.teacherId === teacher.id && m.day === day && (m.isAssembly || m.isHomeroom || (m.periods||[]).includes(0))
-    );
-    if (hmMeet) return hmMeet.isAssembly ? "เข้าหอประชุม" : (hmMeet.label||"Homeroom");
-    return "โฮมรูม";
-  };
-
-  // ── ข้อความห้องสั้น (เช่น "1.7") ──
-  const roomShort = (room) => {
-    if (!room) return "";
-    // ใช้ชื่อห้องตรงๆ
-    return room.name || "";
-  };
-
-  // ── สร้าง header ──
-  // columns: วัน | 08:00-08:30 | คาบ1 | คาบ2 | [พัก] | คาบ3 | คาบ4 | [พัก] | คาบ5 | คาบ6 | [พัก] | คาบ7
-  const vert = (txt, fs="6pt") =>
-    `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};letter-spacing:2px;text-align:center;">${txt}</div>`;
-
-  const thStyle = `border:1px solid #555;text-align:center;vertical-align:middle;font-size:8pt;font-weight:bold;padding:2px;`;
-  const brkStyle = `border:1px solid #555;background:#f9f9e8;padding:0;vertical-align:middle;text-align:center;width:18px;`;
-
-  const hdr = `<tr style="background:#f0f0f0;">
-    <th rowspan="2" style="${thStyle}width:52px;position:relative;">
-      <svg style="position:absolute;top:0;left:0;width:100%;height:100%;" preserveAspectRatio="none">
-        <line x1="0" y1="0" x2="100%" y2="100%" stroke="#888" stroke-width="0.8"/>
-      </svg>
-      <span style="position:absolute;top:3px;right:4px;font-size:5.5pt;font-weight:normal;">เวลา</span>
-      <span style="position:absolute;bottom:3px;left:4px;font-size:5.5pt;font-weight:normal;">วัน</span>
-    </th>
-    <th rowspan="2" style="${thStyle}width:60px;">08:00<br/>08:30</th>
-    <th style="${thStyle}">คาบ 1</th>
-    <th style="${thStyle}">คาบ 2</th>
-    <th rowspan="2" style="${brkStyle}">${vert("10.10-10.25")}</th>
-    <th style="${thStyle}">คาบ 3</th>
-    <th style="${thStyle}">คาบ 4</th>
-    <th rowspan="2" style="${brkStyle}">${vert("12.05-13.00")}</th>
-    <th style="${thStyle}">คาบ 5</th>
-    <th style="${thStyle}">คาบ 6</th>
-    <th rowspan="2" style="${brkStyle}">${vert("13.50-14.00")}</th>
-    <th style="${thStyle}">คาบ 7</th>
-  </tr>
-  <tr style="background:#f0f0f0;">
-    <td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;">08.30-09.20</td>
-    <td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;">09.20-10.10</td>
-    <td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;">10.25-11.15</td>
-    <td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;">11.15-12.05</td>
-    <td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;">13.00-13.50</td>
-    <td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;">13.50-14.40</td>
-    <td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;">14.50-15.40</td>
-  </tr>`;
-
-  // ── helper render cell ──
-  const tdCell = (cells, multi=false) => {
-    const bg = multi ? "background:#eeeeee;" : "";
-    if (!cells.length) return `<td style="border:1px solid #ccc;${bg}"></td>`;
-    // แสดงชื่อห้องสั้น เช่น 1.7
-    const inner = cells.map(c => {
-      const rs = roomShort(c.room);
-      // ถ้าเป็น Lock หรือ meeting
-      if (c.entry?.isLock) return `<span style="color:#cc0000;font-size:8pt;font-weight:bold;">Lock</span>`;
-      return `<span style="font-size:9pt;font-weight:bold;">${rs}</span>`;
-    }).join("<br>");
-    return `<td style="border:1px solid #ccc;text-align:center;vertical-align:middle;padding:2px;${bg}">${inner}</td>`;
-  };
-
-  // ── body rows ──
-  let body = "";
-  DAYS.forEach((day, di) => {
-    const bg = di % 2 === 0 ? "" : "background:#fafafa;";
-    const cells = PIDS.map(pid => getCell(day, pid));
-    const multi = PIDS.map((pid,i) => cells[i].length > 1);
-    const hmText = getHomeroom(day);
-    const isFirstDay = di === 0;
-
-    // check meetings/lock per cell
-    const meetings = (S.meetings||[]).filter(m => m.teacherId === teacher.id && m.day === day);
-    const getMeet = (pid) => meetings.find(m => (m.periods||[]).includes(pid));
-
-    const renderCell = (pid) => {
-      const idx = pid - 1;
-      const c = cells[idx];
-      const m = getMeet(pid);
-      const isMulti = multi[idx];
-      const bg2 = isMulti ? "background:#eeeeee;" : "";
-      if (m && !c.length) {
-        return `<td style="border:1px solid #ccc;text-align:center;vertical-align:middle;padding:2px;${bg2}"><span style="font-size:8pt;color:#1a237e;">${m.label||"Lock"}</span></td>`;
-      }
-      if (!c.length) return `<td style="border:1px solid #ccc;${bg2}"></td>`;
-      const inner = c.map(x => {
-        if (x.entry?.isLock) return `<b style="color:#cc0000;font-size:8pt;">Lock</b>`;
-        return `<b style="font-size:9.5pt;">${roomShort(x.room)}</b>`;
-      }).join("<br>");
-      return `<td style="border:1px solid #ccc;text-align:center;vertical-align:middle;padding:2px;${bg2}">${inner}</td>`;
-    };
-
-    body += `<tr style="height:32px;${bg}">
-      <td style="border:1px solid #888;text-align:center;font-weight:bold;font-size:9pt;vertical-align:middle;background:#f5f5f5;">${day}</td>
-      <td style="border:1px solid #888;text-align:center;vertical-align:middle;font-size:8.5pt;padding:2px;">${hmText}</td>
-      ${renderCell(1)}${renderCell(2)}
-      ${isFirstDay?`<td rowspan="${DAYS.length}" style="${brkStyle}">${vert("พักน้อย 15 นาที","6pt")}</td>`:""}
-      ${renderCell(3)}${renderCell(4)}
-      ${isFirstDay?`<td rowspan="${DAYS.length}" style="${brkStyle}">${vert("พักกลางวัน 55 นาที","6pt")}</td>`:""}
-      ${renderCell(5)}${renderCell(6)}
-      ${isFirstDay?`<td rowspan="${DAYS.length}" style="${brkStyle}">${vert("พักน้อย 10 นาที","6pt")}</td>`:""}
-      ${renderCell(7)}
-    </tr>`;
-  });
-
-  // ── ส่วนสรุปวิชา (ด้านล่าง) ──
-  // รวบรวมวิชาที่ครูสอนทั้งหมด
-  const subMap = {}; // subId → {sub, rooms: Set, periods: count}
-  DAYS.forEach(day => {
-    PIDS.forEach(pid => {
-      getCell(day, pid).forEach(({sub, room}) => {
-        if (!sub) return;
-        if (!subMap[sub.id]) subMap[sub.id] = {sub, roomSet: new Set(), totalPeriods: 0};
-        subMap[sub.id].roomSet.add(room.id);
-        subMap[sub.id].totalPeriods++;
-      });
-    });
-  });
-
-  // นับจาก assigns จริง
-  const assigns = (S.assigns||[]).filter(a => a.teacherId === teacher.id);
-
-  // extra: meetings ที่ครูมี (ลูกเสือ ชุมนุม ฯ)
-  const specialMeets = [...new Set(
-    (S.meetings||[])
-      .filter(m => m.teacherId === teacher.id && m.label && !m.isAssembly && !m.isHomeroom)
-      .map(m => m.label)
-  )];
-
-  // สร้างแถวสรุปวิชา
-  let summaryRows = "";
-  let grandTotal = 0;
-  assigns.forEach(a => {
-    const sub = S.subjects.find(s => s.id === a.subjectId);
-    if (!sub) return;
-    const rooms = (a.roomIds||[]).map(rid => S.rooms.find(r=>r.id===rid)).filter(Boolean);
-    const rCount = rooms.length;
-    const pPerRoom = sub.periodsPerWeek || Math.round((a.totalPeriods||0) / Math.max(rCount,1));
-    const total = a.totalPeriods || (pPerRoom * rCount);
-    grandTotal += total;
-    const roomNames = rooms.map(r=>r.name).join(", ");
-    const codes = sub.code ? `(${sub.code})` : "";
-    summaryRows += `<tr>
-      <td style="padding:1px 4px;font-size:9.5pt;">${sub.name||""} ${codes}</td>
-      <td style="padding:1px 4px;font-size:9.5pt;text-align:center;color:#1a237e;">${roomNames}</td>
-      <td style="padding:1px 4px;font-size:9.5pt;text-align:right;">${rCount} ห้อง</td>
-      <td style="padding:1px 4px;font-size:9.5pt;text-align:center;">×</td>
-      <td style="padding:1px 4px;font-size:9.5pt;text-align:right;">${pPerRoom} คาบ</td>
-      <td style="padding:1px 4px;font-size:9.5pt;text-align:center;">=</td>
-      <td style="padding:1px 4px;font-size:9.5pt;text-align:right;font-weight:bold;">${total}</td>
-      <td style="padding:1px 4px;font-size:9.5pt;">คาบ</td>
-    </tr>`;
-  });
-  specialMeets.forEach(label => {
-    summaryRows += `<tr>
-      <td colspan="8" style="padding:1px 4px;font-size:9.5pt;">${label}</td>
-    </tr>`;
-  });
-  summaryRows += `<tr>
-    <td colspan="5" style="padding:1px 4px;font-size:9.5pt;text-align:right;border-top:1px solid #999;">รวม</td>
-    <td style="padding:1px 4px;font-size:9.5pt;text-align:center;border-top:1px solid #999;">=</td>
-    <td style="padding:1px 4px;font-size:9.5pt;text-align:right;font-weight:bold;border-top:2px double #333;">${grandTotal}</td>
-    <td style="padding:1px 4px;font-size:9.5pt;border-top:1px solid #999;">คาบ</td>
-  </tr>`;
-
-  const totalPeriods = teacher.totalPeriods || grandTotal;
-
-  return `<div style="font-family:'TH SarabunNew','Sarabun',sans-serif;page-break-inside:avoid;">
-    <div style="text-align:center;margin-bottom:6px;">
-      ${logoImg}<span style="font-size:13pt;font-weight:bold;">ตารางสอน ปีการศึกษา ${yr}</span>
-    </div>
-    <table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-bottom:4px;">
-      <colgroup>
-        <col style="width:52px;"><col style="width:60px;">
-        <col><col>
-        <col style="width:18px;">
-        <col><col>
-        <col style="width:18px;">
-        <col><col>
-        <col style="width:18px;">
-        <col>
-      </colgroup>
-      <thead>${hdr}</thead>
-      <tbody>${body}</tbody>
-    </table>
-    <div style="margin-top:6px;font-size:9.5pt;">
-      <span style="color:#1a237e;font-weight:bold;">กลุ่มสาระการเรียนรู้</span>
-      &emsp;&emsp;
-      <span style="color:#1a237e;font-weight:bold;">${dept}</span>
-    </div>
-    <div style="display:flex;gap:20px;margin-top:4px;align-items:flex-start;">
-      <div style="flex:1;font-size:9.5pt;">
-        <div><b>อาจารย์ผู้สอน</b>&emsp;&emsp;${tName}</div>
-        ${assigns.map(a=>{
-          const sub=S.subjects.find(s=>s.id===a.subjectId);
-          if(!sub)return"";
-          const codeStr=sub.code?"("+sub.code+")":"";
-          return"<div>"+(sub.name||"")+" "+codeStr+"</div>";
-        }).join("")}
-        ${specialMeets.map(l=>"<div>"+l+"</div>").join("")}
-      </div>
-      <div>
-        <table style="font-size:9.5pt;border-collapse:collapse;">
-          <tbody>${summaryRows}</tbody>
-        </table>
-      </div>
-    </div>
-  </div>`;
-}
-
-function pdfPage(title, subtitle, dayRows, footerText, logoBase64) {
+function pdfPage(title, subtitle, dayRows, footerText, logoBase64, ps) {
+  const P=ps||DEFAULT_PRINT_SETTINGS;
+  const C=PRINT_COLORS[P.color]||PRINT_COLORS["แดง"];
+  const fScale=P.fontSize/100;
+  const rScale=P.rowHeight/100;
+  const ff=P.fontFamily||"TH SarabunNew";
   const PLIST = [
     { id: 1, time: "08.30-09.20" }, { id: 2, time: "09.20-10.10" },
     { id: 3, time: "10.25-11.15" }, { id: 4, time: "11.15-12.05" },
@@ -6140,7 +5658,7 @@ function pdfPage(title, subtitle, dayRows, footerText, logoBase64) {
       }).join("");
       return '<td class="slot' + (isDouble ? ' slot-hi' : '') + '">' + inner + '</td>';
     }).join("");
-    return '<tr><td class="day-cell">' + r.day + '</td>' + dayCells + '</tr>';
+    return '<tr><td class="day-cell">' + (r.day==="พฤหัสบดี"?"พฤหัส":r.day) + '</td>' + dayCells + '</tr>';
   }).join("\n");
 
   const logoHtml = logoBase64
@@ -6152,27 +5670,30 @@ function pdfPage(title, subtitle, dayRows, footerText, logoBase64) {
     "@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap');" +
     '@page{size:A4 portrait;margin:10mm 8mm}' +
     '*{margin:0;padding:0;box-sizing:border-box}' +
-    "body{font-family:'Sarabun','Noto Sans Thai',sans-serif;font-size:11px;color:#000}" +
-    '.page{width:100%;position:relative}' +
+    'html,body{width:210mm;overflow-x:hidden}' +
+    "body{font-family:'"+ff+"','Sarabun','Noto Sans Thai',sans-serif;font-size:"+(11*fScale).toFixed(1)+"px;color:#000}" +
+    '.page{width:100%;max-width:190mm;margin:0 auto;position:relative}' +
     '.header-row{display:flex;align-items:center;margin-bottom:6px;gap:12px}' +
     '.logo{width:48px;height:48px;border:1.5px solid #999;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;color:#666;flex-shrink:0}' +
     '.title-block{flex:1}' +
-    '.title-main{font-size:14px;font-weight:700}' +
-    '.title-sub{font-size:11px;color:#444;margin-top:2px}' +
+    '.title-main{font-size:'+(14*fScale).toFixed(1)+'px;font-weight:700}' +
+    '.title-sub{font-size:'+(11*fScale).toFixed(1)+'px;color:#444;margin-top:2px}' +
     'table{width:100%;border-collapse:collapse;table-layout:fixed;margin-top:4px}' +
     'th,td{border:1px solid #000;text-align:center;vertical-align:middle}' +
-    'th{padding:3px 1px;font-weight:700}' +
-    'th.period-num{font-size:13px;height:24px}' +
-    'th.period-time{font-size:9px;height:18px;font-weight:400}' +
-    'th.day-col{width:52px;font-size:11px;font-weight:700}' +
-    'td.day-cell{font-weight:700;font-size:12px;padding:4px 2px;width:52px}' +
-    'td.slot{padding:3px 2px;vertical-align:middle;height:68px;text-align:center}' +
+    'th{padding:3px 1px;font-weight:700;background:'+C.header+';color:'+C.headerText+'}' +
+    (P.showBorder?'':'th,td{border:none}') +
+    'th.period-num{font-size:'+(13*fScale).toFixed(1)+'px;height:'+(24*rScale).toFixed(0)+'px}' +
+    'th.period-time{font-size:'+(9*fScale).toFixed(1)+'px;height:'+(18*rScale).toFixed(0)+'px;font-weight:400;white-space:nowrap}' +
+    'th.day-col{width:54px;font-size:'+(12*fScale).toFixed(1)+'px;font-weight:700}' +
+    'td.day-cell{font-weight:700;font-size:'+(13*fScale).toFixed(1)+'px;padding:4px 2px;width:54px;background:#F3F4F6}' +
+    'td.slot{padding:3px 2px;vertical-align:middle;height:'+(76*rScale).toFixed(0)+'px;text-align:center}' +
     'td.slot-hi{background:#eeeeee}' +
-    '.ent{margin-bottom:2px;display:flex;flex-direction:column;align-items:center;justify-content:center}' +
-    '.ent-sub{font-weight:700;font-size:11px;line-height:1.3}' +
-    '.ent-room{font-size:10px;color:#111;line-height:1.25}' +
-    '.ent-room2{font-size:9px;color:#333;line-height:1.2}' +
-    '.sig-area{margin-top:16px;font-size:11px}' +
+    (P.showAltRow?'tbody tr:nth-child(even){background:'+C.rowAlt+'}':'') +
+    '.ent{margin-bottom:3px;display:flex;flex-direction:column;align-items:center;justify-content:center}' +
+    '.ent-sub{font-weight:700;font-size:'+(13*fScale).toFixed(1)+'px;line-height:1.3}' +
+    '.ent-room{font-size:'+(12*fScale).toFixed(1)+'px;color:#111;line-height:1.25}' +
+    '.ent-room2{font-size:'+(11*fScale).toFixed(1)+'px;color:#333;line-height:1.2}' +
+    '.sig-area{margin-top:16px;font-size:'+(11*fScale).toFixed(1)+'px}' +
     '.sig-flex{display:flex;justify-content:space-between;padding:0 20px}' +
     '.sig-box{text-align:center}' +
     '.sig-line{display:inline-block;width:160px;border-bottom:1px dotted #000;margin-bottom:3px}' +
@@ -6184,7 +5705,7 @@ function pdfPage(title, subtitle, dayRows, footerText, logoBase64) {
     '<div class="title-block"><div class="title-main">' + title + '</div><div class="title-sub">' + subtitle + '</div></div>' +
     '</div>' +
     '<table><thead>' +
-    '<tr><th class="day-col" rowspan="2">วัน<br/><span style="font-size:9px;font-weight:400">คาบ/เวลา</span></th>' + thNums + '</tr>' +
+    '<tr><th class="day-col" rowspan="2" style="vertical-align:middle;text-align:center;">วัน<br/><span style="font-size:9px;font-weight:400;white-space:nowrap">คาบ/เวลา</span></th>' + thNums + '</tr>' +
     '<tr>' + thTimes + '</tr>' +
     '</thead><tbody>' +
     bodyRows +
@@ -6197,7 +5718,12 @@ function pdfPage(title, subtitle, dayRows, footerText, logoBase64) {
 }
 
 /* ===== PDF: พิมพ์หลายตาราง 2 ต่อ 1 หน้า A4 แนวตั้ง ===== */
-function pdfMultiPage(pages, logoBase64) {
+function pdfMultiPage(pages, logoBase64, ps) {
+  const P=ps||DEFAULT_PRINT_SETTINGS;
+  const C=PRINT_COLORS[P.color]||PRINT_COLORS["แดง"];
+  const fScale=P.fontSize/100;
+  const rScale=P.rowHeight/100;
+  const ff=P.fontFamily||"TH SarabunNew";
   const PLIST = [
     { id: 1, time: "08.30-09.20" }, { id: 2, time: "09.20-10.10" },
     { id: 3, time: "10.25-11.15" }, { id: 4, time: "11.15-12.05" },
@@ -6223,7 +5749,7 @@ function pdfMultiPage(pages, logoBase64) {
         }).join("");
         return '<td class="slot' + (isDouble ? ' slot-hi' : '') + '">' + inner + '</td>';
       }).join("");
-      return '<tr><td class="day-cell">' + r.day + '</td>' + dayCells + '</tr>';
+      return '<tr><td class="day-cell">' + (r.day==="พฤหัสบดี"?"พฤหัส":r.day) + '</td>' + dayCells + '</tr>';
     }).join("\n");
 
     return '<div class="block">' +
@@ -6231,7 +5757,7 @@ function pdfMultiPage(pages, logoBase64) {
       '<div class="title-block"><div class="title-main">' + pg.title + '</div><div class="title-sub">' + pg.subtitle + '</div></div>' +
       '</div>' +
       '<table><thead>' +
-      '<tr><th class="day-col" rowspan="2">วัน<br/><span style="font-size:8px;font-weight:400">คาบ/เวลา</span></th>' + thNums + '</tr>' +
+      '<tr><th class="day-col" rowspan="2" style="vertical-align:middle;text-align:center;">วัน<br/><span style="font-size:8px;font-weight:400;white-space:nowrap">คาบ/เวลา</span></th>' + thNums + '</tr>' +
       '<tr>' + thTimes + '</tr>' +
       '</thead><tbody>' + bodyRows + '</tbody></table>' +
       '<div class="sig-area"><div class="sig-flex">' +
@@ -6253,29 +5779,32 @@ function pdfMultiPage(pages, logoBase64) {
     "@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap');" +
     '@page{size:A4 portrait;margin:8mm 7mm}' +
     '*{margin:0;padding:0;box-sizing:border-box}' +
-    "body{font-family:'Sarabun','Noto Sans Thai',sans-serif;font-size:10px;color:#000}" +
+    'html,body{width:210mm;overflow-x:hidden}' +
+    "body{font-family:'"+ff+"','Sarabun','Noto Sans Thai',sans-serif;font-size:"+(11*fScale).toFixed(1)+"px;color:#000}" +
     '.sheet{page-break-after:always}' +
     '.sheet:last-child{page-break-after:avoid}' +
     '.block{}' +
     '.header-row{display:flex;align-items:center;margin-bottom:4px;gap:8px}' +
     '.logo{width:36px;height:36px;border:1px solid #999;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:7px;color:#666;flex-shrink:0}' +
     '.title-block{flex:1}' +
-    '.title-main{font-size:12px;font-weight:700}' +
-    '.title-sub{font-size:10px;color:#444;margin-top:1px}' +
+    '.title-main{font-size:'+(14*fScale).toFixed(1)+'px;font-weight:700}' +
+    '.title-sub{font-size:'+(11*fScale).toFixed(1)+'px;color:#444;margin-top:1px}' +
     'table{width:100%;border-collapse:collapse;table-layout:fixed;margin-top:3px}' +
     'th,td{border:1px solid #000;text-align:center;vertical-align:middle}' +
-    'th{padding:2px 1px;font-weight:700}' +
-    'th.period-num{font-size:12px;height:20px}' +
-    'th.period-time{font-size:8px;height:15px;font-weight:400}' +
-    'th.day-col{width:46px;font-size:10px;font-weight:700}' +
-    'td.day-cell{font-weight:700;font-size:11px;padding:2px;width:46px}' +
-    'td.slot{padding:2px 1px;vertical-align:top;height:56px}' +
+    'th{padding:2px 1px;font-weight:700;background:'+C.header+';color:'+C.headerText+'}' +
+    (P.showBorder?'':'th,td{border:none}') +
+    'th.period-num{font-size:'+(13*fScale).toFixed(1)+'px;height:'+(22*rScale).toFixed(0)+'px}' +
+    'th.period-time{font-size:'+(9*fScale).toFixed(1)+'px;height:'+(16*rScale).toFixed(0)+'px;font-weight:400;white-space:nowrap}' +
+    'th.day-col{width:48px;font-size:'+(12*fScale).toFixed(1)+'px;font-weight:700}' +
+    'td.day-cell{font-weight:700;font-size:'+(13*fScale).toFixed(1)+'px;padding:2px;width:48px;background:#F3F4F6}' +
+    'td.slot{padding:2px 1px;vertical-align:middle;height:'+(62*rScale).toFixed(0)+'px;text-align:center}' +
     'td.slot-hi{background:#eeeeee}' +
-    '.ent{margin-bottom:1px}' +
-    '.ent-sub{font-weight:700;font-size:10px;line-height:1.25}' +
-    '.ent-room{font-size:9px;color:#111;line-height:1.2}' +
-    '.ent-room2{font-size:8px;color:#333;line-height:1.15}' +
-    '.sig-area{margin-top:4px;font-size:9px}' +
+    (P.showAltRow?'tbody tr:nth-child(even){background:'+C.rowAlt+'}':'') +
+    '.ent{margin-bottom:2px;display:flex;flex-direction:column;align-items:center;justify-content:center}' +
+    '.ent-sub{font-weight:700;font-size:'+(12*fScale).toFixed(1)+'px;line-height:1.3}' +
+    '.ent-room{font-size:'+(11*fScale).toFixed(1)+'px;color:#111;line-height:1.2}' +
+    '.ent-room2{font-size:'+(10*fScale).toFixed(1)+'px;color:#333;line-height:1.15}' +
+    '.sig-area{margin-top:5px;font-size:'+(10*fScale).toFixed(1)+'px}' +
     '.sig-flex{display:flex;justify-content:space-between;padding:0 15px}' +
     '.sig-box{text-align:center}' +
     '.sig-line{display:inline-block;width:130px;border-bottom:1px dotted #000;margin-bottom:2px}' +
