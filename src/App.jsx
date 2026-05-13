@@ -1781,6 +1781,10 @@ export default function App() {
         switchDivision(firstAllowed.id);
       }
     }
+    // Auto-redirect ครู (isTeacher only) ไปหน้าแลกคาบทันทีที่โหลดสิทธิ์
+    if(userPerms?.divisions?.isTeacher===true&&!(userPerms?.divisions?.canEdit)){
+      setPage('swap');
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[userPerms]);
 
@@ -1951,7 +1955,32 @@ export default function App() {
         </div>
       </div>
       <nav style={{flex:1,padding:"12px 10px",overflowY:"auto"}}>
-        {nav.map(n=><div key={n.id} className={`ni ${page===n.id?"a":""}`} onClick={()=>setPage(n.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:10,cursor:"pointer",color:page===n.id?"#fff":"rgba(255,255,255,0.7)",fontSize:13,fontWeight:page===n.id?700:400,marginBottom:2,transition:"all 0.15s",background:page===n.id?"rgba(255,255,255,0.15)":"transparent"}}><Icon name={n.icon} size={16}/>{n.label}</div>)}
+        {nav.map(n=>{
+          // ตรวจสิทธิ์ครู (isTeacher) — ให้เข้าได้แค่หน้า swap
+          const isTeacherOnly = firebaseConfigured && userPerms?.divisions?.isTeacher === true && !userPerms?.divisions?.canEdit;
+          const isLocked = isTeacherOnly && n.id !== "swap";
+          return (
+            <div
+              key={n.id}
+              className={`ni ${page===n.id?"a":""}`}
+              onClick={()=>{ if(!isLocked) setPage(n.id); }}
+              title={isLocked?"คุณมีสิทธิ์เฉพาะหน้าแลกคาบ / สอนแทน":""}
+              style={{
+                display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:10,
+                cursor:isLocked?"not-allowed":"pointer",
+                color: isLocked ? "rgba(255,255,255,0.25)" : (page===n.id?"#fff":"rgba(255,255,255,0.7)"),
+                fontSize:13,fontWeight:page===n.id?700:400,marginBottom:2,transition:"all 0.15s",
+                background:page===n.id?"rgba(255,255,255,0.15)":"transparent",
+                opacity: isLocked ? 0.4 : 1,
+                userSelect:"none",
+              }}
+            >
+              <Icon name={n.icon} size={16}/>
+              {n.label}
+              {isLocked && <span style={{marginLeft:"auto",fontSize:10,opacity:0.6}}>🔒</span>}
+            </div>
+          );
+        })}
       </nav>
       <div style={{padding:"12px 16px",borderTop:"1px solid #F3F4F6"}}>
         {firebaseConfigured&&authUser&&<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,padding:"8px 10px",background:"#F9FAFB",borderRadius:10}}>
@@ -1992,11 +2021,20 @@ export default function App() {
       </header>
       <main style={{flex:1,overflow:"auto",padding:"20px 24px",background:"#F3F4F6"}}>
         {/* No access guard */}
+        {/* ── Guard 1: ไม่มีสิทธิ์ระดับชั้นนี้ ── */}
         {firebaseConfigured&&!divHasAccess
           ?<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:16}}>
               <div style={{fontSize:48}}>🔒</div>
               <h2 style={{fontSize:20,fontWeight:700,color:"#374151"}}>ไม่มีสิทธิ์เข้าระดับนี้</h2>
               <p style={{color:"#6B7280",fontSize:14}}>กรุณาติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์ {div.name}</p>
+            </div>
+          // ── Guard 2: ครู (isTeacher only) ห้ามเข้าหน้าอื่นนอกจาก swap ──
+          :firebaseConfigured&&userPerms?.divisions?.isTeacher===true&&!(userPerms?.divisions?.canEdit)&&page!=="swap"
+          ?<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:16}}>
+              <div style={{fontSize:48}}>🔒</div>
+              <h2 style={{fontSize:20,fontWeight:700,color:"#374151"}}>ไม่มีสิทธิ์เข้าหน้านี้</h2>
+              <p style={{color:"#6B7280",fontSize:14}}>คุณมีสิทธิ์เฉพาะหน้า <strong>แลกคาบ / สอนแทน</strong> เท่านั้น</p>
+              <button onClick={()=>setPage("swap")} style={{padding:"10px 24px",background:"#DC2626",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:700,cursor:"pointer"}}>→ ไปหน้าแลกคาบ</button>
             </div>
           :<>
             {page==="dashboard"&&<Dash S={S} setPage={setPage}/>}
