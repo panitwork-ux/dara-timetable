@@ -5227,10 +5227,12 @@ function SwapPage({S,st,ay,sh}){
     setResults(res);setSelected({});setSearched(true);
     if(!res.length)st("ไม่พบครูที่สอนแทนได้","warning");
   };
-  const printForm=()=>{
+  // ── สร้าง HTML ฟอร์มแลกคาบ (A4 แนวนอน) ──
+  const buildSwapHtml=()=>{
     const filledKeys=results.map(r=>r.day+"_"+r.period+"_"+r.roomId).filter(k=>selected[k]);
-    if(!filledKeys.length){st("เลือกครูสอนแทนอย่างน้อย 1 คาบก่อน","error");return;}
-    const tA=S.teachers.find(t=>t.id===teacherA);const school=sh?.name||"โรงเรียนดาราวิทยาลัย";
+    if(!filledKeys.length)return null;
+    const tA=S.teachers.find(t=>t.id===teacherA);
+    const school=sh?.name||"โรงเรียนดาราวิทยาลัย";
     const yr=ay?.year||"2568";const sem=ay?.semester||"1";
     const finalReason=reason==="อื่นๆ"?(reasonOther||"อื่นๆ"):reason;
     const logo=sh?.logo?'<img src="'+sh.logo+'" style="height:50px;vertical-align:middle;margin-right:10px;"/>':"";
@@ -5238,84 +5240,270 @@ function SwapPage({S,st,ay,sh}){
     const absentRangeStr=absentDateTo&&absentDateTo!==absentDateFrom?fmtDate(absentDateFrom)+" — "+fmtDate(absentDateTo):fmtDate(absentDateFrom);
     const rows=filledKeys.map(k=>{const r=results.find(r=>r.day+"_"+r.period+"_"+r.roomId===k);const sel=selected[k];const tB=S.teachers.find(t=>t.id===sel.subTeacherId);return{r,sel,tB};});
     const tAName=(tA?.prefix||"")+(tA?.firstName||"")+" "+(tA?.lastName||"");
-    const tableRows=rows.map(({r,sel,tB},i)=>'<tr><td style="text-align:center">'+(i+1)+'</td><td style="text-align:center">'+r.day+'<br/><b>'+fmtDate(absentDateFrom)+'</b><br/>คาบ '+r.period+'<br/><span style="font-size:10pt;color:#555;">('+r.time+')</span></td><td>'+(sel.subBName||r.subFullName||r.subName)+'<br/><span style="font-size:10pt;color:#555;">ห้อง '+(sel.subBRoom||r.roomName)+'</span></td><td><b>'+(tB?.prefix||"")+(tB?.firstName||"")+" "+(tB?.lastName||"")+'</b></td><td style="text-align:center">'+sel.subDay+'<br/><b>'+fmtDate(sel.calcDate||"")+'</b><br/>คาบ '+sel.subPeriod+'<br/><span style="font-size:10pt;color:#555;">('+( PERIODS_SW.find(p=>p.id===sel.subPeriod)?.time||"")+')</span></td><td>'+(r.subFullName||r.subName)+'<br/><span style="font-size:10pt;color:#555;">ห้อง '+r.roomName+'</span></td><td></td></tr>').join("");
-    const html='<!DOCTYPE html><html><head><meta charset="utf-8"/><style>@page{size:A4 landscape;margin:10mm 12mm}*{box-sizing:border-box}body{font-family:\'TH SarabunNew\',\'Sarabun\',sans-serif;font-size:13pt;color:#000;margin:0}.hdr{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:4px}.hdr h1{font-size:17pt;font-weight:700;margin:0}.info{display:grid;grid-template-columns:repeat(4,1fr);gap:2px 12px;margin:8px 0;font-size:12pt}.info .lbl{font-weight:700}table{width:100%;border-collapse:collapse;font-size:12pt;margin:6px 0}thead tr{background:#B91C1C;color:#fff}thead th{padding:6px 8px;font-weight:700;text-align:center;border:1px solid #8B0000}tbody tr:nth-child(even){background:#FFF5F5}td{padding:5px 8px;border:1px solid #D1D5DB;vertical-align:middle}.sigs{display:flex;justify-content:space-around;margin-top:14px}.sig{flex:1;text-align:center}.sig-line{display:block;width:85%;margin:0 auto 4px;border-bottom:1px solid #000}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="hdr">'+logo+'<div><h1>แบบฟอร์มขอแลกเปลี่ยนคาบสอน / สอนแทน</h1><div style="text-align:center;font-size:11pt;color:#444">'+school+' | ภาคเรียนที่ '+sem+'/'+yr+'</div></div></div><div class="info"><div><span class="lbl">ครูผู้ขอแลก: </span>'+tAName+'</div><div><span class="lbl">กลุ่มสาระ: </span>'+(deptA?.name||"—")+'</div><div><span class="lbl">วันที่ไม่อยู่: </span>'+absentRangeStr+'</div><div><span class="lbl">เหตุผล: </span>'+finalReason+'</div></div><table><thead><tr><th style="width:3%">#</th><th style="width:13%">คาบที่ขอ</th><th style="width:18%">วิชา/ห้อง (ที่ครูสอนแทน)</th><th style="width:15%">ครูสอนแทน</th><th style="width:13%">คาบที่ '+tAName+' สอนคืน</th><th style="width:18%">วิชา/ห้อง (ที่ '+tAName+' สอนคืน)</th><th style="width:20%">หมายเหตุ</th></tr></thead><tbody>'+tableRows+'</tbody></table><div class="sigs"><div class="sig"><span class="sig-line"></span><div>'+tAName+'</div><div style="font-size:10pt;color:#555">ผู้ขอแลก วันที่ ___________</div></div><div class="sig"><span class="sig-line"></span><div>(............................)</div><div style="font-size:10pt;color:#555">หัวหน้ากลุ่มสาระ'+(deptA?.name?"<br/>"+deptA.name:"")+'</div></div></div></body></html>';
-    const w=window.open("","_blank");if(!w){st("Browser บล็อก popup","error");return;}
-    w.document.write(html);w.document.close();setTimeout(()=>w.print(),500);st("กำลังเปิดหน้า print...");
+    const tableRows=rows.map(({r,sel,tB},i)=>
+      '<tr><td style="text-align:center">'+(i+1)+'</td>'+
+      '<td style="text-align:center">'+r.day+'<br/><b>'+fmtDate(absentDateFrom)+'</b><br/>คาบ '+r.period+'<br/><span style="font-size:10pt;color:#555;">('+r.time+')</span></td>'+
+      '<td>'+(sel.subBName||r.subFullName||r.subName)+'<br/><span style="font-size:10pt;color:#555;">ห้อง '+(sel.subBRoom||r.roomName)+'</span></td>'+
+      '<td><b>'+(tB?.prefix||"")+(tB?.firstName||"")+" "+(tB?.lastName||"")+'</b></td>'+
+      '<td style="text-align:center">'+sel.subDay+'<br/><b>'+fmtDate(sel.calcDate||"")+'</b><br/>คาบ '+sel.subPeriod+'<br/><span style="font-size:10pt;color:#555;">('+( PERIODS_SW.find(p=>p.id===sel.subPeriod)?.time||"")+')</span></td>'+
+      '<td>'+(r.subFullName||r.subName)+'<br/><span style="font-size:10pt;color:#555;">ห้อง '+r.roomName+'</span></td>'+
+      '<td></td></tr>'
+    ).join("");
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"/>'+
+      '<style>@page{size:A4 landscape;margin:10mm 12mm}*{box-sizing:border-box}'+
+      "body{font-family:'TH SarabunNew','Sarabun',sans-serif;font-size:13pt;color:#000;margin:0}"+
+      '.hdr{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:4px}'+
+      '.hdr h1{font-size:17pt;font-weight:700;margin:0}'+
+      '.info{display:grid;grid-template-columns:repeat(4,1fr);gap:2px 12px;margin:8px 0;font-size:12pt}'+
+      '.info .lbl{font-weight:700}'+
+      'table{width:100%;border-collapse:collapse;font-size:12pt;margin:6px 0}'+
+      'thead tr{background:#B91C1C;color:#fff}'+
+      'thead th{padding:6px 8px;font-weight:700;text-align:center;border:1px solid #8B0000}'+
+      'tbody tr:nth-child(even){background:#FFF5F5}'+
+      'td{padding:5px 8px;border:1px solid #D1D5DB;vertical-align:middle}'+
+      '.sigs{display:flex;justify-content:space-around;margin-top:14px}'+
+      '.sig{flex:1;text-align:center}'+
+      '.sig-line{display:block;width:85%;margin:0 auto 4px;border-bottom:1px solid #000}'+
+      '@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'+
+      '</style></head><body>'+
+      '<div class="hdr">'+logo+'<div><h1>แบบฟอร์มขอแลกเปลี่ยนคาบสอน / สอนแทน</h1>'+
+      '<div style="text-align:center;font-size:11pt;color:#444">'+school+' | ภาคเรียนที่ '+sem+'/'+yr+'</div></div></div>'+
+      '<div class="info">'+
+        '<div><span class="lbl">ครูผู้ขอแลก: </span>'+tAName+'</div>'+
+        '<div><span class="lbl">กลุ่มสาระ: </span>'+(deptA?.name||"—")+'</div>'+
+        '<div><span class="lbl">วันที่ไม่อยู่: </span>'+absentRangeStr+'</div>'+
+        '<div><span class="lbl">เหตุผล: </span>'+finalReason+'</div>'+
+      '</div>'+
+      '<table><thead><tr>'+
+        '<th style="width:3%">#</th>'+
+        '<th style="width:13%">คาบที่ขอ</th>'+
+        '<th style="width:18%">วิชา/ห้อง (ที่ครูสอนแทน)</th>'+
+        '<th style="width:15%">ครูสอนแทน</th>'+
+        '<th style="width:13%">คาบที่ '+tAName+' สอนคืน</th>'+
+        '<th style="width:18%">วิชา/ห้อง (ที่ '+tAName+' สอนคืน)</th>'+
+        '<th style="width:20%">หมายเหตุ</th>'+
+      '</tr></thead><tbody>'+tableRows+'</tbody></table>'+
+      '<div class="sigs">'+
+        '<div class="sig"><span class="sig-line"></span><div>'+tAName+'</div><div style="font-size:10pt;color:#555">ผู้ขอแลก วันที่ ___________</div></div>'+
+        '<div class="sig"><span class="sig-line"></span><div>(............................)</div><div style="font-size:10pt;color:#555">หัวหน้ากลุ่มสาระ'+(deptA?.name?"<br/>"+deptA.name:"")+'</div></div>'+
+      '</div></body></html>';
+  };
+  const printForm=()=>{
+    const html=buildSwapHtml();
+    if(!html){st("เลือกครูสอนแทนอย่างน้อย 1 คาบก่อน","error");return;}
+    const w=window.open("","_blank");
+    if(!w){st("Browser บล็อก popup","error");return;}
+    w.document.write(html);w.document.close();setTimeout(()=>w.print(),500);
+    st("กำลังเปิดหน้า print...");
+  };
+  const downloadSwapPDF=()=>{
+    const html=buildSwapHtml();
+    if(!html){st("เลือกครูสอนแทนอย่างน้อย 1 คาบก่อน","error");return;}
+    const tA=S.teachers.find(t=>t.id===teacherA);
+    const tAName=(tA?.prefix||"")+(tA?.firstName||"")+" "+(tA?.lastName||"");
+    const blob=new Blob([html],{type:"text/html;charset=utf-8"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;
+    a.download="แลกคาบ_"+tAName.trim()+"_"+fmtDate(absentDateFrom)+".html";
+    a.click();URL.revokeObjectURL(url);
+    st("ดาวน์โหลดไฟล์แล้ว — เปิดไฟล์แล้วสั่ง Print → Save as PDF");
   };
   return(
-    <div style={{animation:"fadeIn 0.3s",display:"flex",flexDirection:"column",gap:14}}>
-      <div style={{background:"#fff",borderRadius:14,padding:18,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
-        <h2 style={{fontSize:15,fontWeight:700,marginBottom:14}}>📋 ขั้นที่ 1 — ครูที่ขอแลก และคาบที่ไม่อยู่</h2>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
-          <div><label style={LS}>ครู A (ผู้ขอแลก)</label><SearchSelect value={teacherA} onChange={v=>{setTeacherA(v);setAbsentSlots([]);setSearched(false);}} options={[{value:"",label:"-- เลือกครู --"},...S.teachers.map(t=>({value:t.id,label:t.prefix+t.firstName+" "+t.lastName}))]} placeholder="-- เลือกครู --"/></div>
-          <div><label style={LS}>เหตุผล</label><div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{REASON_OPTS.map(r=><button key={r} onClick={()=>setReason(r)} style={{padding:"5px 10px",borderRadius:20,border:"2px solid "+(reason===r?"#B91C1C":"#D1D5DB"),background:reason===r?"#FEE2E2":"#fff",fontSize:12,fontWeight:reason===r?700:400,cursor:"pointer"}}>{r}</button>)}</div>{reason==="อื่นๆ"&&<input style={{...IS,marginTop:6}} value={reasonOther} onChange={e=>setReasonOther(e.target.value)} placeholder="ระบุเหตุผล..."/>}</div>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
-          <div><label style={LS}>📅 วันที่เริ่มต้น</label><input type="date" style={IS} value={absentDateFrom} onChange={e=>{setAbsentDateFrom(e.target.value);setAbsentSlots([]);setSearched(false);}}/>{absentDateFrom&&<div style={{fontSize:11,color:"#991B1B",marginTop:3,fontWeight:600}}>{fmtDate(absentDateFrom)}</div>}</div>
-          <div><label style={LS}>📅 วันที่สิ้นสุด (ถ้ามากกว่า 1 วัน)</label><input type="date" style={IS} value={absentDateTo} min={absentDateFrom||undefined} onChange={e=>{setAbsentDateTo(e.target.value);setAbsentSlots([]);setSearched(false);}}/></div>
-        </div>
-        {absentRange.length>0&&<div style={{background:"#FEF2F2",borderRadius:10,padding:"7px 12px",marginBottom:12,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-          <span style={{fontSize:12,fontWeight:700,color:"#991B1B"}}>📌 วันที่ไม่อยู่:</span>
-          {absentRange.map(r=><span key={r.dateStr} style={{background:"#FEE2E2",color:"#991B1B",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:600}}>{r.dayName} {fmtDate(r.dateStr)}</span>)}
-        </div>}
-        {teacherA&&<div>
-          <label style={{...LS,marginBottom:8}}>เลือกคาบที่ครู A <b>ไม่อยู่</b> <span style={{fontWeight:400,fontSize:11,color:"#9CA3AF"}}>(กดที่คาบที่มีวิชา)</span></label>
-          <div style={{overflowX:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:500}}>
-              <thead><tr style={{background:"#F9FAFB"}}><th style={{padding:"5px 8px",border:"1px solid #E5E7EB",textAlign:"left",width:76}}>วัน</th>{PERIODS_SW.map(p=><th key={p.id} style={{padding:"4px 2px",border:"1px solid #E5E7EB",textAlign:"center",fontSize:10,minWidth:76}}>คาบ {p.id}<br/><span style={{fontWeight:400,fontSize:9,color:"#6B7280"}}>{p.time}</span></th>)}</tr></thead>
-              <tbody>{DAYS_SW.map(day=>{
-                const inRange=absentRange.length===0||absentDayNames.has(day);
-                return <tr key={day} style={{opacity:absentRange.length>0&&!inRange?0.3:1}}>
-                  <td style={{padding:"4px 8px",border:"1px solid #E5E7EB",fontWeight:700,fontSize:11,background:inRange&&absentRange.length>0?"#FFF5F5":"#F9FAFB",color:inRange&&absentRange.length>0?"#991B1B":"#374151"}}>{day}</td>
-                  {PERIODS_SW.map(p=>{
-                    const ents=getEntries(teacherA,day,p.id);const picked=absentSlots.some(s=>s.day===day&&s.period===p.id);const hasClass=ents.length>0;const canClick=hasClass&&inRange;
-                    return <td key={p.id} onClick={()=>canClick&&toggleSlot(day,p.id)} style={{padding:"2px",border:"1px solid #E5E7EB",textAlign:"center",verticalAlign:"middle",height:50,minWidth:76,background:picked?"#FEE2E2":hasClass&&inRange?"#FFF7ED":hasClass?"#F9FAFB":"",cursor:canClick?"pointer":"default",outline:picked?"2px solid #DC2626":"none"}}>
-                      {ents.map((e,i)=><div key={i} style={{fontSize:11,lineHeight:1.3}}><div style={{fontWeight:700,color:picked?"#991B1B":inRange?"#1E40AF":"#9CA3AF"}}>{e.subName.length>8?e.subName.slice(0,8)+"…":e.subName}</div><div style={{color:"#6B7280",fontSize:10}}>{e.roomName}</div></div>)}
-                      {picked&&<div style={{fontSize:9,color:"#DC2626",fontWeight:700}}>✕ ขอแลก</div>}
-                    </td>;
-                  })}
-                </tr>;
-              })}</tbody>
-            </table>
+    <div style={{animation:"fadeIn 0.3s",display:"flex",flexDirection:"column",gap:12}}>
+      {/* ── ขั้นที่ 1 ── */}
+      <div style={{background:"#fff",borderRadius:14,padding:"16px 14px",boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
+        <h2 style={{fontSize:15,fontWeight:700,marginBottom:12}}>📋 ขั้นที่ 1 — ครูที่ขอแลก และคาบที่ไม่อยู่</h2>
+
+        {/* ครู + เหตุผล */}
+        <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:12}}>
+          <div>
+            <label style={LS}>ครูผู้ขอแลก</label>
+            <SearchSelect value={teacherA} onChange={v=>{setTeacherA(v);setAbsentSlots([]);setSearched(false);}}
+              options={[{value:"",label:"-- เลือกครู --"},...S.teachers.map(t=>({value:t.id,label:t.prefix+t.firstName+" "+t.lastName}))]}
+              placeholder="-- เลือกครู --"/>
           </div>
-          <button onClick={doSearch} style={{...BS(),marginTop:12}}>🔍 ค้นหาครูสอนแทน</button>
-        </div>}
-      </div>
-      {searched&&<div style={{background:"#fff",borderRadius:14,padding:18,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
-        <h2 style={{fontSize:15,fontWeight:700,marginBottom:12}}>🔍 ขั้นที่ 2 — เลือกครูสอนแทน และคาบที่ครู A สอนคืน</h2>
-        {results.length===0?<div style={{textAlign:"center",padding:24,color:"#9CA3AF"}}>ไม่พบครูที่สอนแทนได้</div>:
-        results.map(r=>{
-          const key=r.day+"_"+r.period+"_"+r.roomId;const sel=selected[key];
-          return <div key={key} style={{marginBottom:12,border:"1.5px solid #E5E7EB",borderRadius:12,overflow:"hidden"}}>
-            <div style={{background:"#FFF5F5",padding:"8px 12px",borderBottom:"1px solid #FECACA",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-              <span style={{background:"#FEE2E2",color:"#991B1B",padding:"2px 9px",borderRadius:20,fontSize:12,fontWeight:700}}>{r.day} คาบ {r.period}</span>
-              <span style={{fontSize:13,fontWeight:700}}>{r.subName}</span><span style={{fontSize:12,color:"#6B7280"}}>ห้อง {r.roomName}</span>
-              {sel&&<span style={{background:"#D1FAE5",color:"#065F46",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:600}}>✅ เลือกแล้ว</span>}
-            </div>
-            {r.candidates.length===0?<div style={{padding:"10px 12px",color:"#9CA3AF",fontSize:12}}>ไม่มีครูว่างในเงื่อนไข</div>:
-            <div style={{padding:"10px 12px"}}>
-              {r.candidates.map(({teacher:tB,returnSlots})=>(
-                <div key={tB.id} style={{background:"#F9FAFB",borderRadius:10,padding:"10px 12px",border:"1px solid #E5E7EB",marginBottom:8}}>
-                  <div style={{fontWeight:700,fontSize:13,marginBottom:6}}>{tB.prefix}{tB.firstName} {tB.lastName}</div>
-                  <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                    {returnSlots.map((rs,ri)=>{
-                      const isAct=sel?.subTeacherId===tB.id&&sel?.subDay===rs.day&&sel?.subPeriod===rs.period&&sel?.calcDate===rs.calcDate;
-                      return <button key={ri} onClick={()=>setSelected(p=>({...p,[key]:{subTeacherId:tB.id,subDay:rs.day,subPeriod:rs.period,calcDate:rs.calcDate,subBName:rs.subBName,subBRoom:rs.subBRoom}}))}
-                        style={{padding:"5px 10px",borderRadius:8,border:"2px solid "+(isAct?"#059669":"#D1D5DB"),background:isAct?"#F0FDF4":"#fff",color:isAct?"#065F46":"#374151",fontSize:11,fontWeight:isAct?700:400,cursor:"pointer",minWidth:140,textAlign:"left"}}>
-                        <div style={{fontWeight:700}}>{isAct?"✓ ":""}{rs.day} คาบ {rs.period}</div>
-                        <div style={{fontSize:10,color:isAct?"#059669":"#6B7280"}}>📅 {fmtDate(rs.calcDate)}</div>
-                        {rs.subBName&&<div style={{fontSize:10,color:"#1E40AF"}}>📚 {rs.subBName}</div>}
-                      </button>;
-                    })}
-                  </div>
-                </div>
+          <div>
+            <label style={LS}>เหตุผล</label>
+            <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+              {REASON_OPTS.map(r=>(
+                <button key={r} onClick={()=>setReason(r)} style={{padding:"6px 12px",borderRadius:20,border:"2px solid "+(reason===r?"#B91C1C":"#D1D5DB"),background:reason===r?"#FEE2E2":"#fff",fontSize:13,fontWeight:reason===r?700:400,cursor:"pointer"}}>{r}</button>
               ))}
-            </div>}
-          </div>;
-        })}
-        {results.length>0&&<button onClick={printForm} disabled={!Object.keys(selected).length} style={{...BS("#059669"),opacity:Object.keys(selected).length?1:0.4}}>{"🖨️ พิมพ์ฟอร์มแลกคาบ ("+Object.keys(selected).length+" คาบ)"}</button>}
-      </div>}
+            </div>
+            {reason==="อื่นๆ"&&<input style={{...IS,marginTop:6}} value={reasonOther} onChange={e=>setReasonOther(e.target.value)} placeholder="ระบุเหตุผล..."/>}
+          </div>
+        </div>
+
+        {/* วันที่ */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+          <div>
+            <label style={LS}>📅 วันที่เริ่มต้น</label>
+            <input type="date" style={IS} value={absentDateFrom} onChange={e=>{setAbsentDateFrom(e.target.value);setAbsentSlots([]);setSearched(false);}}/>
+            {absentDateFrom&&<div style={{fontSize:11,color:"#991B1B",marginTop:3,fontWeight:600}}>{fmtDate(absentDateFrom)}</div>}
+          </div>
+          <div>
+            <label style={LS}>📅 วันที่สิ้นสุด</label>
+            <input type="date" style={IS} value={absentDateTo} min={absentDateFrom||undefined} onChange={e=>{setAbsentDateTo(e.target.value);setAbsentSlots([]);setSearched(false);}}/>
+          </div>
+        </div>
+
+        {/* วันที่ไม่อยู่ badge */}
+        {absentRange.length>0&&(
+          <div style={{background:"#FEF2F2",borderRadius:10,padding:"7px 12px",marginBottom:12,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+            <span style={{fontSize:12,fontWeight:700,color:"#991B1B"}}>📌 วันที่ไม่อยู่:</span>
+            {absentRange.map(r=>(
+              <span key={r.dateStr} style={{background:"#FEE2E2",color:"#991B1B",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:600}}>{r.dayName} {fmtDate(r.dateStr)}</span>
+            ))}
+          </div>
+        )}
+
+        {/* ตารางเลือกคาบ — mobile: card layout แทน table */}
+        {teacherA&&(
+          <div>
+            <label style={{...LS,marginBottom:8}}>เลือกคาบที่ <b>ไม่อยู่</b> <span style={{fontWeight:400,fontSize:11,color:"#9CA3AF"}}>(แตะที่คาบที่มีวิชา)</span></label>
+
+            {/* Desktop: table scroll */}
+            <div style={{display:"none"}} className="swap-table-desktop">
+              <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:500}}>
+                  <thead>
+                    <tr style={{background:"#F9FAFB"}}>
+                      <th style={{padding:"5px 8px",border:"1px solid #E5E7EB",textAlign:"left",width:76}}>วัน</th>
+                      {PERIODS_SW.map(p=>(
+                        <th key={p.id} style={{padding:"4px 2px",border:"1px solid #E5E7EB",textAlign:"center",fontSize:10,minWidth:72}}>
+                          คาบ {p.id}<br/><span style={{fontWeight:400,fontSize:9,color:"#6B7280"}}>{p.time}</span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {DAYS_SW.map(day=>{
+                      const inRange=absentRange.length===0||absentDayNames.has(day);
+                      return <tr key={day} style={{opacity:absentRange.length>0&&!inRange?0.3:1}}>
+                        <td style={{padding:"4px 8px",border:"1px solid #E5E7EB",fontWeight:700,fontSize:11,background:inRange&&absentRange.length>0?"#FFF5F5":"#F9FAFB",color:inRange&&absentRange.length>0?"#991B1B":"#374151"}}>{day}</td>
+                        {PERIODS_SW.map(p=>{
+                          const ents=getEntries(teacherA,day,p.id);const picked=absentSlots.some(s=>s.day===day&&s.period===p.id);const hasClass=ents.length>0;const canClick=hasClass&&inRange;
+                          return <td key={p.id} onClick={()=>canClick&&toggleSlot(day,p.id)} style={{padding:"2px",border:"1px solid #E5E7EB",textAlign:"center",verticalAlign:"middle",height:50,minWidth:72,background:picked?"#FEE2E2":hasClass&&inRange?"#FFF7ED":hasClass?"#F9FAFB":"",cursor:canClick?"pointer":"default",outline:picked?"2px solid #DC2626":"none"}}>
+                            {ents.map((e,i)=><div key={i} style={{fontSize:11,lineHeight:1.3}}><div style={{fontWeight:700,color:picked?"#991B1B":inRange?"#1E40AF":"#9CA3AF"}}>{e.subName.length>7?e.subName.slice(0,7)+"…":e.subName}</div><div style={{color:"#6B7280",fontSize:10}}>{e.roomName}</div></div>)}
+                            {picked&&<div style={{fontSize:9,color:"#DC2626",fontWeight:700}}>✕</div>}
+                          </td>;
+                        })}
+                      </tr>;
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Mobile: วันเป็น section ขยายได้ */}
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {DAYS_SW.map(day=>{
+                const inRange=absentRange.length===0||absentDayNames.has(day);
+                const daySlots=PERIODS_SW.map(p=>({p,ents:getEntries(teacherA,day,p.id),picked:absentSlots.some(s=>s.day===day&&s.period===p.id)}));
+                const dayHasClass=daySlots.some(s=>s.ents.length>0);
+                const dayPickedCount=daySlots.filter(s=>s.picked).length;
+                return (
+                  <div key={day} style={{borderRadius:12,border:"1.5px solid "+(dayPickedCount>0?"#FECACA":inRange&&absentRange.length>0?"#FED7AA":"#E5E7EB"),background:dayPickedCount>0?"#FFF5F5":inRange&&absentRange.length>0?"#FFFBEB":"#F9FAFB",overflow:"hidden",opacity:absentRange.length>0&&!inRange?0.35:1}}>
+                    <div style={{padding:"8px 12px",fontWeight:700,fontSize:13,color:dayPickedCount>0?"#991B1B":inRange&&absentRange.length>0?"#92400E":"#374151",display:"flex",alignItems:"center",gap:8}}>
+                      <span>{day}</span>
+                      {dayPickedCount>0&&<span style={{background:"#FEE2E2",color:"#991B1B",padding:"1px 8px",borderRadius:20,fontSize:11,fontWeight:700}}>เลือก {dayPickedCount} คาบ</span>}
+                      {!dayHasClass&&<span style={{fontSize:11,color:"#9CA3AF",fontWeight:400}}>ไม่มีคาบสอน</span>}
+                    </div>
+                    {dayHasClass&&(
+                      <div style={{display:"flex",flexWrap:"wrap",gap:6,padding:"0 12px 10px"}}>
+                        {daySlots.map(({p,ents,picked})=>{
+                          const hasClass=ents.length>0;const canClick=hasClass&&inRange;
+                          return (
+                            <button key={p.id} onClick={()=>canClick&&toggleSlot(day,p.id)} disabled={!canClick}
+                              style={{minWidth:72,padding:"6px 8px",borderRadius:10,border:"2px solid "+(picked?"#DC2626":hasClass&&inRange?"#FED7AA":"#E5E7EB"),background:picked?"#FEE2E2":hasClass&&inRange?"#FFFBEB":"#fff",cursor:canClick?"pointer":"default",textAlign:"center",fontFamily:"inherit",transition:"all 0.15s"}}>
+                              <div style={{fontSize:11,fontWeight:700,color:"#374151"}}>คาบ {p.id}</div>
+                              <div style={{fontSize:9,color:"#9CA3AF",marginBottom:2}}>{p.time}</div>
+                              {ents.map((e,i)=>(
+                                <div key={i}>
+                                  <div style={{fontSize:12,fontWeight:700,color:picked?"#991B1B":inRange?"#1E40AF":"#9CA3AF",lineHeight:1.2}}>{e.subName.length>8?e.subName.slice(0,8)+"…":e.subName}</div>
+                                  <div style={{fontSize:10,color:"#6B7280"}}>{e.roomName}</div>
+                                </div>
+                              ))}
+                              {picked&&<div style={{fontSize:10,color:"#DC2626",fontWeight:700,marginTop:2}}>✕ ขอแลก</div>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <button onClick={doSearch} style={{...BS(),marginTop:12,width:"100%",padding:"12px",fontSize:14}}>
+              🔍 ค้นหาครูสอนแทน {absentSlots.length>0&&"("+absentSlots.length+" คาบ)"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ── ขั้นที่ 2 ── */}
+      {searched&&(
+        <div style={{background:"#fff",borderRadius:14,padding:"16px 14px",boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
+          <h2 style={{fontSize:15,fontWeight:700,marginBottom:12}}>🔍 ขั้นที่ 2 — เลือกครูสอนแทน</h2>
+          {results.length===0
+            ? <div style={{textAlign:"center",padding:24,color:"#9CA3AF"}}>ไม่พบครูที่สอนแทนได้</div>
+            : results.map(r=>{
+                const key=r.day+"_"+r.period+"_"+r.roomId;const sel=selected[key];
+                return (
+                  <div key={key} style={{marginBottom:12,border:"1.5px solid "+(sel?"#86EFAC":"#E5E7EB"),borderRadius:12,overflow:"hidden"}}>
+                    {/* คาบ header */}
+                    <div style={{background:sel?"#F0FDF4":"#FFF5F5",padding:"10px 12px",borderBottom:"1px solid "+(sel?"#BBF7D0":"#FECACA"),display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                      <span style={{background:sel?"#D1FAE5":"#FEE2E2",color:sel?"#065F46":"#991B1B",padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:700}}>{r.day} คาบ {r.period}</span>
+                      <span style={{fontSize:13,fontWeight:700}}>{r.subName}</span>
+                      <span style={{fontSize:12,color:"#6B7280"}}>ห้อง {r.roomName}</span>
+                      {sel&&<span style={{marginLeft:"auto",background:"#D1FAE5",color:"#065F46",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>✅ เลือกแล้ว</span>}
+                    </div>
+
+                    {r.candidates.length===0
+                      ? <div style={{padding:"10px 12px",color:"#9CA3AF",fontSize:12}}>ไม่มีครูว่างในเงื่อนไข</div>
+                      : <div style={{padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
+                          {r.candidates.map(({teacher:tB,returnSlots})=>(
+                            <div key={tB.id} style={{background:sel?.subTeacherId===tB.id?"#F0FDF4":"#F9FAFB",borderRadius:10,padding:"10px 12px",border:"1.5px solid "+(sel?.subTeacherId===tB.id?"#86EFAC":"#E5E7EB")}}>
+                              <div style={{fontWeight:700,fontSize:14,marginBottom:8,color:"#1E3A5F"}}>{tB.prefix}{tB.firstName} {tB.lastName}</div>
+                              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                                {returnSlots.map((rs,ri)=>{
+                                  const isAct=sel?.subTeacherId===tB.id&&sel?.subDay===rs.day&&sel?.subPeriod===rs.period&&sel?.calcDate===rs.calcDate;
+                                  return (
+                                    <button key={ri}
+                                      onClick={()=>setSelected(p=>({...p,[key]:{subTeacherId:tB.id,subDay:rs.day,subPeriod:rs.period,calcDate:rs.calcDate,subBName:rs.subBName,subBRoom:rs.subBRoom}}))}
+                                      style={{padding:"7px 10px",borderRadius:10,border:"2px solid "+(isAct?"#059669":"#D1D5DB"),background:isAct?"#F0FDF4":"#fff",color:isAct?"#065F46":"#374151",fontSize:12,fontWeight:isAct?700:400,cursor:"pointer",minWidth:130,textAlign:"left",fontFamily:"inherit"}}>
+                                      <div style={{fontWeight:700,fontSize:13}}>{isAct?"✓ ":""}{rs.day} คาบ {rs.period}</div>
+                                      <div style={{fontSize:11,color:isAct?"#059669":"#6B7280",marginTop:1}}>📅 {fmtDate(rs.calcDate)}</div>
+                                      {rs.subBName&&<div style={{fontSize:11,color:"#1E40AF",marginTop:1}}>📚 {rs.subBName}</div>}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                    }
+                  </div>
+                );
+              })
+          }
+
+          {/* ── ปุ่ม print + download ── */}
+          {results.length>0&&(
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:4}}>
+              <button onClick={printForm} disabled={!Object.keys(selected).length}
+                style={{...BS("#059669"),flex:"1 1 160px",opacity:Object.keys(selected).length?1:0.4,fontSize:14,padding:"12px 16px"}}>
+                🖨️ พิมพ์ฟอร์ม ({Object.keys(selected).length} คาบ)
+              </button>
+              <button onClick={downloadSwapPDF} disabled={!Object.keys(selected).length}
+                style={{...BS("#2563EB"),flex:"1 1 160px",opacity:Object.keys(selected).length?1:0.4,fontSize:14,padding:"12px 16px"}}>
+                📥 โหลด PDF ({Object.keys(selected).length} คาบ)
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
