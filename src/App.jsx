@@ -5169,8 +5169,39 @@ function SwapPage({S,st,ay,sh}){
     return out;
   };
   const isFree=(tid,day,pid)=>{
+    const t=S.teachers.find(x=>x.id===tid);
+    if(!t)return false;
+
+    // 1) คาบล็อคส่วนตัวครู (personalLocks)
+    if((t.personalLocks||[]).some(pl=>pl.day===day&&(pl.periods||[]).includes(pid)))return false;
+
+    // 2) หน้าที่พิเศษ (specialRoles → ฝ่ายวิชาการ/วินัย)
+    const roleBlocked=(t.specialRoles||[]).some(rid=>{
+      const role=SROLES.find(r=>r.id===rid);
+      return (role?.blocked||[]).some(bl=>bl.day===day&&(bl.periods||[]).includes(pid));
+    });
+    if(roleBlocked)return false;
+
+    // 3) คาบล็อคกลุ่มสาระ (type="dept" หรือไม่มี type)
+    const deptBlocked=(S.meetings||[]).some(m=>{
+      if(m.type&&m.type!=="dept")return false; // ข้าม custom/homeroom
+      if(m.isAssembly||m.isHomeroom)return false;
+      if(m.departmentId!==t.departmentId)return false;
+      return m.day===day&&(m.periods||[]).includes(pid);
+    });
+    if(deptBlocked)return false;
+
+    // 4) คาบล็อคทั้งโรงเรียน (type="custom" — ล็อคทุกคน)
+    const customBlocked=(S.meetings||[]).some(m=>{
+      if(m.type!=="custom")return false;
+      return (m.slots||[]).some(sl=>sl.day===day&&sl.period===pid);
+    });
+    if(customBlocked)return false;
+
+    // 5) meeting ส่วนตัวครู (teacherId ตรงกัน)
     if((S.meetings||[]).some(m=>m.teacherId===tid&&m.day===day&&(m.periods||[]).includes(pid)))return false;
-    // ตรวจ lock ของ slot ที่ครูคนนี้สอนอยู่
+
+    // 6) คาบที่ล็อคไว้ใน schedule
     const hasLockedSlot=Object.entries(S.schedule).some(([k,en])=>{
       if(!en?.length)return false;
       const pts=k.split("_");
@@ -5179,8 +5210,11 @@ function SwapPage({S,st,ay,sh}){
       return en.some(e=>{const coIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);return e.teacherId===tid||coIds.includes(tid);});
     });
     if(hasLockedSlot)return false;
+
+    // 7) มีคาบสอนอยู่แล้ว
     return Object.entries(S.schedule).every(([k,en])=>{
-      if(!en?.length)return true;const pts=k.split("_");
+      if(!en?.length)return true;
+      const pts=k.split("_");
       if(pts[pts.length-2]!==day||parseInt(pts[pts.length-1])!==pid)return true;
       return en.every(e=>{const coIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);return e.teacherId!==tid&&!coIds.includes(tid);});
     });
