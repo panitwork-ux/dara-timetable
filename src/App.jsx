@@ -5541,6 +5541,7 @@ function SwapPage({S,st,ay,sh}){
   };
   return(
     <div style={{animation:"fadeIn 0.3s",display:"flex",flexDirection:"column",gap:12,maxWidth:680,margin:"0 auto",padding:"0 0 24px"}}>
+      <style>{`@media(max-width:520px){.swap-period-grid{grid-template-columns:repeat(4,1fr)!important}}`}</style>
 
       {/* ── ขั้นที่ 1 ── */}
       <div style={{background:"#fff",borderRadius:16,border:"0.5px solid #E5E7EB",padding:"20px 20px 16px"}}>
@@ -5655,11 +5656,11 @@ function SwapPage({S,st,ay,sh}){
                       )}
                     </div>
 
-                    {/* คาบ grid — 4 cols */}
+                    {/* คาบ grid — 7 cols บนคอม, 4 cols บนมือถือ */}
                     {showFull&&dayHasClass&&(
-                      <div style={{
+                      <div className="swap-period-grid" style={{
                         display:"grid",
-                        gridTemplateColumns:"repeat(4,1fr)",
+                        gridTemplateColumns:"repeat(7,1fr)",
                         gap:5,padding:"8px 10px 10px"
                       }}>
                         {daySlots.map(({p,ents,picked})=>{
@@ -5669,7 +5670,7 @@ function SwapPage({S,st,ay,sh}){
                             <button key={p.id} onClick={()=>canClick&&toggleSlot(day,p.id)}
                               disabled={!canClick}
                               style={{
-                                borderRadius:8,padding:"7px 4px",textAlign:"center",
+                                borderRadius:8,padding:"8px 4px",textAlign:"center",
                                 cursor:canClick?"pointer":"default",fontFamily:"inherit",
                                 border:picked?"1.5px solid #DC2626":hasClass&&canClick?"0.5px solid #FED7AA":"0.5px solid #E5E7EB",
                                 background:picked?"#FEE2E2":hasClass&&canClick?"#FFFBEB":"#fff",
@@ -5681,7 +5682,7 @@ function SwapPage({S,st,ay,sh}){
                               <div style={{fontSize:9,color:"#9CA3AF",margin:"1px 0 2px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.time}</div>
                               {ents.map((e,i)=>(
                                 <div key={i}>
-                                  <div style={{fontSize:11,fontWeight:600,color:picked?"#991B1B":canClick?"#1E40AF":"#C4B5A5",lineHeight:1.2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:1,WebkitBoxOrient:"vertical"}}>
+                                  <div style={{fontSize:11,fontWeight:600,color:picked?"#991B1B":canClick?"#1E40AF":"#C4B5A5",lineHeight:1.2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>
                                     {e.subName}
                                   </div>
                                   <div style={{fontSize:10,color:"#9CA3AF"}}>{e.roomName}</div>
