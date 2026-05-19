@@ -823,6 +823,103 @@ const DIVISIONS=[
   {id:"m2",name:"มัธยมศึกษาตอนปลาย",short:"มัธยมปลาย",defaultLevels:["ม.4","ม.5","ม.6"]},
 ];
 
+// ===== PERIOD CONFIG ตามระดับ =====
+// คาบ 1-5 เหมือนกันทุกระดับ
+// ประถมต้น (p1): คาบ6=13.50-14.40, พักหลังคาบ6 (14.40-14.50), คาบ7=14.50-15.40
+// ระดับอื่น:     พักหลังคาบ5 (13.50-14.00), คาบ6=14.00-14.50, คาบ7=14.50-15.40
+const PERIOD_BASE=[
+  {id:1,time:"08.30-09.20"},{id:2,time:"09.20-10.10"},
+  {id:3,time:"10.25-11.15"},{id:4,time:"11.15-12.05"},
+  {id:5,time:"13.00-13.50"},
+];
+// break ก่อนคาบ = [{afterPeriod, label, key}]
+// afterPeriod: หลังคาบไหน / key: "brk0"=08.00-08.30, "brk1"=10.10-10.25, "brk2"=12.05-13.00
+const PERIOD_CONFIG={
+  // ประถมต้น: ไม่มีพักหลัง p5, คาบ6=13.50-14.40, พักหลังคาบ6, คาบ7=14.50-15.40
+  p1:{
+    periods:[
+      ...PERIOD_BASE,
+      {id:6,time:"13.50-14.40"},
+      {id:7,time:"14.50-15.40"},
+    ],
+    // break columns: [ก่อนคาบ1, ก่อนคาบ3, ก่อนคาบ5, ก่อนคาบ7]
+    breaks:[
+      {label:"08.00-08.30",afterPid:0},   // ก่อนคาบ 1
+      {label:"10.10-10.25",afterPid:2},   // หลังคาบ 2
+      {label:"12.05-13.00",afterPid:4},   // หลังคาบ 4
+      {label:"14.40-14.50",afterPid:6},   // หลังคาบ 6 ← ต่างจากระดับอื่น
+    ],
+  },
+  // ระดับอื่น (p2, m1, m2): พักหลังคาบ5, คาบ6=14.00-14.50, คาบ7=14.50-15.40
+  default:{
+    periods:[
+      ...PERIOD_BASE,
+      {id:6,time:"14.00-14.50"},
+      {id:7,time:"14.50-15.40"},
+    ],
+    breaks:[
+      {label:"08.00-08.30",afterPid:0},   // ก่อนคาบ 1
+      {label:"10.10-10.25",afterPid:2},   // หลังคาบ 2
+      {label:"12.05-13.00",afterPid:4},   // หลังคาบ 4
+      {label:"13.50-14.00",afterPid:5},   // หลังคาบ 5 ← ต่างจาก p1
+    ],
+  },
+};
+// helper: ได้ config ตาม divisionId
+function getPeriodCfg(divisionId){
+  return PERIOD_CONFIG[divisionId]||PERIOD_CONFIG.default;
+}
+// helper: ได้ divisionId จาก levelId
+// ใช้ level.divisionId ที่บันทึกไว้ (migrate อัตโนมัติเมื่อเปิด LevelsPage)
+// fallback: guess จากชื่อ level
+// ── single source of truth: guess division จากชื่อ level ──
+function guessDivisionFromName(name){
+  const n=(name||"").trim();
+  for(const div of DIVISIONS){
+    if((div.defaultLevels||[]).some(dl=>n===dl||n.startsWith(dl+"/")||n.startsWith(dl+" "))) return div.id;
+  }
+  if(/ป\.?\s*[1-3]\b/.test(n)) return "p1";
+  if(/ป\.?\s*[4-6]\b/.test(n)) return "p2";
+  if(/ม\.?\s*[1-3]\b/.test(n)) return "m1";
+  if(/ม\.?\s*[4-6]\b/.test(n)) return "m2";
+  if(n.includes("ประถมต้น")||n.includes("ป.ต้น")) return "p1";
+  if(n.includes("ประถมปลาย")||n.includes("ป.ปลาย")) return "p2";
+  if(n.includes("มัธยมต้น")||n.includes("ม.ต้น")) return "m1";
+  if(n.includes("มัธยมปลาย")||n.includes("ม.ปลาย")) return "m2";
+  return "m2";
+}
+function getDivisionForLevel(levelId, levels){
+  const lv = levels?.find(l => l.id === levelId);
+  if(!lv) return "m2";
+  // ใช้ค่าที่บันทึกไว้ก่อน ถ้าไม่มีค่อย guess จากชื่อ
+  return lv.divisionId || guessDivisionFromName(lv.name);
+}
+// helper: ได้ divisionId จาก roomId ผ่าน S.rooms+S.levels
+function getDivisionForRoom(room,S){
+  return getDivisionForLevel(room?.levelId,S?.levels);
+}
+
+
+// helper: หา divisionId หลักของครูจาก rooms ที่สอน
+function getDivisionForTeacher(teacherId, S){
+  for(const day of ["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"]){
+    for(const pid of [1,2,3,4,5,6,7]){
+      const entry=Object.entries(S.schedule||{}).find(([k,en])=>{
+        if(!k.endsWith("_"+day+"_"+pid))return false;
+        return(en||[]).some(e=>{
+          const co=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
+          return e.teacherId===teacherId||co.includes(teacherId);
+        });
+      });
+      if(entry){
+        const rid=entry[0].split("_")[0];
+        const rm=S.rooms?.find(r=>r.id===rid);
+        if(rm) return getDivisionForLevel(rm.levelId, S.levels);
+      }
+    }
+  }
+  return "m2";
+}
 
 // ===== MAIN APP COMPONENT =====
 function groupEntries(entries) {
@@ -924,6 +1021,16 @@ function CornerTh(){
 // Slot cell for format 1
 function SlotCell1({entries,isRoom}){
   if(!entries||!entries.length)return <td className="td-slot"/>;
+  // custom lock — แสดงสีส้มอ่อน
+  if(entries[0]?.isCustomLock){
+    return (
+      <td className="td-slot" style={{background:"#FFF3E0"}}>
+        <div className="ent">
+          <div className="ent-sub" style={{color:"#E65100",fontSize:"8pt"}}>{entries[0].sub}</div>
+        </div>
+      </td>
+    );
+  }
   const grp=groupEntries(entries);
   const hi=grp.some(e=>e.double||e.roomCount>1);
   return (
@@ -1328,6 +1435,22 @@ function buildF2Html(teachers, S, ay, sh, ps) {
       });
 
       const sep = ti > 0 ? ' style="border-top:1px dashed #ccc;margin-top:5px;padding-top:5px"' : '';
+
+      // หา division ของครูจาก rooms ที่สอน (ใช้ first match)
+      const tDivId=(()=>{
+        for(const day of DAYS2){for(const pid of [1,2,3,4,5,6,7]){
+          const entry=Object.entries(S.schedule).find(([k,en])=>{
+            if(!k.endsWith("_"+day+"_"+pid))return false;
+            return(en||[]).some(e=>{const co=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);return e.teacherId===t.id||co.includes(t.id);});
+          });
+          if(entry){const rid=entry[0].split("_")[0];const rm=S.rooms.find(r=>r.id===rid);if(rm){const lv=S.levels.find(l=>l.id===rm.levelId);if(lv?.divisionId)return lv.divisionId;}}
+        }}
+        return "m2";
+      })();
+      const tPcfg=getPeriodCfg(tDivId);
+      const p6time=tPcfg.periods[5]?.time||"14.00-14.50";
+      const brk4label=tDivId==="p1"?"14.40-14.50":"13.50-14.00";
+
       pairHtml +=
         '<div' + sep + '>' +
         '<div class="hdr2">' + logo +
@@ -1358,9 +1481,14 @@ function buildF2Html(teachers, S, ay, sh, ps) {
         '<th class="ph2" style="' + thBg + '">คาบ 4<br/><span class="tl2">11.15-12.05</span></th>' +
         '<th class="brkh brkm" rowspan="2"><div class="vt2" style="height:' + vtH2 + 'px">12.05-13.00</div></th>' +
         '<th class="ph2" style="' + thBg + '">คาบ 5<br/><span class="tl2">13.00-13.50</span></th>' +
-        '<th class="ph2" style="' + thBg + '">คาบ 6<br/><span class="tl2">14.00-14.50</span></th>' +
-        '<th class="brkh" rowspan="2"><div class="vt2" style="height:' + vtH2 + 'px">13.50-14.00</div></th>' +
-        '<th class="ph2" style="' + thBg + '">คาบ 7<br/><span class="tl2">14.50-15.40</span></th>' +
+        (tDivId==="p1"
+          ? '<th class="ph2" style="' + thBg + '">คาบ 6<br/><span class="tl2">' + p6time + '</span></th>' +
+            '<th class="brkh" rowspan="2"><div class="vt2" style="height:' + vtH2 + 'px">' + brk4label + '</div></th>' +
+            '<th class="ph2" style="' + thBg + '">คาบ 7<br/><span class="tl2">14.50-15.40</span></th>'
+          : '<th class="ph2" style="' + thBg + '">คาบ 6<br/><span class="tl2">' + p6time + '</span></th>' +
+            '<th class="brkh" rowspan="2"><div class="vt2" style="height:' + vtH2 + 'px">' + brk4label + '</div></th>' +
+            '<th class="ph2" style="' + thBg + '">คาบ 7<br/><span class="tl2">14.50-15.40</span></th>'
+        ) +
         '</tr><tr style="height:' + HDR_H + 'px"></tr>' +
         '</thead><tbody>' + tbody + '</tbody></table></div>';
     });
@@ -1407,7 +1535,8 @@ function buildF3Html(teachers, S, ay, sh) {
   const ff = "TH SarabunNew";
   const DAYS3 = ["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
   const SD3 = {"พฤหัสบดี":"พฤหัส"};
-  const PTIMES3 = ["08.30-09.20","09.20-10.10","10.25-11.15","11.15-12.05","13.00-13.50","14.00-14.50","14.50-15.40"];
+  const PTIMES3_DEFAULT = ["08.30-09.20","09.20-10.10","10.25-11.15","11.15-12.05","13.00-13.50","14.00-14.50","14.50-15.40"];
+  const PTIMES3_P1      = ["08.30-09.20","09.20-10.10","10.25-11.15","11.15-12.05","13.00-13.50","13.50-14.40","14.50-15.40"];
   const PIDS3 = [1,2,3,4,5,6,7];
   const NDAYS = DAYS3.length;
   const sd3 = d => SD3[d] || d;
@@ -1496,7 +1625,14 @@ function buildF3Html(teachers, S, ay, sh) {
       '<td class="sn3">คาบ</td>'+
     '</tr>';
 
-    const pbAfter = (ti+1)%3===0 && ti<teachers.length-1;
+    const tDivId3=(()=>{
+      for(const day of DAYS3){for(const pid of PIDS3){
+        const rm3=S.rooms.find(room=>(S.schedule[room.id+"_"+day+"_"+pid]||[]).some(e=>{const co=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);return e.teacherId===t.id||co.includes(t.id);}));
+        if(rm3){const lv3=S.levels.find(l=>l.id===rm3.levelId);if(lv3?.divisionId)return lv3.divisionId;}
+      }}return"m2";
+    })();
+    const PTIMES3=tDivId3==="p1"?PTIMES3_P1:PTIMES3_DEFAULT;
+    const brk4lbl3=tDivId3==="p1"?"14.40-14.50":"13.50-14.00";
     const showSep  = !pbAfter && ti<teachers.length-1;
 
     bodyHtml +=
@@ -1526,7 +1662,7 @@ function buildF3Html(teachers, S, ay, sh) {
         '<th class="f3h2">คาบ 3</th><th class="f3h2">คาบ 4</th>' +
         '<th class="f3b" rowspan="2" style="width:'+(BRK_W+2)+'px"><div class="vt3" style="height:'+(HDR1_H+HDR2_H)+'px">12.05-13.00</div></th>' +
         '<th class="f3h2">คาบ 5</th><th class="f3h2">คาบ 6</th>' +
-        '<th class="f3b" rowspan="2" style="width:'+BRK_W+'px"><div class="vt3" style="height:'+(HDR1_H+HDR2_H)+'px">13.50-14.00</div></th>' +
+        '<th class="f3b" rowspan="2" style="width:'+BRK_W+'px"><div class="vt3" style="height:'+(HDR1_H+HDR2_H)+'px">'+brk4lbl3+'</div></th>' +
         '<th class="f3h2">คาบ 7</th>' +
       '</tr>' +
       '<tr style="height:'+HDR2_H+'px">' +
@@ -2077,12 +2213,28 @@ function Dash({S,setPage}){
 function Levels({S,U,st}){
   const [rm,setRm]=useState(false);
   const [rf,setRf]=useState({levelId:"",planId:"",name:""});
+  // Auto-migrate: levels ที่ไม่มี divisionId → guess จากชื่อ
+  useEffect(()=>{
+    const needMigrate=S.levels.some(l=>!l.divisionId);
+    if(needMigrate){
+      U.setLevels(p=>p.map(l=>l.divisionId?l:{...l,divisionId:guessDivision(l.name)}));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+
   const fileRefLv=useRef(null);
   const fileRefRm=useRef(null);
 
-  const addLv=()=>{const n=prompt("ชื่อระดับชั้น:");if(n){U.setLevels(p=>[...p,{id:gid(),name:n}]);st("เพิ่มสำเร็จ")}};
-  const editLv=(lv)=>{const n=prompt("แก้ไขชื่อระดับชั้น:",lv.name);if(n){U.setLevels(p=>p.map(l=>l.id===lv.id?{...l,name:n}:l));st("แก้ไขสำเร็จ")}};
-
+  // ใช้ guessDivisionFromName จาก constants แทน (single source of truth)
+  const guessDivision=(name)=>guessDivisionFromName(name);
+  const addLv=()=>{
+    const n=prompt("ชื่อระดับชั้น:");
+    if(n){U.setLevels(p=>[...p,{id:gid(),name:n,divisionId:guessDivision(n)}]);st("เพิ่มสำเร็จ")}
+  };
+  const editLv=(lv)=>{
+    const n=prompt("แก้ไขชื่อระดับชั้น:",lv.name);
+    if(n){U.setLevels(p=>p.map(l=>l.id===lv.id?{...l,name:n,divisionId:l.divisionId||guessDivision(n)}:l));st("แก้ไขสำเร็จ")}
+  };
   const importLevels=async(e)=>{const f=e.target.files?.[0];if(!f)return;
     const rows=f.name.endsWith('.csv')?parseCSV(await f.text()):await readExcelFile(f);
     const newL=rows.map(r=>({id:gid(),name:String(r["ชื่อระดับชั้น"]||"").trim()})).filter(x=>x.name);
@@ -2123,6 +2275,29 @@ function Levels({S,U,st}){
           </div>
         </div>
         <div style={{padding:16}}>
+          {/* ระดับการศึกษา (division) */}
+          <div style={{marginBottom:10,padding:"8px 12px",background:"#FFF7ED",borderRadius:8,border:"1px solid #FED7AA"}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#92400E",marginBottom:6}}>🏫 ระดับการศึกษา (กำหนดเวลาคาบ 6-7)</div>
+            <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+              {DIVISIONS.map(div=>{
+                const cur=lv.divisionId||guessDivision(lv.name);
+                const active=cur===div.id;
+                return(
+                  <button key={div.id}
+                    onClick={()=>U.setLevels(p=>p.map(l=>l.id===lv.id?{...l,divisionId:div.id}:l))}
+                    style={{padding:"3px 10px",borderRadius:20,border:`1.5px solid ${active?"#92400E":"#D1D5DB"}`,background:active?"#92400E":"#fff",color:active?"#fff":"#374151",fontSize:11,fontWeight:active?700:400,cursor:"pointer"}}>
+                    {div.short}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{fontSize:10,color:"#92400E",marginTop:4}}>
+              {(()=>{const d=DIVISIONS.find(d=>d.id===(lv.divisionId||guessDivision(lv.name)));
+                return d?.id==="p1"?"⏰ คาบ 6 = 13.50-14.40 | พัก | คาบ 7 = 14.50-15.40"
+                  :"⏰ พักหลังคาบ 5 | คาบ 6 = 14.00-14.50 | คาบ 7 = 14.50-15.40";
+              })()}
+            </div>
+          </div>
           {/* วันเข้าหอประชุม */}
           <div style={{marginBottom:10,padding:"8px 12px",background:"#F0F9FF",borderRadius:8,border:"1px solid #BAE6FD"}}>
             <div style={{fontSize:11,fontWeight:700,color:"#0369A1",marginBottom:6}}>🏛️ วันเข้าหอประชุม (Assembly 08.00-08.30)</div>
@@ -4264,12 +4439,13 @@ function Scheduler({S,U,st,gc,isSavingRef,fsReadyRef,fsSave}){
                 <thead>
                   <tr style={{borderBottom:`2px solid ${lc.head}`}}>
                     <th style={{padding:"10px 10px",background:lc.head,color:"#fff",width:62,textAlign:"left",fontSize:13,fontWeight:700,letterSpacing:"0.02em"}}>วัน</th>
-                    {PERIODS.map(p=>(
-                      <th key={p.id} style={{padding:"6px 2px",background:lc.head,textAlign:"center",borderLeft:"1px solid rgba(255,255,255,0.2)"}}>
-                        <div style={{fontSize:11,color:"#fff",fontWeight:700}}>คาบ {p.id}</div>
-                        <div style={{fontSize:9,color:"rgba(255,255,255,0.7)",fontWeight:400}}>{p.time}</div>
-                      </th>
-                    ))}
+              {/* header: ใช้เวลาคาบตาม division ของห้อง */}
+              {(()=>{const rm=S.rooms.find(r=>r.id===rid);const divId=getDivisionForRoom(rm,S);const pList=getPeriodCfg(divId).periods;return pList.map(p=>(
+                <th key={p.id} style={{padding:"6px 2px",background:lc.head,textAlign:"center",borderLeft:"1px solid rgba(255,255,255,0.2)"}}>
+                  <div style={{fontSize:11,color:"#fff",fontWeight:700}}>คาบ {p.id}</div>
+                  <div style={{fontSize:9,color:"rgba(255,255,255,0.7)",fontWeight:400}}>{p.time}</div>
+                </th>
+              ));})()}
                   </tr>
                 </thead>
                 <tbody>
@@ -4283,6 +4459,8 @@ function Scheduler({S,U,st,gc,isSavingRef,fsReadyRef,fsSave}){
                         const en=S.schedule[key]||[];
                         const lk=!!S.locks[key];
                         const bl=mode==="teacher"&&!!selT&&isBlk(selT,day,p.id);
+                        // คาบล็อคแผนก (custom) — แสดงทุกตาราง
+                        const customLock=(S.meetings||[]).find(m=>m.type==="custom"&&(m.slots||[]).some(s=>s.day===day&&s.period===p.id));
                         return (
                           <td key={p.id}
                             className="dz"
@@ -4292,8 +4470,13 @@ if(d.assignmentId){const a=S.assigns.find(x=>x.id===d.assignmentId);const sCa=S.
 e.preventDefault();e.currentTarget.classList.add("over");}}
                             onDragLeave={e=>e.currentTarget.classList.remove("over")}
                             onDrop={e=>{e.preventDefault();e.currentTarget.classList.remove("over");handleDrop(rid,day,p.id);}}
-                            style={{padding:3,verticalAlign:"top",minHeight:68,borderLeft:`1px solid ${lc.border}`,borderBottom:`1px solid ${lc.border}`,background:bl?"#FEF9C3":lk?"#F0FDF4":"inherit"}}
+                            style={{padding:3,verticalAlign:"top",minHeight:68,borderLeft:`1px solid ${lc.border}`,borderBottom:`1px solid ${lc.border}`,background:customLock?"#FFF3E0":bl?"#FEF9C3":lk?"#F0FDF4":"inherit"}}
                           >
+                            {customLock&&(
+                              <div style={{fontSize:9,color:"#E65100",textAlign:"center",padding:"2px 2px 0",fontWeight:700,lineHeight:1.2}}>
+                                🏫 {customLock.name}
+                              </div>
+                            )}
                             {bl&&en.length===0&&(
                               <div style={{fontSize:9,color:"#92400E",textAlign:"center",padding:4}}>
                                 🔒 {blocked(selT).find(b=>b.day===day&&b.period===p.id)?.reason}
@@ -4356,12 +4539,12 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                 <thead>
                   <tr>
                     <th style={{padding:"7px 10px",background:"#1E3A5F",color:"#fff",width:72,textAlign:"left",fontSize:12,fontWeight:700,position:"sticky",top:0,zIndex:2}}>วัน</th>
-                    {PERIODS.map(p=>(
+                    {(()=>{const tDiv=selT?getDivisionForTeacher(selT,S):"m2";const pListW=getPeriodCfg(tDiv).periods;return pListW.map(p=>(
                       <th key={p.id} style={{padding:"5px 3px",background:"#1E3A5F",textAlign:"center",borderLeft:"1px solid rgba(255,255,255,0.15)",position:"sticky",top:0,zIndex:2}}>
                         <div style={{fontSize:12,color:"#fff",fontWeight:700}}>คาบ {p.id}</div>
                         <div style={{fontSize:9,color:"rgba(255,255,255,0.65)"}}>{p.time}</div>
                       </th>
-                    ))}
+                    ));})()}
                   </tr>
                 </thead>
                 <tbody>
@@ -4388,19 +4571,26 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
                     });
                     return (
                       <td key={p.id} style={{textAlign:"center",padding:"5px 3px",borderLeft:"1px solid #F0F0F0",verticalAlign:"middle",minHeight:48}}>
-                        {blk
-                          ? <div style={{background:"#FEF9C3",color:"#92400E",fontSize:10,borderRadius:6,padding:"3px 5px",fontWeight:700}}>
+                        {(() => {
+                          const customLock=(S.meetings||[]).find(m=>m.type==="custom"&&(m.slots||[]).some(s=>s.day===day&&s.period===p.id));
+                          if(customLock) return (
+                            <div style={{background:"#FFF3E0",color:"#E65100",fontSize:10,borderRadius:6,padding:"3px 5px",fontWeight:700}}>
+                              🏫 {customLock.name}
+                            </div>
+                          );
+                          if(blk) return (
+                            <div style={{background:"#FEF9C3",color:"#92400E",fontSize:10,borderRadius:6,padding:"3px 5px",fontWeight:700}}>
                               🔒{S.meetings.some(m=>m.day===day&&m.periods?.includes(p.id)&&m.departmentId===teacher?.departmentId)?"ประชุม":blocked(selT).find(b=>b.day===day&&b.period===p.id)?.reason||"ล็อค"}
                             </div>
-                          : roomsThisPeriod.length>0
-                            ? roomsThisPeriod.map((r,i)=>(
-                                <div key={i} style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:6,padding:"4px 6px",marginBottom:i<roomsThisPeriod.length-1?2:0}}>
-                                  <div style={{fontSize:11,fontWeight:800,color:"#1E40AF"}}>{r.rmName}</div>
-                                  <div style={{fontSize:10,color:"#374151",fontWeight:600}}>{r.subName}</div>
-                                </div>
-                              ))
-                            : <span style={{color:"#D1D5DB",fontSize:12}}>—</span>
-                        }
+                          );
+                          if(roomsThisPeriod.length>0) return roomsThisPeriod.map((r,i)=>(
+                            <div key={i} style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:6,padding:"4px 6px",marginBottom:i<roomsThisPeriod.length-1?2:0}}>
+                              <div style={{fontSize:11,fontWeight:800,color:"#1E40AF"}}>{r.rmName}</div>
+                              <div style={{fontSize:10,color:"#374151",fontWeight:600}}>{r.subName}</div>
+                            </div>
+                          ));
+                          return <span style={{color:"#D1D5DB",fontSize:12}}>—</span>;
+                        })()}
                       </td>
                     );
                   })}
@@ -5031,8 +5221,11 @@ function buildMasterTableHTML(S, ay, sh, filterLevelId) {
         const isBlocked=(S.meetings||[]).some(m=>m.departmentId===t.departmentId&&m.day===DAYS[di]&&m.periods.includes(p.id));
         const br=(pi===P-1&&di<DAYS.length-1)?'border-right:2.5px solid #000;':'';
         let cellTxt=''; let extra='background:'+rowBg+';';
-        if(isBlocked&&rooms.length===0){ cellTxt='X'; extra='background:#ddd;'; }
+        if(isBlocked&&rooms.length===0){ cellTxt='🏫 ประชุม'; extra='background:#ddd;color:#555;font-size:7px;'; }
         else if(rooms.length>0){ cellTxt=rooms.join('<br/>'); extra='background:'+rowBg+';font-weight:700;'; }
+        // คาบล็อคแผนก (custom) — แสดงเพิ่มถ้ายังว่าง
+        const custLock=(S.meetings||[]).find(m=>m.type==="custom"&&(m.slots||[]).some(s=>s.day===DAYS[di]&&s.period===p.id));
+        if(custLock&&!cellTxt){ cellTxt='🏫 '+custLock.name; extra='background:#FFF3E0;color:#E65100;font-size:7px;'; }
         row+='<td style="border:1px solid #ccc;'+br+extra+'font-size:7.5px;padding:1px 2px;text-align:center;vertical-align:middle;line-height:1.2">'+cellTxt+'</td>';
       }); });
       row+='</tr>'; bodyHTML+=row;
@@ -5134,7 +5327,7 @@ function buildLevelTableHTML(S, ay, sh, filterLevelId) {
 
 function SwapPage({S,st,ay,sh}){
   const DAYS_SW=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
-  const PERIODS_SW=[{id:1,time:"08.30–09.20"},{id:2,time:"09.20–10.10"},{id:3,time:"10.25–11.15"},{id:4,time:"11.15–12.05"},{id:5,time:"13.00–13.50"},{id:6,time:"14.00–14.50"},{id:7,time:"14.50–15.40"}];
+  // PERIODS_SW คำนวณตาม division ของครูที่เลือก (ใช้ default ก่อน, update เมื่อเลือกครู)
   const REASON_OPTS=["ติดธุระ","ลาป่วย","ลากิจ","ไปราชการ","ไปอบรม","อื่นๆ"];
   const DAY_IDX={จันทร์:1,อังคาร:2,พุธ:3,พฤหัสบดี:4,ศุกร์:5};
   const [teacherA,setTeacherA]=useState("");
@@ -5154,6 +5347,9 @@ function SwapPage({S,st,ay,sh}){
   };
   const absentRange=getDayRange(absentDateFrom,absentDateTo);
   const absentDayNames=new Set(absentRange.map(r=>r.dayName));
+  // PERIODS_SW ตาม division ของครู A — อัปเดตเมื่อเลือกครู
+  const tADivSW=teacherA?getDivisionForTeacher(teacherA,S):"m2";
+  const PERIODS_SW=getPeriodCfg(tADivSW).periods.map(p=>({...p,time:p.time.replace(/-/g,"–")}));
   const getEntries=(tid,day,pid)=>{
     const out=[];
     Object.entries(S.schedule).forEach(([k,en])=>{
@@ -5550,7 +5746,8 @@ function buildTeacherTableHTML3(teacher,S,ay,sh){
   const dept=S.depts.find(d=>d.id===teacher.departmentId)?.name||"";
   const DAYS_T=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
   const PIDS_T=[1,2,3,4,5,6,7];
-  const PTIMES=["08.30-09.20","09.20-10.10","10.25-11.15","11.15-12.05","13.00-13.50","14.00-14.50","14.50-15.40"];
+  // master table ใช้ default (m2/ม.ปลาย) เพราะครูอาจสอนหลาย division
+  const PTIMES=PERIOD_CONFIG.default.periods.map(p=>p.time);
   const getCell=(day,pid)=>{
     const out=[];
     S.rooms.forEach(room=>{
@@ -5700,15 +5897,15 @@ function Reports({S,U,st,gc,ay,sh}){
     if(!XLib){st("โหลด library ไม่สำเร็จ กรุณาตรวจสอบ internet","error");return;}
 
     const DAYS_TH=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
-    const PERIOD_TIMES=[
-      {id:1,start:"08.30",end:"09.20"},{id:2,start:"09.20",end:"10.10"},
-      {id:3,start:"10.25",end:"11.15"},{id:4,start:"11.15",end:"12.05"},
-      {id:5,start:"13.00",end:"13.50"},{id:6,start:"14.00",end:"14.50"},
-      {id:7,start:"14.50",end:"15.40"},
-    ];
 
     const wb=XLib.utils.book_new();
     roomList.forEach(room=>{
+      // ใช้เวลาคาบตาม division ของห้องนั้น
+      const roomDivId=getDivisionForRoom(room,S);
+      const PERIOD_TIMES=getPeriodCfg(roomDivId).periods.map(p=>{
+        const [start,end]=(p.time||"").split("-");
+        return {id:p.id,start:start||"",end:end||""};
+      });
       const rows=[["วัน","รหัสวิชา","เริ่มเวลา","หมดเวลา","รหัสผู้ใช้งาน(ครูผู้สอน)"]];
       DAYS_TH.forEach(day=>{
         PERIOD_TIMES.forEach(p=>{
@@ -5777,13 +5974,55 @@ function Reports({S,U,st,gc,ay,sh}){
   };
 
 
-  const exportRoomXL=(rm)=>{const h=["วัน",...PERIODS.map(p=>`คาบ${p.id}(${p.time})`)];const d=DAYS.map(day=>[day,...PERIODS.map(p=>{const en=S.schedule[`${rm.id}_${day}_${p.id}`]||[];return en.map(e=>{const sub=S.subjects.find(s=>s.id===e.subjectId);const t=S.teachers.find(x=>x.id===e.teacherId);return`${sub?.code||""} ${subDisplayName(sub)||""} (${t?.firstName||""})`}).join(" / ")})]);exportExcel(h,d,`ตารางเรียน_${rm.name}.xlsx`,rm.name);st(`Export ${rm.name}`)};
+  const exportRoomXL=(rm)=>{
+    const pcfg=getPeriodCfg(getDivisionForRoom(rm,S));
+    const h=["วัน",...pcfg.periods.map(p=>`คาบ${p.id}(${p.time})`)];
+    const d=DAYS.map(day=>[day,...PERIODS.map(p=>{const en=S.schedule[`${rm.id}_${day}_${p.id}`]||[];return en.map(e=>{const sub=S.subjects.find(s=>s.id===e.subjectId);const t=S.teachers.find(x=>x.id===e.teacherId);return`${sub?.code||""} ${subDisplayName(sub)||""} (${t?.firstName||""})`}).join(" / ")})]);
+    exportExcel(h,d,`ตารางเรียน_${rm.name}.xlsx`,rm.name);st(`Export ${rm.name}`);
+  };
 
-  const exportTeacherXL=(t)=>{const h=["วัน",...PERIODS.map(p=>`คาบ${p.id}(${p.time})`)];const d=DAYS.map(day=>[day,...PERIODS.map(p=>{let parts=[];Object.entries(S.schedule).forEach(([k,en])=>{if(!k.endsWith(`_${day}_${p.id}`))return;en?.forEach(e=>{const xCoIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);if(e.teacherId===t.id||xCoIds.includes(t.id)){const sub=S.subjects.find(s=>s.id===e.subjectId);const rid=k.split("_")[0];const rm=S.rooms.find(r=>r.id===rid);parts.push(`${sub?.code||""} ${sub?.name||""} (${rm?.name||""})`)}})});return parts.join(" / ")})]);exportExcel(h,d,`ตารางสอน_${t.prefix}${t.firstName}.xlsx`,"ตารางสอน");st(`Export ${t.firstName}`)};
+  const exportTeacherXL=(t)=>{
+    const tDiv=getDivisionForTeacher(t.id,S);
+    const tPcfg=getPeriodCfg(tDiv);
+    const h=["วัน",...tPcfg.periods.map(p=>`คาบ${p.id}(${p.time})`)];const d=DAYS.map(day=>[day,...PERIODS.map(p=>{let parts=[];Object.entries(S.schedule).forEach(([k,en])=>{if(!k.endsWith(`_${day}_${p.id}`))return;en?.forEach(e=>{const xCoIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);if(e.teacherId===t.id||xCoIds.includes(t.id)){const sub=S.subjects.find(s=>s.id===e.subjectId);const rid=k.split("_")[0];const rm=S.rooms.find(r=>r.id===rid);parts.push(`${sub?.code||""} ${sub?.name||""} (${rm?.name||""})`)}})});return parts.join(" / ")})]);exportExcel(h,d,`ตารางสอน_${t.prefix}${t.firstName}.xlsx`,"ตารางสอน");st(`Export ${t.firstName}`)};
 
-  const exportAllRooms=()=>{exportExcelMulti(S.rooms.map(rm=>({name:rm.name,headers:["วัน",...PERIODS.map(p=>`คาบ${p.id}(${p.time})`)],rows:DAYS.map(day=>[day,...PERIODS.map(p=>{const en=S.schedule[`${rm.id}_${day}_${p.id}`]||[];return en.map(e=>{const sub=S.subjects.find(s=>s.id===e.subjectId);const t=S.teachers.find(x=>x.id===e.teacherId);return`${sub?.code||""} ${subDisplayName(sub)||""} (${t?.firstName||""})`}).join(" / ")})])})),"ตารางเรียนทุกห้อง.xlsx");st("Export ทุกห้อง")};
+  const exportAllRooms=()=>{
+    exportExcelMulti(S.rooms.map(rm=>{
+      const pcfg=getPeriodCfg(getDivisionForRoom(rm,S));
+      return {
+        name:rm.name,
+        headers:["วัน",...pcfg.periods.map(p=>`คาบ${p.id}(${p.time})`)],
+        rows:DAYS.map(day=>[day,...PERIODS.map(p=>{const en=S.schedule[`${rm.id}_${day}_${p.id}`]||[];return en.map(e=>{const sub=S.subjects.find(s=>s.id===e.subjectId);const t=S.teachers.find(x=>x.id===e.teacherId);return`${sub?.code||""} ${subDisplayName(sub)||""} (${t?.firstName||""})`}).join(" / ")})])
+      };
+    }),"ตารางเรียนทุกห้อง.xlsx");
+    st("Export ทุกห้อง");
+  };
 
-  const exportAllTeachers=()=>{exportExcelMulti(S.teachers.map(t=>({name:`${t.firstName} ${t.lastName}`,headers:["วัน",...PERIODS.map(p=>`คาบ${p.id}(${p.time})`)],rows:DAYS.map(day=>[day,...PERIODS.map(p=>{let parts=[];Object.entries(S.schedule).forEach(([k,en])=>{if(!k.endsWith(`_${day}_${p.id}`))return;en?.forEach(e=>{if(e.teacherId===t.id||e.coTeacherId===t.id){const sub=S.subjects.find(s=>s.id===e.subjectId);const rid=k.split("_")[0];const rm=S.rooms.find(r=>r.id===rid);parts.push(`${sub?.code||""} ${sub?.name||""} (${rm?.name||""})`)}})});return parts.join(" / ")})])})),"ตารางสอนทุกคน.xlsx");st("Export ทุกคน")};
+  const exportAllTeachers=()=>{
+    const sheets=S.teachers.map(t=>{
+      const tDivA=getDivisionForTeacher(t.id,S);
+      const tPcfgA=getPeriodCfg(tDivA);
+      const headers=["วัน",...tPcfgA.periods.map(p=>"คาบ"+p.id+"("+p.time+")")];
+      const rows=DAYS.map(day=>[day,...PERIODS.map(p=>{
+        let parts=[];
+        Object.entries(S.schedule).forEach(([k,en])=>{
+          if(!k.endsWith("_"+day+"_"+p.id))return;
+          en?.forEach(e=>{
+            if(e.teacherId===t.id||e.coTeacherId===t.id){
+              const sub=S.subjects.find(s=>s.id===e.subjectId);
+              const rid=k.split("_")[0];
+              const rm=S.rooms.find(r=>r.id===rid);
+              parts.push((sub?.code||"")+" "+(sub?.name||"")+" ("+(rm?.name||"")+")");
+            }
+          });
+        });
+        return parts.join(" / ");
+      })]);
+      return {name:t.firstName+" "+t.lastName,headers,rows};
+    });
+    exportExcelMulti(sheets,"ตารางสอนทุกคน.xlsx");
+    st("Export ทุกคน");
+  };
 
   const exportStatus=()=>{
     const sheets=[{name:"ห้องเรียน",headers:["ห้อง","จัดแล้ว","ทั้งหมด","%"],rows:roomSt.map(r=>[r.room.name,r.filled,r.total,`${r.pct}%`])},{name:"ครู",headers:["ชื่อ","คาบได้รับ","จัดแล้ว","เหลือ","สถานะ"],rows:teacherSt.filter(t=>t.tot>0).map(t=>[`${t.teacher.prefix}${t.teacher.firstName} ${t.teacher.lastName}`,t.tot,t.used,t.rem,t.rem===0?"ครบ":"เหลือ "+t.rem])}];
@@ -5799,6 +6038,7 @@ function Reports({S,U,st,gc,ay,sh}){
       if(numA!==numB) return numA-numB;
       return a.room.localeCompare(b.room,"th");
     });
+    const tDiv=getDivisionForTeacher(t.id,S);
     let html=pdfPage(
       "ตารางสอน "+(t.prefix||"")+(t.firstName||"")+" "+(t.lastName||""),
       "ภาคเรียนที่ "+(ay?.semester||"1")+"/"+(ay?.year||"2568")+" "+(sh?.name||"โรงเรียนดาราวิทยาลัย"),
@@ -5822,7 +6062,8 @@ function Reports({S,U,st,gc,ay,sh}){
       "",
       sh?.logo||null,
       printSettings,
-      false
+      false,
+      tDiv
     );
     setPrintPreview({html:pdfPage(
       "ตารางสอน "+(t.prefix||"")+(t.firstName||"")+" "+(t.lastName||""),
@@ -5847,7 +6088,8 @@ function Reports({S,U,st,gc,ay,sh}){
       "",
       sh?.logo||null,
       printSettings,
-      false
+      false,
+      tDiv
     )});
   };
 
@@ -5866,12 +6108,16 @@ function Reports({S,U,st,gc,ay,sh}){
       subtitle:subtitle,
       dayRows:DAYS.map(day=>({day,cells:PERIODS.map(p=>{
         const en=S.schedule[room.id+"_"+day+"_"+p.id]||[];
-        if(!en.length) return [];
+        if(!en.length){
+          // คาบล็อคแผนก — แสดงแทนช่องว่าง
+          const custLock=(S.meetings||[]).find(m=>m.type==="custom"&&(m.slots||[]).some(s=>s.day===day&&s.period===p.id));
+          if(custLock) return[{sub:"🏫 "+custLock.name,room:"",room2:"",isCustomLock:true}];
+          return [];
+        }
         const isDouble=en.length>1;
         const e=en[sheetIdx]||en[0];
         const sub=S.subjects.find(s=>s.id===e.subjectId);
         const t2=S.teachers.find(x=>x.id===e.teacherId);
-        // room2 ใช้เก็บชื่อห้อง, double flag ส่งผ่าน sub prefix
         return[{sub:(sub?.shortName||sub?.name||""),room:(t2?.prefix||"")+(t2?.firstName||""),room2:room.name,double:isDouble}];
       })}))
     }));
@@ -5880,7 +6126,8 @@ function Reports({S,U,st,gc,ay,sh}){
   const printRoomPDF=(room)=>{
     const pages=buildRoomPages(room);
     if(!pages.length){st("ยังไม่มีตารางในห้องนี้","error");return;}
-    setPrintPreview({html:pdfMultiPage(pages,sh?.logo||null,printSettings,true)});
+    const divId=getDivisionForRoom(room,S);
+    setPrintPreview({html:pdfMultiPage(pages,sh?.logo||null,printSettings,true,divId)});
   };
 
 
@@ -5889,6 +6136,8 @@ function Reports({S,U,st,gc,ay,sh}){
   // สร้าง HTML ตารางเรียนแบบเดียวกับ Excel ต้นแบบ
   const buildRoomTableHTML=(room,opts={})=>{
     const lvl=S.levels.find(l=>l.id===room.levelId);
+    const divId=getDivisionForRoom(room,S);
+    const pcfg=getPeriodCfg(divId);
     const asmDay=lvl?.assemblyDay||"";
     const h1=room.homeroom1||""; const h2=room.homeroom2||""; const hco=room.homeroomCo||"";
     const yr=ay?.year||"2568";
@@ -5897,8 +6146,7 @@ function Reports({S,U,st,gc,ay,sh}){
     const DAYS_TH=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
     const PIDS=[1,2,3,4,5,6,7];
 
-    // หา maxEntries = จำนวนวิชาสูงสุดในคาบที่ซ้อนมากที่สุด
-    // ถ้าทุกคาบมีไม่เกิน 1 วิชา → totalCopies=1 (ไม่แยกฉบับ)
+    // หา maxEntries
     let maxEntries=1;
     DAYS_TH.forEach(day=>PIDS.forEach(pid=>{
       const len=(S.schedule[room.id+"_"+day+"_"+pid]||[]).length;
@@ -5914,9 +6162,11 @@ function Reports({S,U,st,gc,ay,sh}){
       const getCells=(day,pid)=>{
         const key=room.id+"_"+day+"_"+pid;
         const all=S.schedule[key]||[];
-        if(!all.length) return [];
-        // คาบที่มีวิชาเดียว → แสดงทุกฉบับ
-        // คาบที่มีหลายวิชา → ฉบับที่ copyIdx แสดง entry ที่ copyIdx
+        if(!all.length){
+          const custLock=(S.meetings||[]).find(m=>m.type==="custom"&&(m.slots||[]).some(s=>s.day===day&&s.period===pid));
+          if(custLock) return [{th:"🏫 "+custLock.name,en:"",tch:"",isCustomLock:true}];
+          return [];
+        }
         const e=all.length>1?(all[copyIdx]||all[0]):all[0];
         if(!e) return [];
         const sub=S.subjects.find(s=>s.id===e.subjectId);
@@ -5925,118 +6175,125 @@ function Reports({S,U,st,gc,ay,sh}){
         return[{th:sub?.name||sub?.code||"",en:sub?.shortName||"",tch:[t,...cos].filter(Boolean).map(x=>(x.prefix||"")+x.firstName).join(", ")}];
       };
 
-    // colgroup — % based
-    const colgroup=`<colgroup>
-      <col style="width:5%;"><col style="width:2.5%;">
-      <col style="width:11.9%;"><col style="width:11.9%;">
-      <col style="width:3%;">
-      <col style="width:11.9%;"><col style="width:11.9%;">
-      <col style="width:3%;">
-      <col style="width:11.9%;"><col style="width:11.9%;">
-      <col style="width:3%;">
-      <col style="width:12.1%;">
-    </colgroup>`;
+      // colgroup — ปรับตาม break position
+      // p1: break หลัง p6 → col[10] เป็น break, p6 ก่อน break
+      // default: break หลัง p5 → col[8] เป็น break
+      const colgroup=`<colgroup>
+        <col style="width:5%;"><col style="width:2.5%;">
+        <col style="width:11.9%;"><col style="width:11.9%;">
+        <col style="width:3%;">
+        <col style="width:11.9%;"><col style="width:11.9%;">
+        <col style="width:3%;">
+        <col style="width:11.9%;">
+        ${divId==="p1"
+          ? `<col style="width:11.9%;"><col style="width:3%;"><col style="width:12.1%;">`
+          : `<col style="width:3%;"><col style="width:11.9%;"><col style="width:12.1%;">`
+        }
+      </colgroup>`;
 
-    // vert cell: ข้อความแนวตั้ง
-    const vert=(txt,bg="#fffde7",fw="normal",fs="9pt")=>
-      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};font-weight:${fw};letter-spacing:1px;text-align:center;">${txt}</div>`;
+      const vert=(txt,bg="#fffde7",fw="normal",fs="9pt")=>
+        `<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:${fs};font-weight:${fw};letter-spacing:1px;text-align:center;">${txt}</div>`;
 
-    const HDR=[
-      {label:"คาบ 1",time:"08.30 - 09.20"},
-      {label:"คาบ 2",time:"09.20 - 10.10"},
-      {label:"คาบ 3",time:"10.25 - 11.15"},
-      {label:"คาบ 4",time:"11.15 - 12.05"},
-      {label:"คาบ 5",time:"13.00 - 13.50"},
-      {label:"คาบ 6",time:"14.00 - 14.50"},
-      {label:"คาบ 7",time:"14.50 - 15.40"},
-    ];
+      const HDR=pcfg.periods.map(p=>({label:`คาบ ${p.id}`,time:p.time}));
+      const BRK=[["08.00-","08.30"],["10.10-","10.25"],["12.05-","13.00"]];
+      const BRK4=divId==="p1"?["14.40-","14.50"]:["13.50-","14.00"];
+      const BRKall=[...BRK,BRK4];
+      const vertBRK=(parts,fs="9pt")=>
+        `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:${fs};font-weight:600;letter-spacing:1px;text-align:center;display:flex;flex-direction:column;align-items:center;">${parts.map(p=>'<span style="white-space:nowrap;">'+p+'</span>').join("")}</div>`;
 
-    // Header — แถว 1: ชื่อคาบ, แถว 2: เวลา
-    // col: วัน | 08.00-08.30 | คาบ1 | คาบ2 | 10.10-10.25 | คาบ3 | คาบ4 | 12.05-13.00 | คาบ5 | คาบ6 | 14.40-14.50 | คาบ7
-    const BRK=[["08.00-","08.30"],["10.10-","10.25"],["12.05-","13.00"],["14.40-","14.50"]];
-    const vertBRK=(parts,fs="9pt")=>
-      `<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:${fs};font-weight:600;letter-spacing:1px;text-align:center;display:flex;flex-direction:column;align-items:center;">${parts.map(p=>'<span style="white-space:nowrap;">'+p+'</span>').join("")}</div>`;
-    const BRKV=["08.00-08.30","Morning Break","Lunch Time","Afternoon Break"];
+      const brkTh=(i)=>`<th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;vertical-align:middle;text-align:center;">${vertBRK(BRKall[i])}</th>`;
 
-    // Header row1 — ชื่อคาบ (break columns มี rowspan=2)
-    const h1row=`<tr style="background:#f0f0f0;height:22px;max-height:22px;">
-      <th rowspan="2" style="border:1px solid #666;padding:0;position:relative;vertical-align:middle;font-size:7pt;height:38px;">
-        <div style="position:absolute;top:0;left:0;width:100%;height:100%;">
-          <svg style="position:absolute;top:0;left:0;width:100%;height:100%;" preserveAspectRatio="none">
-            <line x1="0" y1="0" x2="100%" y2="100%" stroke="#888" stroke-width="0.8"/>
-          </svg>
-          <div style="position:absolute;top:2px;right:2px;font-size:5.5pt;color:#555;">เวลา</div>
-          <div style="position:absolute;bottom:2px;left:2px;font-size:5.5pt;color:#555;">วัน</div>
-        </div>
-      </th>
-      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;vertical-align:middle;text-align:center;">${vertBRK(BRK[0])}</th>
-      <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[0].label}</th>
-      <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[1].label}</th>
-      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;vertical-align:middle;text-align:center;">${vertBRK(BRK[1])}</th>
-      <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[2].label}</th>
-      <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[3].label}</th>
-      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;vertical-align:middle;text-align:center;">${vertBRK(BRK[2])}</th>
-      <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[4].label}</th>
-      <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[5].label}</th>
-      <th rowspan="2" style="border:1px solid #666;background:#fffde7;padding:0;height:38px;vertical-align:middle;text-align:center;">${vertBRK(BRK[3])}</th>
-      <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[6].label}</th>
-    </tr>
-    <tr style="background:#f0f0f0;height:16px;max-height:16px;">
-      ${[0,1,2,3,4,5,6].map(i=>`<td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;height:16px;">${HDR[i].time}</td>`).join("")}
-    </tr>`;
+      // Header แถว 1 — ปรับตาม divisionId
+      const h1row=`<tr style="background:#f0f0f0;height:22px;max-height:22px;">
+        <th rowspan="2" style="border:1px solid #666;padding:0;position:relative;vertical-align:middle;font-size:7pt;height:38px;">
+          <div style="position:absolute;top:0;left:0;width:100%;height:100%;">
+            <svg style="position:absolute;top:0;left:0;width:100%;height:100%;" preserveAspectRatio="none">
+              <line x1="0" y1="0" x2="100%" y2="100%" stroke="#888" stroke-width="0.8"/>
+            </svg>
+            <div style="position:absolute;top:2px;right:2px;font-size:5.5pt;color:#555;">เวลา</div>
+            <div style="position:absolute;bottom:2px;left:2px;font-size:5.5pt;color:#555;">วัน</div>
+          </div>
+        </th>
+        ${brkTh(0)}
+        <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[0].label}</th>
+        <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[1].label}</th>
+        ${brkTh(1)}
+        <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[2].label}</th>
+        <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[3].label}</th>
+        ${brkTh(2)}
+        <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[4].label}</th>
+        ${divId==="p1"
+          ? `<th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[5].label}</th>
+             ${brkTh(3)}
+             <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[6].label}</th>`
+          : `${brkTh(3)}
+             <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[5].label}</th>
+             <th style="border:1px solid #666;font-size:8pt;font-weight:bold;text-align:center;padding:1px;height:22px;">${HDR[6].label}</th>`
+        }
+      </tr>
+      <tr style="background:#f0f0f0;height:16px;max-height:16px;">
+        ${[0,1,2,3,4,5,6].map(i=>`<td style="border:1px solid #888;font-size:6.5pt;text-align:center;padding:1px;height:16px;">${HDR[i].time}</td>`).join("")}
+      </tr>`;
 
-    const DAYS_TH=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
-    let body="";
+      const DAYS_TH2=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
+      let body="";
+      DAYS_TH2.forEach((day,di)=>{
+        const isAsm=asmDay===day;
+        const hmTxt=isAsm?"หอประชุม<br>Assembly":"Homeroom";
+        const hmBg=isAsm?"#e8f5e9":"#fafff7";
+        const D=[1,2,3,4,5,6,7].map(pid=>getCells(day,pid));
+        const isMulti=[1,2,3,4,5,6,7].map(pid=>(S.schedule[room.id+"_"+day+"_"+pid]||[]).length>1);
+        const MBG="#eeeeee";
 
-    DAYS_TH.forEach((day,di)=>{
-      const isAsm=asmDay===day;
-      // Homeroom: "Homeroom" หรือ "หอประชุม↵Assembly" (2 บรรทัด เพื่อไม่ให้ cell กว้าง)
-      const hmTxt=isAsm?"หอประชุม<br>Assembly":"Homeroom";
-      const hmBg=isAsm?"#e8f5e9":"#fafff7";
-      const D=[1,2,3,4,5,6,7].map(pid=>getCells(day,pid));
-      const isMulti=[1,2,3,4,5,6,7].map(pid=>(S.schedule[room.id+"_"+day+"_"+pid]||[]).length>1);
-      const MBG="#eeeeee";
+        const cell=(arr,type,multi=false)=>{
+          const isLock=arr[0]?.isCustomLock;
+          const v=arr.map(c=>c[type]).filter(Boolean).join("<br>");
+          const s=isLock?"font-size:8pt;font-weight:bold;color:#E65100;"
+            :type==="th"?"font-size:8.5pt;font-weight:bold;"
+            :type==="en"?"font-size:7.5pt;color:#444;"
+            :"font-size:7.5pt;color:#1a237e;";
+          const bg=isLock?"background:#FFF3E0;":multi?`background:${MBG};`:"";
+          if(isLock&&type!=="th") return `<td style="border:1px solid #ddd;border-top:none;border-bottom:none;${bg}"></td>`;
+          return`<td style="border:1px solid #ddd;border-top:none;border-bottom:none;text-align:center;vertical-align:middle;padding:2px;${bg}${s}">${v}</td>`;
+        };
+        const cellTop=(arr,type,multi=false)=>cell(arr,type,multi).replace("border-top:none;","border-top:1px solid #888;");
+        const cellBot=(arr,type,multi=false)=>cell(arr,type,multi).replace("border-bottom:none;","border-bottom:1px solid #888;");
 
-      const cell=(arr,type,multi=false)=>{
-        const v=arr.map(c=>c[type]).filter(Boolean).join("<br>");
-        const s=type==="th"?"font-size:8.5pt;font-weight:bold;":type==="en"?"font-size:7.5pt;color:#444;":"font-size:7.5pt;color:#1a237e;";
-        const bg=multi?`background:${MBG};`:"";
-        return`<td style="border:1px solid #ddd;border-top:none;border-bottom:none;text-align:center;vertical-align:middle;padding:2px;${bg}${s}">${v}</td>`;
-      };
-      const cellTop=(arr,type,multi=false)=>cell(arr,type,multi).replace("border-top:none;","border-top:1px solid #888;");
-      const cellBot=(arr,type,multi=false)=>cell(arr,type,multi).replace("border-bottom:none;","border-bottom:1px solid #888;");
+        const BKcell=(rows,vtext,bg="#fffde7")=>
+          `<td rowspan="${rows}" style="border:1px solid #888;background:${bg};padding:0;vertical-align:middle;text-align:center;min-width:26px;">${vert(vtext,bg,"600","9pt")}</td>`;
 
-      const BKcell=(rows,vtext,bg="#fffde7")=>
-        `<td rowspan="${rows}" style="border:1px solid #888;background:${bg};padding:0;vertical-align:middle;text-align:center;min-width:26px;">${vert(vtext,bg,"600","9pt")}</td>`;
+        const bk=di===0;
+        const TOTAL_ROWS=DAYS_TH2.length*3;
+        const brkLbl4=divId==="p1"?"พัก 14.40-14.50":"พัก 13.50-14.00";
 
-      // break columns ใส่เฉพาะวันแรก (di===0) ด้วย rowspan=15 (5วัน × 3แถว)
-      const bk=di===0;
-      const TOTAL_ROWS=DAYS_TH.length*3;
-
-      body+=`
-        <tr style="height:20px;max-height:20px;">
-          <td rowspan="3" style="border:1px solid #888;text-align:center;font-weight:bold;font-size:10pt;vertical-align:middle;background:#f5f5f5;padding:2px;">${day==="พฤหัสบดี"?"พฤหัส":day}</td>
-          <td rowspan="3" style="border:1px solid #888;background:${hmBg};padding:0;vertical-align:middle;text-align:center;min-width:26px;">${vert(hmTxt.replace('<br>','/').replace('<br/>','/'),hmBg,"600","9pt")}</td>
-          ${cellTop(D[0],"th",isMulti[0])}${cellTop(D[1],"th",isMulti[1])}
-          ${bk?BKcell(TOTAL_ROWS,"พักน้อย 15 นาที"):""}
-          ${cellTop(D[2],"th",isMulti[2])}${cellTop(D[3],"th",isMulti[3])}
-          ${bk?BKcell(TOTAL_ROWS,"พักกลางวัน 55 นาที"):""}
-          ${cellTop(D[4],"th",isMulti[4])}${cellTop(D[5],"th",isMulti[5])}
-          ${bk?BKcell(TOTAL_ROWS,"พักน้อย 10 นาที"):""}
-          ${cellTop(D[6],"th",isMulti[6])}
-        </tr>
-        <tr style="height:17px;max-height:17px;">
-          ${cell(D[0],"en",isMulti[0])}${cell(D[1],"en",isMulti[1])}
-          ${cell(D[2],"en",isMulti[2])}${cell(D[3],"en",isMulti[3])}
-          ${cell(D[4],"en",isMulti[4])}${cell(D[5],"en",isMulti[5])}
-          ${cell(D[6],"en",isMulti[6])}
-        </tr>
-        <tr style="height:17px;max-height:17px;">
-          ${cellBot(D[0],"tch",isMulti[0])}${cellBot(D[1],"tch",isMulti[1])}
-          ${cellBot(D[2],"tch",isMulti[2])}${cellBot(D[3],"tch",isMulti[3])}
-          ${cellBot(D[4],"tch",isMulti[4])}${cellBot(D[5],"tch",isMulti[5])}
-          ${cellBot(D[6],"tch",isMulti[6])}
-        </tr>`;
+        body+=`
+          <tr style="height:20px;max-height:20px;">
+            <td rowspan="3" style="border:1px solid #888;text-align:center;font-weight:bold;font-size:10pt;vertical-align:middle;background:#f5f5f5;padding:2px;">${day==="พฤหัสบดี"?"พฤหัส":day}</td>
+            <td rowspan="3" style="border:1px solid #888;background:${hmBg};padding:0;vertical-align:middle;text-align:center;min-width:26px;">${vert(hmTxt.replace('<br>','/').replace('<br/>','/'),hmBg,"600","9pt")}</td>
+            ${cellTop(D[0],"th",isMulti[0])}${cellTop(D[1],"th",isMulti[1])}
+            ${bk?BKcell(TOTAL_ROWS,"พัก 10.10-10.25"):""}
+            ${cellTop(D[2],"th",isMulti[2])}${cellTop(D[3],"th",isMulti[3])}
+            ${bk?BKcell(TOTAL_ROWS,"พัก 12.05-13.00"):""}
+            ${cellTop(D[4],"th",isMulti[4])}
+            ${divId==="p1"
+              ? `${cellTop(D[5],"th",isMulti[5])}${bk?BKcell(TOTAL_ROWS,brkLbl4):""}${cellTop(D[6],"th",isMulti[6])}`
+              : `${bk?BKcell(TOTAL_ROWS,brkLbl4):""}${cellTop(D[5],"th",isMulti[5])}${cellTop(D[6],"th",isMulti[6])}`
+            }
+          </tr>
+          <tr style="height:17px;max-height:17px;">
+            ${cell(D[0],"en",isMulti[0])}${cell(D[1],"en",isMulti[1])}
+            ${cell(D[2],"en",isMulti[2])}${cell(D[3],"en",isMulti[3])}
+            ${cell(D[4],"en",isMulti[4])}
+            ${divId==="p1"
+              ? `${cell(D[5],"en",isMulti[5])}${cell(D[6],"en",isMulti[6])}`
+              : `${cell(D[5],"en",isMulti[5])}${cell(D[6],"en",isMulti[6])}`
+            }
+          </tr>
+          <tr style="height:17px;max-height:17px;">
+            ${cellBot(D[0],"tch",isMulti[0])}${cellBot(D[1],"tch",isMulti[1])}
+            ${cellBot(D[2],"tch",isMulti[2])}${cellBot(D[3],"tch",isMulti[3])}
+            ${cellBot(D[4],"tch",isMulti[4])}${cellBot(D[5],"tch",isMulti[5])}${cellBot(D[6],"tch",isMulti[6])}
+          </tr>`;
     });
 
       const footer=(h1||h2||hco)?`
@@ -6145,10 +6402,30 @@ function Reports({S,U,st,gc,ay,sh}){
       if(la!==lb) return la.localeCompare(lb,"th");
       return a.name.localeCompare(b.name,"th");
     });
-    const pages=sorted.flatMap(room=>buildRoomPages(room));
-    if(!pages.length){st("ยังไม่มีตารางในระบบ","error");return}
+    if(!sorted.length){st("ยังไม่มีตารางในระบบ","error");return}
+    // build HTML per-room เพื่อใช้เวลาคาบที่ถูกต้องของแต่ละห้อง
+    // แล้ว concat body เข้ากัน (ใช้ pdfPage ทีละห้อง แล้ว open window เดียว)
     const w=window.open('','_blank');
-    w.document.write(pdfMultiPage(pages,sh?.logo||null,printSettings,true));
+    if(!w){st("Browser บล็อก popup","error");return;}
+    // สร้าง HTML รวม: loop แต่ละห้อง สร้าง pdfPage แต่เอาแค่ body
+    const allHtml=sorted.flatMap(room=>{
+      const pages=buildRoomPages(room);
+      if(!pages.length) return [];
+      const divId=getDivisionForRoom(room,S);
+      return pages.map((pg,pi)=>
+        pdfMultiPage([pg],sh?.logo||null,printSettings,true,divId)
+      );
+    });
+    if(!allHtml.length){st("ยังไม่มีตารางในระบบ","error");w.close();return;}
+    // เอาแค่ HTML แรกเป็น wrapper แล้วต่อ body block ของที่เหลือ
+    const combined=sorted.flatMap(room=>{
+      const pages=buildRoomPages(room);
+      const divId=getDivisionForRoom(room,S);
+      return pages;
+    });
+    w.document.write(pdfMultiPage(combined,sh?.logo||null,printSettings,true,"m2"));
+    w.document.close();setTimeout(()=>w.print(),600);
+    st("กำลังพิมพ์ตารางเรียนทุกห้อง");
   };
 
   // PDF: ตารางสอนรวมกลุ่มสาระ (landscape)
@@ -6899,18 +7176,14 @@ function buildTeacherTableHTML(teacher, S, ay, sh, ps) {
     </table>`;
 }
 
-function pdfPage(title, subtitle, dayRows, footerText, logoBase64, ps, isRoom) {
+function pdfPage(title, subtitle, dayRows, footerText, logoBase64, ps, isRoom, divisionId) {
   const P=ps||DEFAULT_PRINT_SETTINGS;
   const C=PRINT_COLORS[P.color]||PRINT_COLORS["แดง"];
   const fScale=P.fontSize/100;
   const rScale=P.rowHeight/100;
   const ff=P.fontFamily||"TH SarabunNew";
-  const PLIST = [
-    { id: 1, time: "08.30-09.20" }, { id: 2, time: "09.20-10.10" },
-    { id: 3, time: "10.25-11.15" }, { id: 4, time: "11.15-12.05" },
-    { id: 5, time: "13.00-13.50" }, { id: 6, time: "14.00-14.50" },
-    { id: 7, time: "14.50-15.40" },
-  ];
+  const pcfg=getPeriodCfg(divisionId||"m2");
+  const PLIST = pcfg.periods;
 
   const thNums = PLIST.map(p => '<th class="period-num">' + p.id + '</th>').join("");
   const thTimes = PLIST.map(p => '<th class="period-time">' + p.time + '</th>').join("");
@@ -6986,18 +7259,14 @@ function pdfPage(title, subtitle, dayRows, footerText, logoBase64, ps, isRoom) {
 }
 
 /* ===== PDF: พิมพ์หลายตาราง 2 ต่อ 1 หน้า A4 แนวตั้ง ===== */
-function pdfMultiPage(pages, logoBase64, ps, isRoom) {
+function pdfMultiPage(pages, logoBase64, ps, isRoom, divisionId) {
   const P=ps||DEFAULT_PRINT_SETTINGS;
   const C=PRINT_COLORS[P.color]||PRINT_COLORS["แดง"];
   const fScale=P.fontSize/100;
   const rScale=P.rowHeight/100;
   const ff=P.fontFamily||"TH SarabunNew";
-  const PLIST = [
-    { id: 1, time: "08.30-09.20" }, { id: 2, time: "09.20-10.10" },
-    { id: 3, time: "10.25-11.15" }, { id: 4, time: "11.15-12.05" },
-    { id: 5, time: "13.00-13.50" }, { id: 6, time: "14.00-14.50" },
-    { id: 7, time: "14.50-15.40" },
-  ];
+  const pcfg=getPeriodCfg(divisionId||"m2");
+  const PLIST = pcfg.periods;
   const thNums = PLIST.map(p => '<th class="period-num">' + p.id + '</th>').join("");
   const thTimes = PLIST.map(p => '<th class="period-time">' + p.time + '</th>').join("");
 
