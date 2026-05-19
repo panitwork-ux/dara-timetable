@@ -5540,101 +5540,154 @@ function SwapPage({S,st,ay,sh}){
     st("ดาวน์โหลดไฟล์แล้ว — เปิดไฟล์แล้วสั่ง Print → Save as PDF");
   };
   return(
-    <div style={{animation:"fadeIn 0.3s",display:"flex",flexDirection:"column",gap:12,maxWidth:600,margin:"0 auto"}}>
+    <div style={{animation:"fadeIn 0.3s",display:"flex",flexDirection:"column",gap:12,maxWidth:680,margin:"0 auto",padding:"0 0 24px"}}>
+
       {/* ── ขั้นที่ 1 ── */}
-      <div style={{background:"#fff",borderRadius:16,padding:"18px 16px",boxShadow:"0 2px 16px rgba(0,0,0,0.07)"}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
-          <div style={{width:28,height:28,borderRadius:14,background:"#B91C1C",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,flexShrink:0}}>1</div>
+      <div style={{background:"#fff",borderRadius:16,border:"0.5px solid #E5E7EB",padding:"20px 20px 16px"}}>
+
+        {/* step header */}
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+          <div style={{width:28,height:28,borderRadius:"50%",background:"#B91C1C",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:600,flexShrink:0}}>1</div>
           <div>
-            <div style={{fontSize:15,fontWeight:700,color:"#111"}}>ครูที่ขอแลก และคาบที่ไม่อยู่</div>
-            <div style={{fontSize:11,color:"#9CA3AF"}}>เลือกครู → เหตุผล → วันที่ → คาบ</div>
+            <div style={{fontSize:15,fontWeight:600,color:"#111"}}>ครูที่ขอแลก และคาบที่ไม่อยู่</div>
+            <div style={{fontSize:11,color:"#9CA3AF",marginTop:1}}>เลือกครู → เหตุผล → วันที่ → คาบ</div>
           </div>
         </div>
+
+        {/* ครู */}
         <div style={{marginBottom:14}}>
-          <label style={LS}>👤 ครูผู้ขอแลก</label>
+          <div style={{fontSize:12,color:"#6B7280",marginBottom:5}}>ครูผู้ขอแลก</div>
           <SearchSelect value={teacherA} onChange={v=>{setTeacherA(v);setAbsentSlots([]);setSearched(false);}}
             options={[{value:"",label:"-- เลือกครู --"},...S.teachers.map(t=>({value:t.id,label:t.prefix+t.firstName+" "+t.lastName}))]}
             placeholder="-- เลือกครู --"/>
         </div>
+
+        {/* เหตุผล */}
         <div style={{marginBottom:14}}>
-          <label style={LS}>📝 เหตุผล</label>
+          <div style={{fontSize:12,color:"#6B7280",marginBottom:5}}>เหตุผล</div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
             {REASON_OPTS.map(r=>(
-              <button key={r} onClick={()=>setReason(r)}
-                style={{padding:"8px 14px",borderRadius:20,border:"2px solid "+(reason===r?"#B91C1C":"#D1D5DB"),
-                  background:reason===r?"#FEE2E2":"#fff",fontSize:13,fontWeight:reason===r?700:400,cursor:"pointer",
-                  color:reason===r?"#991B1B":"#374151"}}>
-                {r}
-              </button>
+              <button key={r} onClick={()=>setReason(r)} style={{
+                padding:"6px 13px",borderRadius:20,cursor:"pointer",fontFamily:"inherit",
+                border:"1.5px solid "+(reason===r?"#B91C1C":"#E5E7EB"),
+                background:reason===r?"#FEF2F2":"#fff",
+                color:reason===r?"#991B1B":"#6B7280",
+                fontSize:13,fontWeight:reason===r?600:400,
+                transition:"all 0.12s"
+              }}>{r}</button>
             ))}
           </div>
           {reason==="อื่นๆ"&&<input style={{...IS,marginTop:8}} value={reasonOther} onChange={e=>setReasonOther(e.target.value)} placeholder="ระบุเหตุผล..."/>}
         </div>
-        <div style={{marginBottom:12}}>
-          <label style={LS}>📅 วันที่ไม่อยู่</label>
+
+        {/* วันที่ */}
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:12,color:"#6B7280",marginBottom:5}}>วันที่ไม่อยู่</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <div>
-              <div style={{fontSize:11,color:"#6B7280",marginBottom:4}}>เริ่มต้น</div>
-              <input type="date" style={{...IS,fontSize:14,padding:"10px 12px"}} value={absentDateFrom}
+              <div style={{fontSize:11,color:"#9CA3AF",marginBottom:3}}>เริ่มต้น</div>
+              <input type="date" style={{...IS,fontSize:14}} value={absentDateFrom}
                 onChange={e=>{setAbsentDateFrom(e.target.value);setAbsentSlots([]);setSearched(false);}}/>
-              {absentDateFrom&&<div style={{fontSize:11,color:"#991B1B",marginTop:4,fontWeight:600}}>📌 {fmtDate(absentDateFrom)}</div>}
             </div>
             <div>
-              <div style={{fontSize:11,color:"#6B7280",marginBottom:4}}>สิ้นสุด (ถ้ามากกว่า 1 วัน)</div>
-              <input type="date" style={{...IS,fontSize:14,padding:"10px 12px"}} value={absentDateTo}
+              <div style={{fontSize:11,color:"#9CA3AF",marginBottom:3}}>สิ้นสุด (ถ้ามากกว่า 1 วัน)</div>
+              <input type="date" style={{...IS,fontSize:14}} value={absentDateTo}
                 min={absentDateFrom||undefined} onChange={e=>{setAbsentDateTo(e.target.value);setAbsentSlots([]);setSearched(false);}}/>
             </div>
           </div>
+          {absentRange.length>0&&(
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+              {absentRange.map(r=>(
+                <span key={r.dateStr} style={{display:"inline-flex",alignItems:"center",gap:4,background:"#FEF2F2",color:"#991B1B",padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:500}}>
+                  📌 {r.dayName} {fmtDate(r.dateStr)}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
-        {absentRange.length>0&&(
-          <div style={{background:"#FEF2F2",borderRadius:10,padding:"8px 12px",marginBottom:12,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-            <span style={{fontSize:12,fontWeight:700,color:"#991B1B"}}>📌</span>
-            {absentRange.map(r=>(
-              <span key={r.dateStr} style={{background:"#FEE2E2",color:"#991B1B",padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:600}}>{r.dayName} {fmtDate(r.dateStr)}</span>
-            ))}
+
+        {/* ยังไม่เลือกครู */}
+        {!teacherA&&(
+          <div style={{borderRadius:10,padding:"18px 16px",textAlign:"center",color:"#9CA3AF",fontSize:13,border:"1px dashed #E5E7EB",marginTop:4,background:"#FAFAFA"}}>
+            เลือกครูก่อน เพื่อแสดงตารางคาบสอน
           </div>
         )}
-        {!teacherA?(
-          <div style={{background:"#F9FAFB",borderRadius:12,padding:"20px 16px",textAlign:"center",color:"#9CA3AF",fontSize:13,border:"1.5px dashed #E5E7EB"}}>
-            👆 เลือกครูก่อน เพื่อแสดงตารางคาบสอน
-          </div>
-        ):(
-          <div>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-              <label style={{...LS,margin:0}}>เลือกคาบที่ <b>ไม่อยู่</b></label>
-              <span style={{fontSize:11,color:"#9CA3AF"}}>(แตะที่คาบที่มีวิชา)</span>
+
+        {/* ตารางคาบ */}
+        {teacherA&&(
+          <div style={{marginTop:4}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,borderTop:"0.5px solid #F3F4F6",paddingTop:12}}>
+              <span style={{fontSize:13,fontWeight:500,color:"#374151"}}>เลือกคาบที่ไม่อยู่</span>
+              <span style={{fontSize:11,color:"#9CA3AF"}}>แตะ/คลิกที่คาบที่มีวิชา</span>
             </div>
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
               {DAYS_SW.map(day=>{
                 const inRange=absentRange.length===0||absentDayNames.has(day);
                 const daySlots=PERIODS_SW.map(p=>({p,ents:getEntries(teacherA,day,p.id),picked:absentSlots.some(s=>s.day===day&&s.period===p.id)}));
                 const dayHasClass=daySlots.some(s=>s.ents.length>0);
                 const dayPickedCount=daySlots.filter(s=>s.picked).length;
+                const showFull=inRange||absentRange.length===0;
+
                 return (
-                  <div key={day} style={{borderRadius:12,border:"1.5px solid "+(dayPickedCount>0?"#FECACA":inRange&&absentRange.length>0?"#FED7AA":"#E5E7EB"),background:dayPickedCount>0?"#FFF5F5":inRange&&absentRange.length>0?"#FFFBEB":"#F9FAFB",overflow:"hidden",opacity:absentRange.length>0&&!inRange?0.35:1}}>
-                    <div style={{padding:"10px 14px",fontWeight:700,fontSize:14,color:dayPickedCount>0?"#991B1B":inRange&&absentRange.length>0?"#92400E":"#374151",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:dayHasClass?"1px solid "+(dayPickedCount>0?"#FECACA":inRange&&absentRange.length>0?"#FED7AA":"#E5E7EB"):"none"}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <span>{day}</span>
-                        {!dayHasClass&&<span style={{fontSize:11,color:"#9CA3AF",fontWeight:400}}>ไม่มีคาบสอน</span>}
+                  <div key={day} style={{
+                    borderRadius:10,
+                    border:"0.5px solid "+(dayPickedCount>0?"#FECACA":showFull&&dayHasClass?"#FED7AA":"#E5E7EB"),
+                    background:dayPickedCount>0?"#FFF5F5":showFull&&dayHasClass?"#FFFBEB":"#FAFAFA",
+                    overflow:"hidden",
+                    opacity:!showFull&&absentRange.length>0?0.4:1,
+                  }}>
+                    {/* วัน header */}
+                    <div style={{
+                      padding:"8px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",
+                      borderBottom:showFull&&dayHasClass?"0.5px solid "+(dayPickedCount>0?"#FECACA":"#FED7AA"):"none"
+                    }}>
+                      <div style={{display:"flex",alignItems:"center",gap:7}}>
+                        <span style={{fontSize:13,fontWeight:600,color:dayPickedCount>0?"#991B1B":showFull&&dayHasClass?"#92400E":"#9CA3AF"}}>
+                          {day}
+                        </span>
+                        {!dayHasClass&&<span style={{fontSize:11,color:"#C4B5A5"}}>ไม่มีคาบสอน</span>}
+                        {!showFull&&absentRange.length>0&&<span style={{fontSize:11,color:"#C4B5A5"}}>ไม่ใช่วันที่เลือก</span>}
                       </div>
-                      {dayPickedCount>0&&<span style={{background:"#FEE2E2",color:"#991B1B",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>✓ {dayPickedCount} คาบ</span>}
+                      {dayPickedCount>0&&(
+                        <span style={{background:"#FEE2E2",color:"#991B1B",padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:500}}>
+                          ✓ {dayPickedCount} คาบ
+                        </span>
+                      )}
                     </div>
-                    {dayHasClass&&(
-                      <div style={{padding:"10px 12px",display:"flex",flexWrap:"wrap",gap:7}}>
+
+                    {/* คาบ grid — 4 cols */}
+                    {showFull&&dayHasClass&&(
+                      <div style={{
+                        display:"grid",
+                        gridTemplateColumns:"repeat(4,1fr)",
+                        gap:5,padding:"8px 10px 10px"
+                      }}>
                         {daySlots.map(({p,ents,picked})=>{
-                          const hasClass=ents.length>0;const canClick=hasClass&&inRange;
+                          const hasClass=ents.length>0;
+                          const canClick=hasClass&&(inRange||absentRange.length===0);
                           return (
-                            <button key={p.id} onClick={()=>canClick&&toggleSlot(day,p.id)} disabled={!canClick}
-                              style={{minWidth:78,flex:"1 1 78px",padding:"8px 6px",borderRadius:10,border:"2px solid "+(picked?"#DC2626":hasClass&&inRange?"#FED7AA":"#E5E7EB"),background:picked?"#FEE2E2":hasClass&&inRange?"#FFFBEB":"#fff",cursor:canClick?"pointer":"default",textAlign:"center",fontFamily:"inherit",transition:"all 0.15s",boxShadow:picked?"0 0 0 2px #FCA5A5":"none"}}>
-                              <div style={{fontSize:12,fontWeight:700,color:"#374151",marginBottom:1}}>คาบ {p.id}</div>
-                              <div style={{fontSize:10,color:"#9CA3AF",marginBottom:3}}>{p.time}</div>
+                            <button key={p.id} onClick={()=>canClick&&toggleSlot(day,p.id)}
+                              disabled={!canClick}
+                              style={{
+                                borderRadius:8,padding:"7px 4px",textAlign:"center",
+                                cursor:canClick?"pointer":"default",fontFamily:"inherit",
+                                border:picked?"1.5px solid #DC2626":hasClass&&canClick?"0.5px solid #FED7AA":"0.5px solid #E5E7EB",
+                                background:picked?"#FEE2E2":hasClass&&canClick?"#FFFBEB":"#fff",
+                                opacity:hasClass?1:0.35,
+                                transition:"all 0.12s",
+                                minWidth:0,
+                              }}>
+                              <div style={{fontSize:12,fontWeight:600,color:"#374151"}}>คาบ {p.id}</div>
+                              <div style={{fontSize:9,color:"#9CA3AF",margin:"1px 0 2px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.time}</div>
                               {ents.map((e,i)=>(
                                 <div key={i}>
-                                  <div style={{fontSize:12,fontWeight:700,color:picked?"#991B1B":inRange?"#1E40AF":"#9CA3AF",lineHeight:1.2}}>{e.subName.length>9?e.subName.slice(0,9)+"…":e.subName}</div>
-                                  <div style={{fontSize:10,color:"#6B7280"}}>{e.roomName}</div>
+                                  <div style={{fontSize:11,fontWeight:600,color:picked?"#991B1B":canClick?"#1E40AF":"#C4B5A5",lineHeight:1.2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:1,WebkitBoxOrient:"vertical"}}>
+                                    {e.subName}
+                                  </div>
+                                  <div style={{fontSize:10,color:"#9CA3AF"}}>{e.roomName}</div>
                                 </div>
                               ))}
-                              {picked&&<div style={{fontSize:10,color:"#DC2626",fontWeight:700,marginTop:2}}>✕ ขอแลก</div>}
+                              {picked&&<div style={{fontSize:9,color:"#DC2626",fontWeight:600,marginTop:2}}>✕ ขอแลก</div>}
                             </button>
                           );
                         })}
@@ -5644,8 +5697,15 @@ function SwapPage({S,st,ay,sh}){
                 );
               })}
             </div>
-            <button onClick={doSearch} style={{...BS(),marginTop:14,width:"100%",padding:"14px",fontSize:15,borderRadius:12,opacity:absentSlots.length>0?1:0.6,boxShadow:absentSlots.length>0?"0 4px 14px rgba(185,28,28,0.3)":"none"}}>
-              🔍 ค้นหาครูสอนแทน {absentSlots.length>0&&`(${absentSlots.length} คาบ)`}
+
+            <button onClick={doSearch} style={{
+              width:"100%",marginTop:12,padding:"12px",borderRadius:10,border:"none",
+              background:absentSlots.length>0?"#B91C1C":"#9CA3AF",
+              color:"#fff",fontSize:14,fontWeight:600,cursor:absentSlots.length>0?"pointer":"default",
+              fontFamily:"inherit",transition:"background 0.15s",
+              boxShadow:absentSlots.length>0?"0 2px 8px rgba(185,28,28,0.25)":"none"
+            }}>
+              {absentSlots.length>0?`🔍 ค้นหาครูสอนแทน (${absentSlots.length} คาบ)`:"เลือกคาบที่ไม่อยู่ก่อน"}
             </button>
           </div>
         )}
@@ -5653,43 +5713,79 @@ function SwapPage({S,st,ay,sh}){
 
       {/* ── ขั้นที่ 2 ── */}
       {searched&&(
-        <div style={{background:"#fff",borderRadius:16,padding:"18px 16px",boxShadow:"0 2px 16px rgba(0,0,0,0.07)"}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
-            <div style={{width:28,height:28,borderRadius:14,background:"#059669",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,flexShrink:0}}>2</div>
+        <div style={{background:"#fff",borderRadius:16,border:"0.5px solid #E5E7EB",padding:"20px 20px 16px"}}>
+
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+            <div style={{width:28,height:28,borderRadius:"50%",background:"#059669",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:600,flexShrink:0}}>2</div>
             <div>
-              <div style={{fontSize:15,fontWeight:700,color:"#111"}}>เลือกครูสอนแทน</div>
-              <div style={{fontSize:11,color:"#9CA3AF"}}>เลือกครูและคาบที่สอนคืน</div>
+              <div style={{fontSize:15,fontWeight:600,color:"#111"}}>เลือกครูสอนแทน</div>
+              <div style={{fontSize:11,color:"#9CA3AF",marginTop:1}}>เลือกครูและคาบที่สอนคืน</div>
             </div>
           </div>
+
           {results.length===0
-            ?<div style={{textAlign:"center",padding:24,color:"#9CA3AF",fontSize:13}}>ไม่พบครูที่สอนแทนได้</div>
+            ?<div style={{textAlign:"center",padding:"24px 0",color:"#9CA3AF",fontSize:13}}>ไม่พบครูที่สอนแทนได้</div>
             :results.map(r=>{
-              const key=r.day+"_"+r.period+"_"+r.roomId;const sel=selected[key];
+              const key=r.day+"_"+r.period+"_"+r.roomId;
+              const sel=selected[key];
               return(
-                <div key={key} style={{marginBottom:12,border:"1.5px solid "+(sel?"#86EFAC":"#E5E7EB"),borderRadius:12,overflow:"hidden"}}>
-                  <div style={{background:sel?"#F0FDF4":"#FFF5F5",padding:"10px 14px",borderBottom:"1px solid "+(sel?"#BBF7D0":"#FECACA"),display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-                    <span style={{background:sel?"#D1FAE5":"#FEE2E2",color:sel?"#065F46":"#991B1B",padding:"4px 12px",borderRadius:20,fontSize:13,fontWeight:700}}>{r.day} คาบ {r.period}</span>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:13,fontWeight:700}}>{r.subName}</div>
-                      <div style={{fontSize:11,color:"#6B7280"}}>ห้อง {r.roomName}</div>
+                <div key={key} style={{
+                  marginBottom:10,
+                  border:"0.5px solid "+(sel?"#6EE7B7":"#E5E7EB"),
+                  borderRadius:12,overflow:"hidden"
+                }}>
+                  {/* คาบ header */}
+                  <div style={{
+                    background:sel?"#F0FDF4":"#FFF5F5",
+                    padding:"9px 14px",
+                    borderBottom:"0.5px solid "+(sel?"#A7F3D0":"#FECACA"),
+                    display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"
+                  }}>
+                    <span style={{
+                      background:sel?"#D1FAE5":"#FEE2E2",
+                      color:sel?"#065F46":"#991B1B",
+                      padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:600
+                    }}>{r.day} คาบ {r.period}</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:600,color:"#111"}}>{r.subName}</div>
+                      <div style={{fontSize:11,color:"#9CA3AF"}}>ห้อง {r.roomName}</div>
                     </div>
-                    {sel&&<span style={{background:"#D1FAE5",color:"#065F46",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>✅ เลือกแล้ว</span>}
+                    {sel&&<span style={{
+                      background:"#D1FAE5",color:"#065F46",
+                      padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:600
+                    }}>✅ เลือกแล้ว</span>}
                   </div>
+
                   {r.candidates.length===0
                     ?<div style={{padding:"12px 14px",color:"#9CA3AF",fontSize:12}}>ไม่มีครูว่างในเงื่อนไข</div>
                     :<div style={{padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
                       {r.candidates.map(({teacher:tB,returnSlots})=>(
-                        <div key={tB.id} style={{background:sel?.subTeacherId===tB.id?"#F0FDF4":"#F9FAFB",borderRadius:10,padding:"10px 12px",border:"1.5px solid "+(sel?.subTeacherId===tB.id?"#86EFAC":"#E5E7EB")}}>
-                          <div style={{fontWeight:700,fontSize:14,marginBottom:8,color:"#1E3A5F"}}>{tB.prefix}{tB.firstName} {tB.lastName}</div>
-                          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        <div key={tB.id} style={{
+                          borderRadius:10,padding:"10px 12px",
+                          border:"0.5px solid "+(sel?.subTeacherId===tB.id?"#6EE7B7":"#E5E7EB"),
+                          background:sel?.subTeacherId===tB.id?"#F0FDF4":"#FAFAFA"
+                        }}>
+                          <div style={{fontSize:13,fontWeight:600,color:"#1E3A5F",marginBottom:8}}>
+                            {tB.prefix}{tB.firstName} {tB.lastName}
+                          </div>
+                          {/* return slots grid — 2 cols */}
+                          <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:6}}>
                             {returnSlots.map((rs,ri)=>{
                               const isAct=sel?.subTeacherId===tB.id&&sel?.subDay===rs.day&&sel?.subPeriod===rs.period&&sel?.calcDate===rs.calcDate;
                               return(
-                                <button key={ri} onClick={()=>setSelected(p=>({...p,[key]:{subTeacherId:tB.id,subDay:rs.day,subPeriod:rs.period,calcDate:rs.calcDate,subBName:rs.subBName,subBRoom:rs.subBRoom}}))}
-                                  style={{flex:"1 1 140px",padding:"9px 10px",borderRadius:10,border:"2px solid "+(isAct?"#059669":"#D1D5DB"),background:isAct?"#F0FDF4":"#fff",color:isAct?"#065F46":"#374151",fontSize:12,fontWeight:isAct?700:400,cursor:"pointer",textAlign:"left",fontFamily:"inherit",boxShadow:isAct?"0 0 0 2px #6EE7B7":"none"}}>
-                                  <div style={{fontWeight:700,fontSize:13}}>{isAct?"✓ ":""}{rs.day} คาบ {rs.period}</div>
-                                  <div style={{fontSize:11,color:isAct?"#059669":"#6B7280",marginTop:2}}>📅 {fmtDate(rs.calcDate)}</div>
-                                  {rs.subBName&&<div style={{fontSize:11,color:"#1E40AF",marginTop:1}}>📚 {rs.subBName}</div>}
+                                <button key={ri}
+                                  onClick={()=>setSelected(p=>({...p,[key]:{subTeacherId:tB.id,subDay:rs.day,subPeriod:rs.period,calcDate:rs.calcDate,subBName:rs.subBName,subBRoom:rs.subBRoom}}))}
+                                  style={{
+                                    padding:"8px 10px",borderRadius:8,textAlign:"left",fontFamily:"inherit",
+                                    border:isAct?"1.5px solid #059669":"0.5px solid #E5E7EB",
+                                    background:isAct?"#F0FDF4":"#fff",
+                                    cursor:"pointer",transition:"all 0.12s"
+                                  }}>
+                                  <div style={{fontSize:12,fontWeight:600,color:isAct?"#065F46":"#374151"}}>
+                                    {isAct?"✓ ":""}{rs.day} คาบ {rs.period}
+                                  </div>
+                                  <div style={{fontSize:11,color:isAct?"#059669":"#9CA3AF",marginTop:2}}>📅 {fmtDate(rs.calcDate)}</div>
+                                  {rs.subBName&&<div style={{fontSize:11,color:"#1E40AF",marginTop:1,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>📚 {rs.subBName}</div>}
                                 </button>
                               );
                             })}
@@ -5702,12 +5798,26 @@ function SwapPage({S,st,ay,sh}){
               );
             })
           }
+
+          {/* ปุ่ม */}
           {results.length>0&&(
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
-              <button onClick={printForm} disabled={!Object.keys(selected).length} style={{...BS("#059669"),flex:"1 1 150px",opacity:Object.keys(selected).length?1:0.4,fontSize:14,padding:"13px 16px",borderRadius:12}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:6}}>
+              <button onClick={printForm} disabled={!Object.keys(selected).length}
+                style={{
+                  padding:"12px",borderRadius:10,border:"none",fontFamily:"inherit",fontSize:13,fontWeight:600,
+                  background:Object.keys(selected).length?"#059669":"#9CA3AF",
+                  color:"#fff",cursor:Object.keys(selected).length?"pointer":"default",
+                  transition:"background 0.12s"
+                }}>
                 🖨️ พิมพ์ฟอร์ม ({Object.keys(selected).length} คาบ)
               </button>
-              <button onClick={downloadSwapPDF} disabled={!Object.keys(selected).length} style={{...BS("#2563EB"),flex:"1 1 150px",opacity:Object.keys(selected).length?1:0.4,fontSize:14,padding:"13px 16px",borderRadius:12}}>
+              <button onClick={downloadSwapPDF} disabled={!Object.keys(selected).length}
+                style={{
+                  padding:"12px",borderRadius:10,border:"none",fontFamily:"inherit",fontSize:13,fontWeight:600,
+                  background:Object.keys(selected).length?"#2563EB":"#9CA3AF",
+                  color:"#fff",cursor:Object.keys(selected).length?"pointer":"default",
+                  transition:"background 0.12s"
+                }}>
                 📥 โหลด PDF ({Object.keys(selected).length} คาบ)
               </button>
             </div>
