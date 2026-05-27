@@ -5468,11 +5468,14 @@ function SwapPage({S,st,ay,sh}){
     const logo=sh?.logo?'<img src="'+sh.logo+'" style="height:50px;vertical-align:middle;margin-right:10px;"/>':"";
     const deptA=S.depts.find(d=>d.id===tA?.departmentId);
     const absentRangeStr=absentDateTo&&absentDateTo!==absentDateFrom?fmtDate(absentDateFrom)+" — "+fmtDate(absentDateTo):fmtDate(absentDateFrom);
-    const rows=filledKeys.map(k=>{const r=results.find(r=>r.day+"_"+r.period+"_"+r.roomId===k);const sel=selected[k];const tB=S.teachers.find(t=>t.id===sel.subTeacherId);return{r,sel,tB};});
+    const rows=filledKeys.map(k=>{const r=results.find(r=>r.day+"_"+r.period+"_"+r.roomId===k);const sel=selected[k];const tB=S.teachers.find(t=>t.id===sel.subTeacherId);
+      // หาวันที่จริงของ slot นี้จาก absentRange (match ตาม dayName)
+      const slotDate=absentRange.find(ar=>ar.dayName===r.day)?.dateStr||absentDateFrom;
+      return{r,sel,tB,slotDate};});
     const tAName=(tA?.prefix||"")+(tA?.firstName||"")+" "+(tA?.lastName||"");
-    const tableRows=rows.map(({r,sel,tB},i)=>
+    const tableRows=rows.map(({r,sel,tB,slotDate},i)=>
       '<tr><td style="text-align:center">'+(i+1)+'</td>'+
-      '<td style="text-align:center">'+r.day+'<br/><b>'+fmtDate(absentDateFrom)+'</b><br/>คาบ '+r.period+'<br/><span style="font-size:10pt;color:#555;">('+r.time+')</span></td>'+
+      '<td style="text-align:center">'+r.day+'<br/><b>'+fmtDate(slotDate)+'</b><br/>คาบ '+r.period+'<br/><span style="font-size:10pt;color:#555;">('+r.time+')</span></td>'+
       '<td>'+(sel.subBName||r.subFullName||r.subName)+'<br/><span style="font-size:10pt;color:#555;">ห้อง '+(sel.subBRoom||r.roomName)+'</span></td>'+
       '<td><b>'+(tB?.prefix||"")+(tB?.firstName||"")+" "+(tB?.lastName||"")+'</b></td>'+
       '<td style="text-align:center">'+sel.subDay+'<br/><b>'+fmtDate(sel.calcDate||"")+'</b><br/>คาบ '+sel.subPeriod+'<br/><span style="font-size:10pt;color:#555;">('+( PERIODS_SW.find(p=>p.id===sel.subPeriod)?.time||"")+')</span></td>'+
