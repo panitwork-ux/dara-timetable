@@ -1987,11 +1987,26 @@ export default function App() {
     setSyncing(true);
     const unsub=fsSubscribeTimetable(divId,(d)=>{
       if(!fsReadyRef.current){
-        // โหลดครั้งแรก: Firestore เป็น source of truth — ล้าง localStorage cache เก่าก่อน
-        const keepKeys=["dara_academicYear","dara_schoolHeader","dara_division"];
-        Object.keys(localStorage)
-          .filter(k=>k.startsWith("dara_"+divId)&&!keepKeys.includes(k))
-          .forEach(k=>localStorage.removeItem(k));
+        // ตรวจว่า Firestore ส่งข้อมูลจริงมาหรือเปล่า
+        // ถ้าว่างทุก field → อาจเป็น offline หรือ document ว่างจริง
+        const hasRealData=(d.teachers?.length||0)+(d.subjects?.length||0)+(d.rooms?.length||0)+(d.levels?.length||0)>0;
+        const hasLocalData=Object.keys(localStorage).some(k=>k.startsWith("dara_"+divId+"_teachers")||k.startsWith("dara_"+divId+"_rooms"));
+
+        if(!hasRealData&&hasLocalData){
+          // Firestore ส่งว่างมา แต่ localStorage มีข้อมูล → ใช้ localStorage แทน (offline guard)
+          fsReadyRef.current=true;
+          setSyncing(false);
+          setGasReady(true);
+          return;
+        }
+
+        if(hasRealData){
+          // Firestore มีข้อมูลจริง → ล้าง localStorage cache เก่าแล้วใช้ Firestore
+          const keepKeys=["dara_academicYear","dara_schoolHeader","dara_division"];
+          Object.keys(localStorage)
+            .filter(k=>k.startsWith("dara_"+divId)&&!keepKeys.includes(k))
+            .forEach(k=>localStorage.removeItem(k));
+        }
         // set state จาก Firestore (ถ้า Firestore ว่าง ก็ว่างจริงๆ ไม่เอา localStorage)
         setLevels(d.levels?.length?d.levels:DIVISIONS.find(x=>x.id===divId)?.defaultLevels.map(n=>({id:gid(),name:n}))||[]);
         setPlans(d.plans||[]);
