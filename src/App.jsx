@@ -1775,15 +1775,29 @@ export default function App() {
 
   // ===== AUTH STATE =====
   const [authUser,setAuthUser]=useState(undefined);
-  const [userPerms,setUserPerms]=useState(null);
+  const [userPerms,setUserPerms]=useState(()=>{
+    // โหลดจาก localStorage cache ก่อน เผื่อ Firestore offline
+    try{const c=localStorage.getItem("dara_perms_cache");return c?JSON.parse(c):null;}catch{return null;}
+  });
   const [showAdmin,setShowAdmin]=useState(false);
+
+  // helper: fsGetPermissions พร้อม timeout 8 วินาที
+  const fsGetPermsWithTimeout=async(uid)=>{
+    return Promise.race([
+      fsGetPermissions(uid),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error("timeout")),8000))
+    ]).catch(()=>null);
+  };
 
   // refresh permissions จาก Firestore (เรียกได้ทุกเวลา)
   const refreshPerms=async(u)=>{
     const user=u||authUser;
     if(!user)return;
-    const perms=await fsGetPermissions(user.uid);
-    if(perms)setUserPerms(perms);
+    const perms=await fsGetPermsWithTimeout(user.uid);
+    if(perms){
+      setUserPerms(perms);
+      try{localStorage.setItem("dara_perms_cache",JSON.stringify(perms));}catch{}
+    }
   };
 
   // ฟัง Firebase auth state
@@ -1799,41 +1813,57 @@ export default function App() {
         const {db}=getFB();
         const makePreKey=(email)=>"pre_"+email.trim().toLowerCase().replace(/[@.]/g,"_");
 
-        // โหลด permissions ครั้งแรก
-        let perms=await fsGetPermissions(u.uid);
+        // โหลด permissions ครั้งแรก (พร้อม timeout)
+        let perms=await fsGetPermsWithTimeout(u.uid);
 
-        // ตรวจ pre-key เสมอ ถ้า perms ยังไม่มีสิทธิ์ใดเลย (รวมกรณี user เคย login แล้วแต่ admin เพิ่มสิทธิ์ทีหลังผ่าน pre-key)
+        // ตรวจ pre-key เสมอ ถ้า perms ยังไม่มีสิทธิ์ใดเลย
         const hasAnyAccess=perms&&Object.values(perms.divisions||{}).some(Boolean);
         if((!perms||!hasAnyAccess)&&db){
-          const emailKey=makePreKey(u.email);
-          const preSnap=await getDoc(doc(db,"permissions",emailKey));
-          if(preSnap.exists()&&!preSnap.data().merged){
-            const preData=preSnap.data();
-            const divs=preData.divisions||{p1:false,p2:false,m1:false,m2:false};
-            await setDoc(doc(db,"permissions",u.uid),{
-              displayName:u.displayName||"",email:u.email,divisions:divs,preAdded:false,
-            },{merge:true});
-            await setDoc(doc(db,"permissions",emailKey),{merged:true},{merge:true});
-            perms={...perms,divisions:divs};
-          }
+          try{
+            const emailKey=makePreKey(u.email);
+            const preSnap=await Promise.race([getDoc(doc(db,"permissions",emailKey)),new Promise((_,r)=>setTimeout(()=>r(new Error("t")),5000))]).catch(()=>null);
+            if(preSnap?.exists()&&!preSnap.data().merged){
+              const preData=preSnap.data();
+              const divs=preData.divisions||{p1:false,p2:false,m1:false,m2:false};
+              await Promise.race([setDoc(doc(db,"permissions",u.uid),{displayName:u.displayName||"",email:u.email,divisions:divs,preAdded:false},{merge:true}),new Promise((_,r)=>setTimeout(()=>r(),5000))]).catch(()=>{});
+              await Promise.race([setDoc(doc(db,"permissions",emailKey),{merged:true},{merge:true}),new Promise((_,r)=>setTimeout(()=>r(),5000))]).catch(()=>{});
+              perms={...perms,divisions:divs};
+            }
+          }catch{}
         }
 
         if(!perms){
-          const emptyDivs={p1:false,p2:false,m1:false,m2:false};
-          await fsSetPermissions(u.uid,{displayName:u.displayName||"",email:u.email,divisions:emptyDivs});
-          setUserPerms({divisions:emptyDivs});
+          // Firestore offline — ใช้ cache จาก localStorage
+          const cached=localStorage.getItem("dara_perms_cache");
+          if(cached){
+            try{
+              const cachedPerms=JSON.parse(cached);
+              setUserPerms(cachedPerms);
+            }catch{setUserPerms({divisions:{p1:false,p2:false,m1:false,m2:false}});}
+          } else {
+            // สร้าง empty perms (จะ update เมื่อ online)
+            const emptyDivs={p1:false,p2:false,m1:false,m2:false};
+            try{await Promise.race([fsSetPermissions(u.uid,{displayName:u.displayName||"",email:u.email,divisions:emptyDivs}),new Promise((_,r)=>setTimeout(()=>r(),5000))]).catch(()=>{});}catch{}
+            setUserPerms({divisions:emptyDivs});
+          }
         } else {
-          // merge เฉพาะ displayName/email ไม่ทับ divisions ที่ admin ตั้งไว้
-          await setDoc(doc(db,"permissions",u.uid),{displayName:u.displayName||"",email:u.email},{merge:true});
-          // re-fetch เพื่อให้ได้ค่าล่าสุดจาก Firestore (กัน race condition)
-          const freshPerms=await fsGetPermissions(u.uid);
-          setUserPerms(freshPerms||perms);
+          // merge displayName/email ไม่ทับ divisions
+          try{await Promise.race([setDoc(doc(db,"permissions",u.uid),{displayName:u.displayName||"",email:u.email},{merge:true}),new Promise((_,r)=>setTimeout(()=>r(),5000))]).catch(()=>{});}catch{}
+          // re-fetch เพื่อให้ได้ค่าล่าสุด
+          const freshPerms=await fsGetPermsWithTimeout(u.uid);
+          const finalPerms=freshPerms||perms;
+          setUserPerms(finalPerms);
+          try{localStorage.setItem("dara_perms_cache",JSON.stringify(finalPerms));}catch{}
         }
 
         // Real-time listener — permissions อัปเดตทันทีเมื่อ admin แก้ไข
         if(db){
           unsubPerms=onSnapshot(doc(db,"permissions",u.uid),(snap)=>{
-            if(snap.exists())setUserPerms(snap.data());
+            if(snap.exists()){
+              const data=snap.data();
+              setUserPerms(data);
+              try{localStorage.setItem("dara_perms_cache",JSON.stringify(data));}catch{}
+            }
           });
         }
       } else {
@@ -2162,7 +2192,7 @@ export default function App() {
           ?<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:12}}>
               <div style={{width:36,height:36,border:"3px solid #E5E7EB",borderTopColor:"#B91C1C",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
               <p style={{color:"#9CA3AF",fontSize:13}}>กำลังโหลดสิทธิ์การเข้าใช้งาน...</p>
-              <p style={{color:"#C4B5A5",fontSize:11}}>หากใช้เวลานาน กรุณา reload หน้านี้</p>
+              <button onClick={()=>window.location.reload()} style={{marginTop:8,padding:"8px 20px",background:"#B91C1C",color:"#fff",border:"none",borderRadius:8,fontSize:13,cursor:"pointer"}}>🔄 Reload</button>
             </div>
         /* ── Guard 1: ไม่มีสิทธิ์ระดับชั้นนี้ ── */
         :firebaseConfigured&&!divHasAccess
