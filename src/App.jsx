@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import * as XLSX from 'xlsx';
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
-import { getFirestore, doc, getDoc, setDoc, collection, getDocs, onSnapshot } from "firebase/firestore";
+import { getFirestore, initializeFirestore, doc, getDoc, setDoc, collection, getDocs, onSnapshot } from "firebase/firestore";
 
 // ===== FIREBASE CONFIG — ใส่ค่าจาก Firebase Console =====
 const FIREBASE_CONFIG = {
@@ -23,7 +23,8 @@ const getFB=()=>{
   if(!_fbApp&&!FIREBASE_CONFIG.apiKey.includes("YOUR")){
     _fbApp=initializeApp(FIREBASE_CONFIG);
     _auth=getAuth(_fbApp);
-    _db=getFirestore(_fbApp);
+    // experimentalForceLongPolling แก้ปัญหา WebChannel 400 error บน GitHub Pages
+    _db=initializeFirestore(_fbApp,{experimentalForceLongPolling:true,useFetchStreams:false});
   }
   return{auth:_auth,db:_db};
 };
@@ -2156,9 +2157,15 @@ export default function App() {
         </div>
       </header>
       <main style={{flex:1,overflow:"auto",padding:"20px 24px",background:"#F3F4F6"}}>
-        {/* No access guard */}
-        {/* ── Guard 1: ไม่มีสิทธิ์ระดับชั้นนี้ ── */}
-        {firebaseConfigured&&!divHasAccess
+        {/* ── Guard 0: กำลังโหลดสิทธิ์จาก Firebase ── */}
+        {firebaseConfigured&&authUser&&userPerms===null
+          ?<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:12}}>
+              <div style={{width:36,height:36,border:"3px solid #E5E7EB",borderTopColor:"#B91C1C",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+              <p style={{color:"#9CA3AF",fontSize:13}}>กำลังโหลดสิทธิ์การเข้าใช้งาน...</p>
+              <p style={{color:"#C4B5A5",fontSize:11}}>หากใช้เวลานาน กรุณา reload หน้านี้</p>
+            </div>
+        /* ── Guard 1: ไม่มีสิทธิ์ระดับชั้นนี้ ── */
+        :firebaseConfigured&&!divHasAccess
           ?<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:16}}>
               <div style={{fontSize:48}}>🔒</div>
               <h2 style={{fontSize:20,fontWeight:700,color:"#374151"}}>ไม่มีสิทธิ์เข้าระดับนี้</h2>
