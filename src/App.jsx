@@ -7500,3 +7500,5 @@ function pdfMultiPage(pages, logoBase64, ps, isRoom, divisionId) {
     pagesHtml +
     '</body></html>';
 }
+/ /   v  
+ 
