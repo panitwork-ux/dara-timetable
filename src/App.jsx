@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import * as XLSX from 'xlsx';
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
-import { getFirestore, initializeFirestore, doc, getDoc, setDoc, collection, getDocs, onSnapshot } from "firebase/firestore";
+import { getFirestore, initializeFirestore, enableIndexedDbPersistence, doc, getDoc, setDoc, collection, getDocs, onSnapshot } from "firebase/firestore";
 
 // ===== FIREBASE CONFIG — ใส่ค่าจาก Firebase Console =====
 const FIREBASE_CONFIG = {
@@ -23,8 +23,12 @@ const getFB=()=>{
   if(!_fbApp&&!FIREBASE_CONFIG.apiKey.includes("YOUR")){
     _fbApp=initializeApp(FIREBASE_CONFIG);
     _auth=getAuth(_fbApp);
-    // experimentalForceLongPolling แก้ปัญหา WebChannel 400 error บน GitHub Pages
-    _db=initializeFirestore(_fbApp,{experimentalForceLongPolling:true,useFetchStreams:false});
+    // autoDetectLongPolling แก้ปัญหา WebChannel 400 error บน GitHub Pages
+    _db=initializeFirestore(_fbApp,{
+      experimentalAutoDetectLongPolling:true,
+    });
+    // เปิด offline persistence — ข้อมูลยังอ่านได้แม้ Firestore ขัดข้อง
+    enableIndexedDbPersistence(_db).catch(()=>{});
   }
   return{auth:_auth,db:_db};
 };
