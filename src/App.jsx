@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import * as XLSX from 'xlsx';
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
-import { getFirestore, initializeFirestore, enableIndexedDbPersistence, doc, getDoc, setDoc, collection, getDocs, onSnapshot } from "firebase/firestore";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, collection, getDocs, onSnapshot } from "firebase/firestore";
 
 // ===== FIREBASE CONFIG — ใส่ค่าจาก Firebase Console =====
 const FIREBASE_CONFIG = {
@@ -26,9 +26,9 @@ const getFB=()=>{
     // autoDetectLongPolling แก้ปัญหา WebChannel 400 error บน GitHub Pages
     _db=initializeFirestore(_fbApp,{
       experimentalAutoDetectLongPolling:true,
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
     });
-    // เปิด offline persistence — ข้อมูลยังอ่านได้แม้ Firestore ขัดข้อง
-    enableIndexedDbPersistence(_db).catch(()=>{});
+    // persistentLocalCache ใน initializeFirestore แทน enableIndexedDbPersistence (deprecated)
   }
   return{auth:_auth,db:_db};
 };
@@ -1821,7 +1821,7 @@ export default function App() {
         let perms=await fsGetPermsWithTimeout(u.uid);
 
         // ตรวจ pre-key เสมอ ถ้า perms ยังไม่มีสิทธิ์ใดเลย
-        const hasAnyAccess=perms&&Object.values(perms.divisions||{}).some(Boolean);
+        const hasAnyAccess=perms&&Object.values(perms.divisions||{}).some(v=>Boolean(v)&&v!=='false');
         if((!perms||!hasAnyAccess)&&db){
           try{
             const emailKey=makePreKey(u.email);
@@ -1945,9 +1945,9 @@ export default function App() {
   // Auto-switch ไปยัง division แรกที่มีสิทธิ์ ถ้า divId ปัจจุบันไม่มีสิทธิ์
   useEffect(()=>{
     if(!firebaseConfigured||!userPerms)return;
-    const currentOk=userPerms?.divisions?.[divId]===true;
+    const currentOk=Boolean(userPerms?.divisions?.[divId]);
     if(!currentOk){
-      const firstAllowed=DIVISIONS.find(d=>userPerms?.divisions?.[d.id]===true);
+      const firstAllowed=DIVISIONS.find(d=>Boolean(userPerms?.divisions?.[d.id]));
       if(firstAllowed&&firstAllowed.id!==divId){
         switchDivision(firstAllowed.id);
       }
@@ -1976,7 +1976,7 @@ export default function App() {
         await fsSaveTimetable(divId,{...stateRef.current,schoolHeader:shRef.current?.schoolHeader,academicYear:shRef.current?.academicYear});
       }catch(e){console.warn("Firestore save error:",e);}
       setSyncing(false);
-      setTimeout(()=>{isSavingRef.current=false;},300); // รอ onSnapshot ผ่านไปก่อน
+      setTimeout(()=>{isSavingRef.current=false;},700); // รอ onSnapshot ผ่านไปก่อน (700ms กัน network ช้า)
     },delay);
   },[divId]);
 
@@ -2054,17 +2054,17 @@ export default function App() {
   },[divId, authUser]);
 
   // Auto-save ไป localStorage (cache offline) + Firestore เมื่อข้อมูลเปลี่ยน
-  useEffect(()=>{ saveLS(divId+"_levels",levels);       if(fsReadyRef.current) syncToFirestore(); },[levels]);
-  useEffect(()=>{ saveLS(divId+"_plans",plans);         if(fsReadyRef.current) syncToFirestore(); },[plans]);
-  useEffect(()=>{ saveLS(divId+"_depts",depts);         if(fsReadyRef.current) syncToFirestore(); },[depts]);
-  useEffect(()=>{ saveLS(divId+"_teachers",teachers);   if(fsReadyRef.current) syncToFirestore(); },[teachers]);
-  useEffect(()=>{ saveLS(divId+"_subjects",subjects);   if(fsReadyRef.current) syncToFirestore(); },[subjects]);
-  useEffect(()=>{ saveLS(divId+"_rooms",rooms);         if(fsReadyRef.current) syncToFirestore(); },[rooms]);
-  useEffect(()=>{ saveLS(divId+"_specialRooms",specialRooms); if(fsReadyRef.current) syncToFirestore(); },[specialRooms]);
-  useEffect(()=>{ saveLS(divId+"_assigns",assigns);     if(fsReadyRef.current) syncToFirestore(); },[assigns]);
-  useEffect(()=>{ saveLS(divId+"_meetings",meetings);   if(fsReadyRef.current) syncToFirestore(); },[meetings]);
-  useEffect(()=>{ saveLS(divId+"_schedule",schedule);   if(fsReadyRef.current) syncToFirestore(); },[schedule]);
-  useEffect(()=>{ saveLS(divId+"_locks",locks);         if(fsReadyRef.current) syncToFirestore(); },[locks]);
+  useEffect(()=>{ saveLS(divId+"_levels",levels);       if(fsReadyRef.current) syncToFirestore(); },[levels,divId]); // eslint-disable-line
+  useEffect(()=>{ saveLS(divId+"_plans",plans);         if(fsReadyRef.current) syncToFirestore(); },[plans,divId]); // eslint-disable-line
+  useEffect(()=>{ saveLS(divId+"_depts",depts);         if(fsReadyRef.current) syncToFirestore(); },[depts,divId]); // eslint-disable-line
+  useEffect(()=>{ saveLS(divId+"_teachers",teachers);   if(fsReadyRef.current) syncToFirestore(); },[teachers,divId]); // eslint-disable-line
+  useEffect(()=>{ saveLS(divId+"_subjects",subjects);   if(fsReadyRef.current) syncToFirestore(); },[subjects,divId]); // eslint-disable-line
+  useEffect(()=>{ saveLS(divId+"_rooms",rooms);         if(fsReadyRef.current) syncToFirestore(); },[rooms,divId]); // eslint-disable-line
+  useEffect(()=>{ saveLS(divId+"_specialRooms",specialRooms); if(fsReadyRef.current) syncToFirestore(); },[specialRooms,divId]); // eslint-disable-line
+  useEffect(()=>{ saveLS(divId+"_assigns",assigns);     if(fsReadyRef.current) syncToFirestore(); },[assigns,divId]); // eslint-disable-line
+  useEffect(()=>{ saveLS(divId+"_meetings",meetings);   if(fsReadyRef.current) syncToFirestore(); },[meetings,divId]); // eslint-disable-line
+  useEffect(()=>{ saveLS(divId+"_schedule",schedule);   if(fsReadyRef.current) syncToFirestore(); },[schedule,divId]); // eslint-disable-line
+  useEffect(()=>{ saveLS(divId+"_locks",locks);         if(fsReadyRef.current) syncToFirestore(); },[locks,divId]); // eslint-disable-line
 
   const st=(m,t="success")=>setToast({message:m,type:t});
   const gc=did=>{const i=depts.findIndex(d=>d.id===did);return DC[i%DC.length]||DC[0]};
@@ -2110,10 +2110,10 @@ export default function App() {
 
   // Filter division selector ตาม permissions
   const availDivs=firebaseConfigured
-    ?DIVISIONS.filter(d=>userPerms?.divisions?.[d.id]===true)
+    ?DIVISIONS.filter(d=>Boolean(userPerms?.divisions?.[d.id]))
     :DIVISIONS;
 
-  const divHasAccess=!firebaseConfigured||userPerms?.divisions?.[divId]===true;
+  const divHasAccess=!firebaseConfigured||Boolean(userPerms?.divisions?.[divId]);
 
   return <div style={{display:"flex",height:"100vh",fontFamily:"'Sarabun','Noto Sans Thai',sans-serif",background:"linear-gradient(145deg,#EEF2FF 0%,#F8F9FF 40%,#FFF5F5 100%)",overflow:"hidden"}}>
     <style>{`@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#D4C5BA;border-radius:4px}::-webkit-scrollbar-track{background:transparent}@keyframes slideIn{from{transform:translateX(100px);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}.ni:hover{background:rgba(255,255,255,0.12)!important;border-radius:10px}.ni.a{background:rgba(255,255,255,0.15)!important;border-radius:10px}input:focus,select:focus{border-color:#991B1B!important;box-shadow:0 0 0 3px rgba(153,27,27,0.12)!important}input,select{transition:border-color 0.15s,box-shadow 0.15s}.drag-card{cursor:grab;user-select:none}.drag-card:active{cursor:grabbing}.dz{transition:background 0.15s,outline 0.15s}.dz.over{background:#FEE2E2!important;outline:2px dashed #DC2626}button:hover{opacity:0.88;transition:opacity 0.15s}select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:36px!important}.div-sel{appearance:none!important;background:rgba(0,0,0,0.2)!important;background-image:none!important;border:1px solid rgba(255,255,255,0.25)!important;border-radius:10px!important;color:#fff!important;font-size:13px!important;font-weight:600!important;font-family:inherit!important;padding:8px 32px 8px 12px!important;width:100%!important;cursor:pointer!important;outline:none!important;transition:border-color 0.15s}.div-sel:focus{box-shadow:0 0 0 2px rgba(255,255,255,0.2)!important;border-color:rgba(255,255,255,0.5)!important}.div-sel option{background:#991B1B;color:#fff}`}</style>
@@ -2219,6 +2219,8 @@ export default function App() {
               <div style={{fontSize:48}}>🔒</div>
               <h2 style={{fontSize:20,fontWeight:700,color:"#374151"}}>ไม่มีสิทธิ์เข้าระดับนี้</h2>
               <p style={{color:"#6B7280",fontSize:14}}>กรุณาติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์ {div.name}</p>
+              <button onClick={()=>{try{localStorage.removeItem("dara_perms_cache");}catch{}refreshPerms&&refreshPerms();window.location.reload();}} style={{marginTop:8,padding:"10px 24px",background:"#B91C1C",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:700,cursor:"pointer"}}>🔄 รีเฟรชสิทธิ์</button>
+              <p style={{color:"#9CA3AF",fontSize:12}}>ถ้าได้รับสิทธิ์แล้วแต่ยังเข้าไม่ได้ ให้กดปุ่มนี้</p>
             </div>
           // ── Guard 2: ครู (isTeacher only) ห้ามเข้าหน้าอื่นนอกจาก swap ──
           :firebaseConfigured&&userPerms?.divisions?.isTeacher===true&&!(userPerms?.divisions?.canEdit)&&page!=="swap"
@@ -5974,7 +5976,9 @@ function Reports({S,U,st,gc,ay,sh}){
   const fileRefSched=useRef(null);
   const [printSettings,setPrintSettings]=useState(loadPrintSettings);
   const [showPrintSettings,setShowPrintSettings]=useState(false);
+  const [showPrintDesigner,setShowPrintDesigner]=useState(false);
   const [printPreview,setPrintPreview]=useState(null);
+  const [reportTab,setReportTab]=useState("print");
   const [selTeacherPDF,setSelTeacherPDF]=useState("");
   const [selRoomPDF,setSelRoomPDF]=useState("");
   const [selTeacherXL,setSelTeacherXL]=useState("");
@@ -6598,13 +6602,24 @@ function Reports({S,U,st,gc,ay,sh}){
 
   return <div style={{animation:"fadeIn 0.3s",display:"flex",flexDirection:"column",gap:20}}>
 
-    {/* ── PRINT CENTER ── */}
+    {/* ── PRINT DESIGNER ── */}
+    <PrintDesignerModal open={showPrintDesigner} onClose={()=>setShowPrintDesigner(false)} S={S} ay={ay} sh={sh} />
+
+    {/* ── REPORT TABS ── */}
     <div style={{background:"#fff",borderRadius:16,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,0.07)"}}>
-      <h3 style={{fontSize:17,fontWeight:800,marginBottom:20,display:"flex",alignItems:"center",gap:8}}>🖨️ Print / Export Center
-        <button onClick={()=>setShowPrintSettings(true)} style={{marginLeft:"auto",fontSize:12,padding:"5px 14px",borderRadius:20,border:"2px solid #B91C1C",background:"#FEF2F2",color:"#B91C1C",cursor:"pointer",fontWeight:600}}>⚙️ ตั้งค่าการพิมพ์</button>
-      </h3>
+      <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
+        {[["print","🖨️ Print Center"],["hours","⏱ ชั่วโมงสอน"],["conflicts","⚠️ ตรวจ Conflict"]].map(([v,l])=>(
+          <button key={v} onClick={()=>setReportTab(v)} style={{padding:"8px 18px",borderRadius:10,fontWeight:700,fontSize:13,border:`2px solid ${reportTab===v?"#B91C1C":"#E5E7EB"}`,background:reportTab===v?"#B91C1C":"#fff",color:reportTab===v?"#fff":"#374151",cursor:"pointer"}}>{l}</button>
+        ))}
+        <button onClick={()=>setShowPrintDesigner(true)} style={{marginLeft:"auto",padding:"8px 18px",borderRadius:10,fontWeight:700,fontSize:13,border:"2px solid #7C3AED",background:"#F5F3FF",color:"#7C3AED",cursor:"pointer"}}>🎨 Print Designer</button>
+        <button onClick={()=>setShowPrintSettings(true)} style={{fontSize:12,padding:"5px 14px",borderRadius:20,border:"2px solid #B91C1C",background:"#FEF2F2",color:"#B91C1C",cursor:"pointer",fontWeight:600}}>⚙️ ตั้งค่าการพิมพ์</button>
+      </div>
       <PrintSettingsPanel open={showPrintSettings} onClose={()=>setShowPrintSettings(false)} onApply={(s)=>{setPrintSettings(s);st("บันทึกการตั้งค่าแล้ว ✓");}} />
       <PrintPreviewModal data={printPreview} onClose={()=>setPrintPreview(null)} ps={printSettings}/>
+
+      {reportTab==="hours" && <TeacherHoursSummary S={S} />}
+      {reportTab==="conflicts" && <ConflictPanel S={S} />}
+      <div style={{display:reportTab==="print"?"block":"none"}}>
 
       {/* ─ Section 1: PDF ─ */}
       <div style={{marginBottom:20}}>
@@ -6929,44 +6944,1004 @@ function Reports({S,U,st,gc,ay,sh}){
         </div>
       </div>
     </div>
+  </div>
+  </div>;
+}
 
-    {/* ── สถานะห้องเรียน ── */}
-    <h3 style={{fontSize:18,fontWeight:700}}>สถานะห้องเรียน</h3>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:12}}>
-      {roomSt.map(({room,filled,total,pct})=><div key={room.id} style={{padding:14,borderRadius:10,background:pct===100?"#F0FDF4":pct>0?"#FFFBEB":"#FEF2F2",border:`1px solid ${pct===100?"#BBF7D0":pct>0?"#FDE68A":"#FECACA"}`,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
-        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:700,fontSize:13}}>{room.name}</span><span style={{fontSize:12,fontWeight:700,color:pct===100?"#059669":pct>0?"#D97706":"#DC2626"}}>{pct}%</span></div>
-        <div style={{height:5,background:"rgba(0,0,0,0.08)",borderRadius:3,marginTop:6,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:pct===100?"#059669":pct>0?"#D97706":"#DC2626",borderRadius:3}}/></div>
-        <div style={{display:"flex",gap:5,marginTop:8}}>
-          <button onClick={()=>exportRoomXL(room)} style={{background:"none",border:"1.5px solid #2563EB",borderRadius:6,padding:"2px 8px",color:"#2563EB",fontSize:10,fontWeight:600,cursor:"pointer"}}>Excel</button>
-          <button onClick={()=>printRoomPDF(room)} style={{background:"none",border:"1.5px solid #DC2626",borderRadius:6,padding:"2px 8px",color:"#DC2626",fontSize:10,fontWeight:600,cursor:"pointer"}}>PDF</button>
+/* ===== CONFLICT CHECKER ===== */
+function checkConflicts(S) {
+  const conflicts = [];
+  const teacherSlots = {}; // teacherId → set of "day_period"
+  const roomSlots = {};    // roomId → set of "day_period"
+  const srSlots = {};      // specialRoomId → set of "day_period"
+
+  Object.entries(S.schedule || {}).forEach(([key, entries]) => {
+    if (!entries?.length) return;
+    const parts = key.split('_');
+    const roomId = parts[0];
+    const day = parts[1];
+    const period = parts[2];
+    const slotKey = `${day}_${period}`;
+
+    // ตรวจห้องเรียนซ้ำ
+    if (!roomSlots[roomId]) roomSlots[roomId] = {};
+    const prevCount = roomSlots[roomId][slotKey] || 0;
+    if (prevCount + entries.length > 1) {
+      const room = S.rooms.find(r => r.id === roomId);
+      conflicts.push({ type: 'room', key, day, period: parseInt(period),
+        msg: `ห้อง ${room?.name || roomId} มี ${prevCount + entries.length} วิชาในคาบเดียวกัน` });
+    }
+    roomSlots[roomId][slotKey] = (prevCount || 0) + entries.length;
+
+    entries.forEach(entry => {
+      const allTeachers = [entry.teacherId, ...(entry.coTeacherIds || [])].filter(Boolean);
+      allTeachers.forEach(tid => {
+        if (!teacherSlots[tid]) teacherSlots[tid] = {};
+        if (teacherSlots[tid][slotKey]) {
+          const teacher = S.teachers.find(t => t.id === tid);
+          conflicts.push({ type: 'teacher', key, day, period: parseInt(period),
+            msg: `ครู${teacher?.firstName || tid} สอนซ้ำในคาบเดียวกัน` });
+        }
+        teacherSlots[tid][slotKey] = true;
+      });
+
+      // ตรวจห้องพิเศษซ้ำ
+      if (entry.specialRoomId) {
+        if (!srSlots[entry.specialRoomId]) srSlots[entry.specialRoomId] = {};
+        if (srSlots[entry.specialRoomId][slotKey]) {
+          const sr = S.specialRooms?.find(r => r.id === entry.specialRoomId);
+          conflicts.push({ type: 'specialroom', key, day, period: parseInt(period),
+            msg: `ห้องพิเศษ ${sr?.name || entry.specialRoomId} ถูกใช้ซ้ำ` });
+        }
+        srSlots[entry.specialRoomId][slotKey] = true;
+      }
+    });
+  });
+
+  return conflicts;
+}
+
+/* ===== TEACHER HOURS SUMMARY ===== */
+function TeacherHoursSummary({ S }) {
+  const DAYS_TH = ["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
+  const PERIOD_IDS = [1,2,3,4,5,6,7];
+  const [sortBy, setSortBy] = useState("name"); // name | used | rem
+  const [filterDept, setFilterDept] = useState("");
+
+  const rows = useMemo(() => {
+    return S.teachers.map(t => {
+      let used = 0;
+      const dayMap = {}; // day → count
+      DAYS_TH.forEach(d => { dayMap[d] = 0; });
+      const seen = new Set();
+      Object.entries(S.schedule || {}).forEach(([k, en]) => {
+        const pts = k.split("_");
+        const day = pts[pts.length-2];
+        en?.forEach(e => {
+          const allT = [e.teacherId, ...(e.coTeacherIds||[])].filter(Boolean);
+          if (!allT.includes(t.id)) return;
+          const sub = S.subjects.find(s => s.id === e.subjectId);
+          const ca = sub?.consecutiveAllowed || 0;
+          if (ca === -1 || ca === -2) {
+            const npKey = e.subjectId+"_"+pts[pts.length-2]+"_"+pts[pts.length-1];
+            if (!seen.has(npKey)) { seen.add(npKey); used++; if(dayMap[day]!==undefined) dayMap[day]++; }
+          } else {
+            used++;
+            if(dayMap[day]!==undefined) dayMap[day]++;
+          }
+        });
+      });
+      const tot = t.totalPeriods || 0;
+      const dept = S.depts.find(d => d.id === t.departmentId);
+      return { teacher: t, used, tot, rem: tot - used, dayMap, dept };
+    });
+  }, [S]);
+
+  const filtered = rows
+    .filter(r => !filterDept || r.teacher.departmentId === filterDept)
+    .sort((a, b) => {
+      if (sortBy === "used") return b.used - a.used;
+      if (sortBy === "rem") return b.rem - a.rem;
+      return (a.teacher.firstName||"").localeCompare(b.teacher.firstName||"", "th");
+    });
+
+  const overloaded = filtered.filter(r => r.rem < 0);
+  const underloaded = filtered.filter(r => r.tot > 0 && r.rem > 0 && r.used < r.tot * 0.5);
+
+  const LS = {fontSize:13, fontWeight:600, display:"block", marginBottom:6};
+  return (
+    <div>
+      {(overloaded.length > 0 || underloaded.length > 0) && (
+        <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+          {overloaded.length > 0 && (
+            <div style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:10,padding:"10px 16px",flex:1,minWidth:200}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#B91C1C",marginBottom:4}}>⚠️ สอนเกินกำหนด ({overloaded.length} คน)</div>
+              {overloaded.slice(0,3).map(r=><div key={r.teacher.id} style={{fontSize:12,color:"#7F1D1D"}}>{r.teacher.firstName} {r.teacher.lastName}: {r.used}/{r.tot} คาบ (+{Math.abs(r.rem)})</div>)}
+              {overloaded.length > 3 && <div style={{fontSize:11,color:"#9CA3AF"}}>...และอีก {overloaded.length-3} คน</div>}
+            </div>
+          )}
+          {underloaded.length > 0 && (
+            <div style={{background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:10,padding:"10px 16px",flex:1,minWidth:200}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#D97706",marginBottom:4}}>💡 ยังสอนน้อยกว่า 50% ({underloaded.length} คน)</div>
+              {underloaded.slice(0,3).map(r=><div key={r.teacher.id} style={{fontSize:12,color:"#78350F"}}>{r.teacher.firstName} {r.teacher.lastName}: {r.used}/{r.tot} คาบ</div>)}
+              {underloaded.length > 3 && <div style={{fontSize:11,color:"#9CA3AF"}}>...และอีก {underloaded.length-3} คน</div>}
+            </div>
+          )}
         </div>
-      </div>)}
-      {!roomSt.length&&<div style={{padding:20,color:"#9CA3AF"}}>ยังไม่มีห้องเรียน</div>}
-    </div>
+      )}
 
-    {/* ── สถานะครู ── */}
-    <h3 style={{fontSize:18,fontWeight:700,marginTop:4}}>สถานะครู</h3>
-    <div style={{background:"#fff",borderRadius:14,padding:20,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
-      <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-        <thead><tr style={{background:"#F9FAFB"}}>{["ชื่อ","ได้รับ","จัดแล้ว","เหลือ","สถานะ","Export"].map(h=><th key={h} style={{padding:"8px 12px",textAlign:"left",fontWeight:600,color:"#6B7280",fontSize:12}}>{h}</th>)}</tr></thead>
+      <div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+        <select value={filterDept} onChange={e=>setFilterDept(e.target.value)} style={{padding:"7px 10px",borderRadius:8,border:"1px solid #D1D5DB",fontSize:13,flex:1,minWidth:160}}>
+          <option value="">กลุ่มสาระทั้งหมด</option>
+          {S.depts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+        </select>
+        <div style={{display:"flex",gap:6}}>
+          {[["name","ชื่อ"],["used","คาบสอน"],["rem","คงเหลือ"]].map(([v,l])=>(
+            <button key={v} onClick={()=>setSortBy(v)} style={{padding:"6px 12px",borderRadius:8,fontSize:12,fontWeight:600,border:`2px solid ${sortBy===v?"#B91C1C":"#E5E7EB"}`,background:sortBy===v?"#FEE2E2":"#fff",color:sortBy===v?"#B91C1C":"#6B7280",cursor:"pointer"}}>เรียง{l}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead>
+            <tr style={{background:"#F9FAFB"}}>
+              <th style={{padding:"8px 10px",textAlign:"left",border:"1px solid #E5E7EB",minWidth:120}}>ครู</th>
+              <th style={{padding:"8px 6px",textAlign:"center",border:"1px solid #E5E7EB",minWidth:60}}>กำหนด</th>
+              <th style={{padding:"8px 6px",textAlign:"center",border:"1px solid #E5E7EB",minWidth:60}}>สอนแล้ว</th>
+              <th style={{padding:"8px 6px",textAlign:"center",border:"1px solid #E5E7EB",minWidth:60}}>คงเหลือ</th>
+              {DAYS_TH.map(d=><th key={d} style={{padding:"6px 4px",textAlign:"center",border:"1px solid #E5E7EB",fontSize:11,minWidth:40}}>{d.slice(0,3)}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((r,i)=>{
+              const overload = r.rem < 0;
+              const ok = r.tot > 0 && r.used === r.tot;
+              return (
+                <tr key={r.teacher.id} style={{background: overload?"#FEF2F2": ok?"#F0FDF4": i%2===1?"#F9FAFB":"#fff"}}>
+                  <td style={{padding:"6px 10px",border:"1px solid #E5E7EB"}}>
+                    <div style={{fontWeight:600,color:"#1F2937"}}>{r.teacher.firstName} {r.teacher.lastName}</div>
+                    <div style={{fontSize:10,color:"#6B7280"}}>{r.dept?.name||""}</div>
+                  </td>
+                  <td style={{padding:"6px",textAlign:"center",border:"1px solid #E5E7EB",fontWeight:600}}>{r.tot||"—"}</td>
+                  <td style={{padding:"6px",textAlign:"center",border:"1px solid #E5E7EB",fontWeight:700,color: overload?"#B91C1C": ok?"#059669":"#1F2937"}}>{r.used}</td>
+                  <td style={{padding:"6px",textAlign:"center",border:"1px solid #E5E7EB",color: overload?"#B91C1C": r.rem>0?"#D97706":"#059669",fontWeight:600}}>{r.tot?r.rem:"—"}</td>
+                  {DAYS_TH.map(d=>(
+                    <td key={d} style={{padding:"4px",textAlign:"center",border:"1px solid #E5E7EB",fontSize:11,color:r.dayMap[d]>0?"#1F2937":"#D1D5DB"}}>
+                      {r.dayMap[d]>0?r.dayMap[d]:"·"}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+            {!filtered.length && <tr><td colSpan={11} style={{padding:24,textAlign:"center",color:"#9CA3AF"}}>ไม่มีข้อมูล</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ===== CONFLICT PANEL ===== */
+function ConflictPanel({ S }) {
+  const conflicts = useMemo(() => checkConflicts(S), [S]);
+  const DAYS_TH = ["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
+  if (!conflicts.length) return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:48,color:"#059669"}}>
+      <div style={{fontSize:48,marginBottom:12}}>✅</div>
+      <div style={{fontSize:16,fontWeight:700}}>ไม่พบความขัดแย้ง!</div>
+      <div style={{fontSize:13,color:"#6B7280",marginTop:4}}>ตารางสอนสมบูรณ์</div>
+    </div>
+  );
+  return (
+    <div>
+      <div style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:10,padding:"12px 16px",marginBottom:16}}>
+        <div style={{fontWeight:700,color:"#B91C1C"}}>⚠️ พบ {conflicts.length} ความขัดแย้ง</div>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {conflicts.map((c,i)=>{
+          const typeIcon = c.type==="teacher"?"👨‍🏫": c.type==="room"?"🏫":"⭐";
+          const typeLabel = c.type==="teacher"?"ครูสอนซ้ำ": c.type==="room"?"ห้องซ้ำ":"ห้องพิเศษซ้ำ";
+          return (
+            <div key={i} style={{background:"#fff",border:"1px solid #FCA5A5",borderRadius:10,padding:"10px 14px",display:"flex",gap:12,alignItems:"flex-start"}}>
+              <div style={{fontSize:20}}>{typeIcon}</div>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:600,fontSize:13,color:"#B91C1C"}}>{typeLabel}</div>
+                <div style={{fontSize:13,color:"#374151",marginTop:2}}>{c.msg}</div>
+                <div style={{fontSize:11,color:"#9CA3AF",marginTop:2}}>วัน{DAYS_TH.find(d=>c.day===d)||c.day} คาบ {c.period}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ===== PRINT DESIGNER ===== */
+
+// ===== Field options =====
+const PD_FIELD_OPTIONS = [
+  { value:"subject_name",  label:"ชื่อวิชา (เต็ม)" },
+  { value:"subject_short", label:"ชื่อวิชา (ย่อ)" },
+  { value:"subject_code",  label:"รหัสวิชา" },
+  { value:"teacher_name",  label:"ชื่อครู" },
+  { value:"teacher_fname", label:"ชื่อครู (ชื่อต้น)" },
+  { value:"teacher_code",  label:"รหัสครู" },
+  { value:"room_name",     label:"ห้องเรียน" },
+  { value:"period_time",   label:"เวลา" },
+  { value:"period_num",    label:"คาบที่" },
+  { value:"custom_text",   label:"ข้อความกำหนดเอง" },
+  { value:"empty",         label:"(ว่าง)" },
+];
+
+// ===== Column types =====
+// type: "period" | "break" | "homeroom" | "assembly" | "custom"
+const PD_DEFAULT_COLUMNS = [
+  { id:"c_day",   type:"day",      label:"วัน",        width:55,  show:true },
+  { id:"c_hr",    type:"homeroom", label:"Homeroom",   width:22,  show:false, vertical:true, bg:"#FFF9E6", textColor:"#92400E" },
+  { id:"c_asm",   type:"assembly", label:"Assembly",   width:22,  show:false, vertical:true, bg:"#FFF9E6", textColor:"#92400E" },
+  { id:"c_p1",    type:"period",   label:"คาบ 1",      width:100, show:true, periodId:1, timeLabel:"08.30-09.20" },
+  { id:"c_p2",    type:"period",   label:"คาบ 2",      width:100, show:true, periodId:2, timeLabel:"09.20-10.10" },
+  { id:"c_brk1",  type:"break",    label:"พัก",        width:22,  show:false, timeLabel:"10.10-10.25", vertical:true, bg:"#F3F4F6" },
+  { id:"c_p3",    type:"period",   label:"คาบ 3",      width:100, show:true, periodId:3, timeLabel:"10.25-11.15" },
+  { id:"c_p4",    type:"period",   label:"คาบ 4",      width:100, show:true, periodId:4, timeLabel:"11.15-12.05" },
+  { id:"c_brk2",  type:"break",    label:"พัก",        width:22,  show:false, timeLabel:"12.05-13.00", vertical:true, bg:"#F3F4F6" },
+  { id:"c_p5",    type:"period",   label:"คาบ 5",      width:100, show:true, periodId:5, timeLabel:"13.00-13.50" },
+  { id:"c_brk3",  type:"break",    label:"พัก",        width:22,  show:false, timeLabel:"13.50-14.00", vertical:true, bg:"#F3F4F6" },
+  { id:"c_p6",    type:"period",   label:"คาบ 6",      width:100, show:true, periodId:6, timeLabel:"14.00-14.50" },
+  { id:"c_p7",    type:"period",   label:"คาบ 7",      width:100, show:true, periodId:7, timeLabel:"14.50-15.40" },
+];
+
+const PD_DEFAULT_LAYOUT = {
+  // cell content rows
+  cellRows: [
+    { field:"subject_short", fontSize:13, bold:true,  align:"center", color:"#1F2937", customText:"" },
+    { field:"teacher_name",  fontSize:11, bold:false, align:"center", color:"#4B5563", customText:"" },
+    { field:"room_name",     fontSize:10, bold:false, align:"center", color:"#6B7280", customText:"" },
+  ],
+  // columns config
+  columns: PD_DEFAULT_COLUMNS.map(c => ({...c})),
+  // header style
+  headerBg:      "#B91C1C",
+  headerText:    "#fff",
+  rowAltBg:      "#FFF5F5",
+  showAltRow:    true,
+  showBorder:    true,
+  borderColor:   "#E5E7EB",
+  fontFamily:    "TH SarabunNew",
+  fontSize:      100,
+  rowHeight:     100,
+  showPeriodNum:  true,
+  showPeriodTime: true,
+  paperSize:      "A4",
+  orientation:    "landscape",
+  marginMm:       10,
+  // header block
+  showLogo:       true,
+  logoSize:       48,
+  logoPosition:   "left",   // left | center | right
+  titleText:      "",
+  titleFontSize:  16,
+  subtitleText:   "",
+  subtitleFontSize:12,
+  showYear:       true,
+  headerLayout:   "logo-left", // logo-left | logo-center | no-logo
+  // footer
+  showFooter:     true,
+  footerLeft:     "ลงชื่อ _________________________ รองฝ่ายวิชาการ",
+  footerRight:    "ลงชื่อ _________________________ ผู้อำนวยการ",
+};
+
+function loadPDLayouts() {
+  try { const s = localStorage.getItem("dara_pdLayouts2"); return s ? JSON.parse(s) : {}; } catch { return {}; }
+}
+function savePDLayouts(layouts) {
+  try { localStorage.setItem("dara_pdLayouts2", JSON.stringify(layouts)); } catch {}
+}
+
+function renderPDCell(entry, field, S, customText) {
+  if (!entry) return "";
+  const sub = S.subjects.find(s => s.id === entry.subjectId);
+  const tch = S.teachers.find(t => t.id === entry.teacherId);
+  switch (field) {
+    case "subject_name":  return sub?.name || "";
+    case "subject_short": return sub?.shortName || sub?.name || "";
+    case "subject_code":  return sub?.code || "";
+    case "teacher_name":  return tch ? `${tch.firstName||""} ${tch.lastName||""}`.trim() : "";
+    case "teacher_fname": return tch?.firstName || "";
+    case "teacher_code":  return tch?.teacherCode || "";
+    case "room_name": {
+      const room = S.rooms.find(r => r.id === entry.roomId) || S.specialRooms?.find(r => r.id === entry.specialRoomId);
+      return room?.name || "";
+    }
+    case "period_time": {
+      const p = PERIODS.find(p => String(p.id) === String(entry.periodId));
+      return p?.time || "";
+    }
+    case "period_num": return entry.periodId ? `คาบ ${entry.periodId}` : "";
+    case "custom_text": return customText || "";
+    case "empty": return "";
+    default: return "";
+  }
+}
+
+// ===== Build full print HTML =====
+function buildPDPrintHTML(layout, S, ay, sh, targetType, targetId) {
+  const DAYS_TH = ["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
+  const fScale = layout.fontSize / 100;
+  const rScale = layout.rowHeight / 100;
+  const hBg = layout.headerBg;
+  const hTxt = layout.headerText;
+  const bd = layout.showBorder ? `1px solid ${layout.borderColor||"#ddd"}` : "1px solid transparent";
+  const ff = layout.fontFamily;
+  const cols = layout.columns.filter(c => c.show);
+
+  // ข้อมูลตาราง
+  let targetName = "";
+  let rowData = []; // [{label, homeroomText, assemblyText, cells:{periodId→entry}}]
+
+  if (targetType === "room") {
+    const room = S.rooms.find(r => r.id === targetId);
+    if (!room) return "<p>ไม่พบห้องเรียน</p>";
+    targetName = `ตารางเรียน${room.name}`;
+    DAYS_TH.forEach(day => {
+      const cells = {};
+      PERIODS.forEach(p => {
+        const k = `${room.id}_${day}_${p.id}`;
+        cells[p.id] = (S.schedule[k]||[])[0] || null;
+      });
+      rowData.push({ label: day, cells, homeroomText:"", assemblyText:"" });
+    });
+  } else {
+    const teacher = S.teachers.find(t => t.id === targetId);
+    if (!teacher) return "<p>ไม่พบครู</p>";
+    targetName = `ตารางสอน${teacher.firstName||""} ${teacher.lastName||""}`;
+    DAYS_TH.forEach(day => {
+      const cells = {};
+      PERIODS.forEach(p => {
+        let found = null;
+        Object.entries(S.schedule||{}).forEach(([k, ens]) => {
+          const pts = k.split("_");
+          if (pts[pts.length-2] === day && parseInt(pts[pts.length-1]) === p.id) {
+            ens?.forEach(e => {
+              if ([e.teacherId,...(e.coTeacherIds||[])].includes(teacher.id))
+                found = {...e, roomId: pts[0]};
+            });
+          }
+        });
+        cells[p.id] = found;
+      });
+      rowData.push({ label: day, cells, homeroomText:"", assemblyText:"" });
+    });
+  }
+
+  const yr = ay?.year || (sh?.year) || "2569";
+  const schoolName = sh?.schoolName || "โรงเรียนดาราวิทยาลัย";
+  const titleText = layout.titleText || targetName;
+  const subtitleText = layout.subtitleText || `ภาคเรียนที่ 1/${yr} ${schoolName}`;
+  const logoData = sh?.logo || "";
+
+  // Header HTML
+  let headerHtml = "";
+  if (layout.headerLayout === "logo-left" && logoData) {
+    headerHtml = `<div class="hdr-wrap hdr-left">
+      <img src="${logoData}" class="hdr-logo" style="width:${layout.logoSize||48}px;height:${layout.logoSize||48}px">
+      <div class="hdr-text">
+        <div class="hdr-title" style="font-size:${(layout.titleFontSize||16)*fScale}px">${titleText}</div>
+        <div class="hdr-sub" style="font-size:${(layout.subtitleFontSize||12)*fScale}px">${subtitleText}</div>
+      </div>
+    </div>`;
+  } else if (layout.headerLayout === "logo-center" && logoData) {
+    headerHtml = `<div class="hdr-wrap hdr-center">
+      <img src="${logoData}" class="hdr-logo" style="width:${layout.logoSize||48}px;height:${layout.logoSize||48}px">
+      <div class="hdr-title" style="font-size:${(layout.titleFontSize||16)*fScale}px">${titleText}</div>
+      <div class="hdr-sub" style="font-size:${(layout.subtitleFontSize||12)*fScale}px">${subtitleText}</div>
+    </div>`;
+  } else {
+    headerHtml = `<div class="hdr-wrap hdr-center">
+      <div class="hdr-title" style="font-size:${(layout.titleFontSize||16)*fScale}px">${titleText}</div>
+      <div class="hdr-sub" style="font-size:${(layout.subtitleFontSize||12)*fScale}px">${subtitleText}</div>
+    </div>`;
+  }
+
+  // Column headers
+  const colHeaders = cols.map(col => {
+    if (col.type === "day") {
+      return `<th class="th-day" style="width:${col.width}px;background:${hBg};color:${hTxt};border:${bd}">
+        <div>วัน</div><div style="font-size:${9*fScale}px;font-weight:400;opacity:0.8">\\เวลา</div>
+      </th>`;
+    }
+    if (col.type === "break" || col.type === "homeroom" || col.type === "assembly") {
+      return `<th style="width:${col.width}px;background:${col.bg||hBg};color:${col.textColor||hTxt};border:${bd};writing-mode:vertical-rl;text-orientation:mixed;font-size:${9*fScale}px;padding:4px 2px;white-space:nowrap">
+        ${col.label || ""}${col.timeLabel ? `<br><span style="font-weight:400;font-size:${8*fScale}px">${col.timeLabel}</span>` : ""}
+      </th>`;
+    }
+    if (col.type === "period") {
+      return `<th style="width:${col.width}px;background:${hBg};color:${hTxt};border:${bd};text-align:center;padding:${5*rScale}px 4px">
+        ${layout.showPeriodNum ? `<div style="font-size:${11*fScale}px;font-weight:700">${col.label}</div>` : ""}
+        ${layout.showPeriodTime ? `<div style="font-size:${9*fScale}px;font-weight:400;opacity:0.85">${col.timeLabel||""}</div>` : ""}
+      </th>`;
+    }
+    return `<th style="width:${col.width}px;background:${hBg};color:${hTxt};border:${bd}">${col.label||""}</th>`;
+  }).join("");
+
+  // Data rows
+  const dataRows = rowData.map((row, ri) => {
+    const altBg = layout.showAltRow && ri%2===1 ? layout.rowAltBg : "#fff";
+    const cells = cols.map(col => {
+      if (col.type === "day") {
+        return `<td class="td-day" style="background:${hBg};color:${hTxt};border:${bd};font-size:${12*fScale}px;font-weight:700;text-align:center;padding:${6*rScale}px 4px">${row.label}</td>`;
+      }
+      if (col.type === "homeroom") {
+        return `<td style="background:${col.bg||"#FFF9E6"};border:${bd};writing-mode:vertical-rl;text-orientation:mixed;font-size:${9*fScale}px;color:${col.textColor||"#92400E"};text-align:center;padding:2px">${row.homeroomText||col.label||"Homeroom"}</td>`;
+      }
+      if (col.type === "assembly") {
+        return `<td style="background:${col.bg||"#FFF9E6"};border:${bd};writing-mode:vertical-rl;text-orientation:mixed;font-size:${9*fScale}px;color:${col.textColor||"#92400E"};text-align:center;padding:2px">${row.assemblyText||col.label||"Assembly"}</td>`;
+      }
+      if (col.type === "break") {
+        return `<td style="background:${col.bg||"#F3F4F6"};border:${bd};writing-mode:vertical-rl;text-orientation:mixed;font-size:${8*fScale}px;color:#6B7280;text-align:center;padding:2px">${col.timeLabel||"พัก"}</td>`;
+      }
+      if (col.type === "period") {
+        const entry = row.cells[col.periodId];
+        if (!entry) return `<td style="background:${altBg};border:${bd};min-height:${40*rScale}px"></td>`;
+        const lines = layout.cellRows.map(rowCfg => {
+          if (rowCfg.field === "empty") return "";
+          const val = renderPDCell(entry, rowCfg.field, S, rowCfg.customText);
+          if (!val) return "";
+          return `<div style="font-size:${rowCfg.fontSize*fScale}px;font-weight:${rowCfg.bold?"700":"400"};text-align:${rowCfg.align};color:${rowCfg.color};line-height:1.3">${val}</div>`;
+        }).filter(Boolean).join("");
+        return `<td style="background:${altBg};border:${bd};padding:${4*rScale}px 3px;vertical-align:middle;text-align:center">${lines}</td>`;
+      }
+      return `<td style="background:${altBg};border:${bd}"></td>`;
+    }).join("");
+    return `<tr>${cells}</tr>`;
+  }).join("");
+
+  // Footer
+  const footerHtml = layout.showFooter ? `
+    <div class="footer">
+      <span>${layout.footerLeft||""}</span>
+      <span>${layout.footerRight||""}</span>
+    </div>` : "";
+
+  // colgroup
+  const colgroup = cols.map(col => `<col style="width:${col.width}px">`).join("");
+
+  return `<!DOCTYPE html><html><head>
+    <meta charset="UTF-8">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+      @page { size: ${layout.paperSize||"A4"} ${layout.orientation||"landscape"}; margin: ${layout.marginMm||10}mm; }
+      body { font-family: '${ff}','Sarabun',sans-serif; margin:0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      table { border-collapse:collapse; width:100%; }
+      .hdr-wrap { margin-bottom:10px; }
+      .hdr-left { display:flex; align-items:center; gap:12px; }
+      .hdr-center { display:flex; flex-direction:column; align-items:center; text-align:center; gap:2px; }
+      .hdr-logo { object-fit:contain; }
+      .hdr-title { font-weight:700; }
+      .hdr-sub { color:#555; }
+      .td-day { white-space:nowrap; }
+      .footer { display:flex; justify-content:space-between; margin-top:10px; font-size:${10*fScale}px; padding:0 8px; }
+      @media print { body { -webkit-print-color-adjust:exact; } }
+    </style>
+  </head><body>
+    ${headerHtml}
+    <table>
+      <colgroup>${colgroup}</colgroup>
+      <thead><tr>${colHeaders}</tr></thead>
+      <tbody>${dataRows}</tbody>
+    </table>
+    ${footerHtml}
+  </body></html>`;
+}
+
+// ===== Preview Table Component =====
+function PreviewTable({ layout, S, targetType, targetId }) {
+  const DAYS_TH = ["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์"];
+  const fScale = (layout.fontSize||100) / 100;
+  const rScale = (layout.rowHeight||100) / 100;
+  const hBg = layout.headerBg || "#B91C1C";
+  const hTxt = layout.headerText || "#fff";
+  const bd = layout.showBorder ? `1px solid ${layout.borderColor||"#E5E7EB"}` : "none";
+  const cols = (layout.columns || PD_DEFAULT_COLUMNS).filter(c => c.show);
+
+  let rowData = [];
+  if (targetType === "room") {
+    const room = S.rooms.find(r => r.id === targetId);
+    if (!room) return null;
+    DAYS_TH.forEach(day => {
+      const cells = {};
+      PERIODS.forEach(p => { const k=`${room.id}_${day}_${p.id}`; cells[p.id]=(S.schedule[k]||[])[0]||null; });
+      rowData.push({ label:day, cells });
+    });
+  } else {
+    const teacher = S.teachers.find(t => t.id === targetId);
+    if (!teacher) return null;
+    DAYS_TH.forEach(day => {
+      const cells = {};
+      PERIODS.forEach(p => {
+        let found = null;
+        Object.entries(S.schedule||{}).forEach(([k,ens]) => {
+          const pts=k.split("_");
+          if(pts[pts.length-2]===day&&parseInt(pts[pts.length-1])===p.id)
+            ens?.forEach(e=>{ if([e.teacherId,...(e.coTeacherIds||[])].includes(teacher.id)) found={...e,roomId:pts[0]}; });
+        });
+        cells[p.id] = found;
+      });
+      rowData.push({ label:day, cells });
+    });
+  }
+
+  return (
+    <div style={{fontFamily:layout.fontFamily,overflowX:"auto"}}>
+      <table style={{borderCollapse:"collapse",width:"100%"}}>
+        <thead>
+          <tr>
+            {cols.map(col => {
+              if (col.type==="day") return <th key={col.id} style={{background:hBg,color:hTxt,border:bd,width:col.width,padding:`${5*rScale}px 4px`,fontSize:11*fScale,textAlign:"center"}}>วัน</th>;
+              if (col.type==="break"||col.type==="homeroom"||col.type==="assembly") return (
+                <th key={col.id} style={{background:col.bg||hBg,color:col.textColor||hTxt,border:bd,width:col.width,writingMode:"vertical-rl",fontSize:8*fScale,padding:"4px 2px",textAlign:"center"}}>
+                  {col.label}{col.timeLabel&&<span style={{fontSize:7*fScale,display:"block",opacity:0.8}}>{col.timeLabel}</span>}
+                </th>
+              );
+              if (col.type==="period") return (
+                <th key={col.id} style={{background:hBg,color:hTxt,border:bd,width:col.width,padding:`${4*rScale}px 4px`,textAlign:"center"}}>
+                  {layout.showPeriodNum&&<div style={{fontSize:10*fScale,fontWeight:700}}>{col.label}</div>}
+                  {layout.showPeriodTime&&<div style={{fontSize:8*fScale,opacity:0.85}}>{col.timeLabel}</div>}
+                </th>
+              );
+              return <th key={col.id} style={{background:hBg,color:hTxt,border:bd,width:col.width}}>{col.label}</th>;
+            })}
+          </tr>
+        </thead>
         <tbody>
-          {teacherSt.filter(t=>t.tot>0).map(ts=><tr key={ts.teacher.id} style={{borderTop:"1px solid #F3F4F6"}}>
-            <td style={{padding:"8px 12px",fontWeight:600,fontSize:12}}>{ts.teacher.prefix}{ts.teacher.firstName} {ts.teacher.lastName}</td>
-            <td style={{padding:"8px 12px",fontSize:12}}>{ts.tot}</td>
-            <td style={{padding:"8px 12px",fontSize:12}}>{ts.used}</td>
-            <td style={{padding:"8px 12px",fontWeight:700,color:ts.rem>0?"#D97706":"#059669",fontSize:12}}>{ts.rem}</td>
-            <td style={{padding:"8px 12px"}}>{ts.rem===0?<span style={{background:"#D1FAE5",color:"#065F46",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>ครบ</span>:<span style={{background:"#FEF3C7",color:"#92400E",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>เหลือ {ts.rem}</span>}</td>
-            <td style={{padding:"8px 12px"}}><div style={{display:"flex",gap:4}}>
-              <button onClick={()=>exportTeacherXL(ts.teacher)} style={{background:"none",border:"1.5px solid #2563EB",borderRadius:5,padding:"2px 8px",color:"#2563EB",fontSize:10,fontWeight:600,cursor:"pointer"}}>Excel</button>
-              <button onClick={()=>printTeacherPDF(ts.teacher)} style={{background:"none",border:"1.5px solid #DC2626",borderRadius:5,padding:"2px 8px",color:"#DC2626",fontSize:10,fontWeight:600,cursor:"pointer"}}>PDF</button>
-            </div></td>
-          </tr>)}
-          {!teacherSt.filter(t=>t.tot>0).length&&<tr><td colSpan={6} style={{padding:24,textAlign:"center",color:"#9CA3AF"}}>ยังไม่มีครูที่กำหนดคาบ</td></tr>}
+          {rowData.map((row,ri) => {
+            const altBg = layout.showAltRow&&ri%2===1 ? layout.rowAltBg : "#fff";
+            return (
+              <tr key={row.label}>
+                {cols.map(col => {
+                  if (col.type==="day") return <td key={col.id} style={{background:hBg,color:hTxt,border:bd,textAlign:"center",fontWeight:700,fontSize:11*fScale,padding:`${5*rScale}px 4px`,whiteSpace:"nowrap"}}>{row.label}</td>;
+                  if (col.type==="homeroom"||col.type==="assembly") return <td key={col.id} style={{background:col.bg||"#FFF9E6",border:bd,writingMode:"vertical-rl",fontSize:8*fScale,color:col.textColor||"#92400E",textAlign:"center",padding:2}}>{col.label}</td>;
+                  if (col.type==="break") return <td key={col.id} style={{background:col.bg||"#F3F4F6",border:bd,writingMode:"vertical-rl",fontSize:8*fScale,color:"#6B7280",textAlign:"center",padding:2}}>{col.timeLabel||"พัก"}</td>;
+                  if (col.type==="period") {
+                    const entry = row.cells[col.periodId];
+                    if (!entry) return <td key={col.id} style={{background:altBg,border:bd,minHeight:35*rScale}}></td>;
+                    return (
+                      <td key={col.id} style={{background:altBg,border:bd,padding:`${3*rScale}px 3px`,verticalAlign:"middle",textAlign:"center"}}>
+                        {layout.cellRows.map((rowCfg,rci) => {
+                          if(rowCfg.field==="empty") return null;
+                          const val = renderPDCell(entry, rowCfg.field, S, rowCfg.customText);
+                          if(!val) return null;
+                          return <div key={rci} style={{fontSize:rowCfg.fontSize*fScale,fontWeight:rowCfg.bold?"700":"400",textAlign:rowCfg.align,color:rowCfg.color,lineHeight:1.3}}>{val}</div>;
+                        })}
+                      </td>
+                    );
+                  }
+                  return <td key={col.id} style={{background:altBg,border:bd}}></td>;
+                })}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
-  </div>;
+  );
 }
+
+// ===== Main PrintDesignerModal =====
+function PrintDesignerModal({ open, onClose, S, ay, sh }) {
+  const [layouts, setLayouts] = useState(loadPDLayouts);
+  const [activeName, setActiveName] = useState("");
+  const [layout, setLayout] = useState({ ...PD_DEFAULT_LAYOUT, columns: PD_DEFAULT_COLUMNS.map(c=>({...c})) });
+  const [previewTarget, setPreviewTarget] = useState({ type:"room", id:"" });
+  const [newName, setNewName] = useState("");
+  const [showSaveAs, setShowSaveAs] = useState(false);
+  const [tab, setTab] = useState("cell"); // cell | columns | style | header
+
+  useEffect(() => {
+    if (!open) return;
+    const names = Object.keys(loadPDLayouts());
+    if (names.length && !activeName) {
+      const saved = loadPDLayouts();
+      setActiveName(names[0]);
+      setLayout({ ...PD_DEFAULT_LAYOUT, columns: PD_DEFAULT_COLUMNS.map(c=>({...c})), ...saved[names[0]] });
+    }
+  }, [open]);
+
+  if (!open) return null;
+
+  const upd = (key, val) => setLayout(p => ({ ...p, [key]: val }));
+  const updCol = (id, key, val) => setLayout(p => ({
+    ...p,
+    columns: p.columns.map(c => c.id === id ? { ...c, [key]: val } : c)
+  }));
+  const updCellRow = (i, key, val) => {
+    const rows = [...layout.cellRows];
+    rows[i] = { ...rows[i], [key]: val };
+    upd("cellRows", rows);
+  };
+  const moveCellRow = (i, dir) => {
+    const rows = [...layout.cellRows];
+    const j = i + dir;
+    if (j < 0 || j >= rows.length) return;
+    [rows[i], rows[j]] = [rows[j], rows[i]];
+    upd("cellRows", rows);
+  };
+  const addCellRow = () => upd("cellRows", [...layout.cellRows, { field:"empty", fontSize:11, bold:false, align:"center", color:"#6B7280", customText:"" }]);
+  const removeCellRow = (i) => upd("cellRows", layout.cellRows.filter((_,ri) => ri !== i));
+
+  const addCustomCol = () => {
+    const newCol = { id:`c_custom_${Date.now()}`, type:"custom", label:"กำหนดเอง", width:80, show:true, bg:"#fff", textColor:"#333" };
+    upd("columns", [...layout.columns, newCol]);
+  };
+  const addBreakCol = () => {
+    const newCol = { id:`c_brk_${Date.now()}`, type:"break", label:"พัก", width:22, show:true, timeLabel:"", vertical:true, bg:"#F3F4F6" };
+    upd("columns", [...layout.columns, newCol]);
+  };
+  const removeCol = (id) => upd("columns", layout.columns.filter(c => c.id !== id));
+  const moveCol = (id, dir) => {
+    const cols = [...layout.columns];
+    const i = cols.findIndex(c => c.id === id);
+    const j = i + dir;
+    if (j < 0 || j >= cols.length) return;
+    [cols[i], cols[j]] = [cols[j], cols[i]];
+    upd("columns", cols);
+  };
+
+  const saveLayout = (name) => {
+    const nl = { ...loadPDLayouts(), [name]: layout };
+    setLayouts(nl); savePDLayouts(nl); setActiveName(name);
+  };
+  const deleteLayout = (name) => {
+    const nl = { ...loadPDLayouts() }; delete nl[name];
+    setLayouts(nl); savePDLayouts(nl);
+    const rem = Object.keys(nl);
+    if (rem.length) { setActiveName(rem[0]); setLayout({ ...PD_DEFAULT_LAYOUT, columns: PD_DEFAULT_COLUMNS.map(c=>({...c})), ...nl[rem[0]] }); }
+    else { setActiveName(""); setLayout({ ...PD_DEFAULT_LAYOUT, columns: PD_DEFAULT_COLUMNS.map(c=>({...c})) }); }
+  };
+
+  const doPrint = () => {
+    if (!previewTarget.id) return;
+    const html = buildPDPrintHTML(layout, S, ay, sh, previewTarget.type, previewTarget.id);
+    const w = window.open("", "_blank");
+    w.document.write(html); w.document.close();
+    setTimeout(() => w.print(), 600);
+  };
+
+  const IS2 = { width:"100%", padding:"6px 10px", border:"1.5px solid #E5E7EB", borderRadius:8, fontSize:12, outline:"none", fontFamily:"inherit", background:"#fff" };
+  const LS = { fontSize:12, fontWeight:600, display:"block", marginBottom:4, color:"#374151" };
+  const TABS = [["cell","📋 เนื้อหาช่อง"],["columns","↔️ คอลัมน์"],["style","🎨 สไตล์"],["header","🏷 หัว/ท้าย"]];
+
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:4000,background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"stretch",justifyContent:"flex-end"}}>
+      {/* ===== LEFT: Preview ===== */}
+      <div style={{flex:1,overflow:"auto",padding:20,display:"flex",flexDirection:"column",gap:12}}>
+        <div style={{fontWeight:700,fontSize:15,color:"#fff"}}>👁 ตัวอย่าง</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",background:"rgba(255,255,255,0.1)",borderRadius:10,padding:10}}>
+          <select value={previewTarget.type} onChange={e=>setPreviewTarget(p=>({...p,type:e.target.value,id:""}))} style={{...IS2,width:"auto",background:"rgba(255,255,255,0.95)"}}>
+            <option value="room">ห้องเรียน</option>
+            <option value="teacher">ครู</option>
+          </select>
+          <select value={previewTarget.id} onChange={e=>setPreviewTarget(p=>({...p,id:e.target.value}))} style={{...IS2,flex:1,minWidth:150,background:"rgba(255,255,255,0.95)"}}>
+            <option value="">-- เลือก --</option>
+            {previewTarget.type==="room"
+              ? S.rooms.map(r=><option key={r.id} value={r.id}>{r.name}</option>)
+              : S.teachers.map(t=><option key={t.id} value={t.id}>{t.firstName} {t.lastName}</option>)}
+          </select>
+          <button onClick={doPrint} disabled={!previewTarget.id} style={{padding:"8px 20px",background:previewTarget.id?"#B91C1C":"#9CA3AF",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:previewTarget.id?"pointer":"default",fontSize:13,whiteSpace:"nowrap"}}>🖨 พิมพ์</button>
+        </div>
+        {previewTarget.id
+          ? <div style={{flex:1,background:"#fff",borderRadius:12,overflow:"auto",padding:14}}>
+              {/* header preview */}
+              {(layout.showLogo||layout.titleText) && (
+                <div style={{marginBottom:8,display:"flex",flexDirection:layout.headerLayout==="logo-left"?"row":"column",alignItems:layout.headerLayout==="logo-left"?"center":"center",gap:8,textAlign:layout.headerLayout==="logo-center"?"center":"left"}}>
+                  {layout.showLogo && sh?.logo && <img src={sh.logo} style={{width:layout.logoSize||48,height:layout.logoSize||48,objectFit:"contain"}} alt="logo"/>}
+                  <div>
+                    <div style={{fontSize:layout.titleFontSize||16,fontWeight:700,fontFamily:layout.fontFamily}}>{layout.titleText || `ตาราง${previewTarget.type==="room"?"เรียน":"สอน"}`}</div>
+                    <div style={{fontSize:layout.subtitleFontSize||12,color:"#555",fontFamily:layout.fontFamily}}>{layout.subtitleText || `${sh?.schoolName||"โรงเรียนดาราวิทยาลัย"}`}</div>
+                  </div>
+                </div>
+              )}
+              <PreviewTable layout={layout} S={S} targetType={previewTarget.type} targetId={previewTarget.id} />
+              {layout.showFooter && (
+                <div style={{display:"flex",justifyContent:"space-between",marginTop:8,fontSize:11,fontFamily:layout.fontFamily,padding:"0 4px"}}>
+                  <span>{layout.footerLeft}</span><span>{layout.footerRight}</span>
+                </div>
+              )}
+            </div>
+          : <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:"rgba(255,255,255,0.4)",fontSize:14}}>เลือกห้องหรือครูเพื่อดูตัวอย่าง</div>
+        }
+      </div>
+
+      {/* ===== RIGHT: Designer Panel ===== */}
+      <div style={{width:"min(440px,48vw)",background:"#fff",display:"flex",flexDirection:"column",boxShadow:"-8px 0 40px rgba(0,0,0,0.25)"}}>
+        {/* Title bar */}
+        <div style={{padding:"14px 18px",background:"#B91C1C",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <div style={{color:"#fff",fontWeight:700,fontSize:15}}>🎨 Print Designer</div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#fff",fontSize:22,cursor:"pointer",lineHeight:1}}>✕</button>
+        </div>
+
+        {/* Saved layouts */}
+        <div style={{padding:"10px 14px",borderBottom:"1px solid #F0F0F0",background:"#FAFAFA",flexShrink:0}}>
+          <div style={{fontSize:12,fontWeight:600,marginBottom:6,color:"#374151"}}>💾 รูปแบบที่บันทึก</div>
+          <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:6}}>
+            {Object.keys(layouts).map(n => (
+              <button key={n} onClick={()=>{setActiveName(n);const s=loadPDLayouts();setLayout({...PD_DEFAULT_LAYOUT,columns:PD_DEFAULT_COLUMNS.map(c=>({...c})),...s[n]});}}
+                style={{padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:600,border:`2px solid ${activeName===n?"#B91C1C":"#D1D5DB"}`,background:activeName===n?"#FEE2E2":"#fff",color:activeName===n?"#B91C1C":"#374151",cursor:"pointer",display:"flex",alignItems:"center",gap:3}}>
+                {n}
+                <span onClick={ev=>{ev.stopPropagation();if(window.confirm(`ลบ "${n}"?`))deleteLayout(n);}} style={{color:"#9CA3AF",fontSize:10}}>✕</span>
+              </button>
+            ))}
+            {!Object.keys(layouts).length && <span style={{fontSize:11,color:"#9CA3AF"}}>ยังไม่มีรูปแบบ</span>}
+          </div>
+          {showSaveAs ? (
+            <div style={{display:"flex",gap:6}}>
+              <input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="ชื่อ เช่น ม.1-3, ม.4-6" style={{...IS2,flex:1}}
+                onKeyDown={e=>{if(e.key==="Enter"&&newName.trim()){saveLayout(newName.trim());setNewName("");setShowSaveAs(false);}}} />
+              <button onClick={()=>{if(newName.trim()){saveLayout(newName.trim());setNewName("");setShowSaveAs(false);}}} style={{padding:"5px 12px",background:"#B91C1C",color:"#fff",border:"none",borderRadius:7,fontSize:12,fontWeight:600,cursor:"pointer"}}>บันทึก</button>
+              <button onClick={()=>setShowSaveAs(false)} style={{padding:"5px 8px",border:"1px solid #E5E7EB",borderRadius:7,background:"none",cursor:"pointer",fontSize:12}}>ยกเลิก</button>
+            </div>
+          ) : (
+            <div style={{display:"flex",gap:6}}>
+              {activeName && <button onClick={()=>saveLayout(activeName)} style={{flex:1,padding:"5px",background:"#1D4ED8",color:"#fff",border:"none",borderRadius:7,fontSize:11,fontWeight:600,cursor:"pointer"}}>💾 ทับ "{activeName}"</button>}
+              <button onClick={()=>{setShowSaveAs(true);setNewName("");}} style={{flex:1,padding:"5px",background:"#059669",color:"#fff",border:"none",borderRadius:7,fontSize:11,fontWeight:600,cursor:"pointer"}}>+ บันทึกใหม่</button>
+            </div>
+          )}
+        </div>
+
+        {/* Tabs */}
+        <div style={{display:"flex",borderBottom:"2px solid #F0F0F0",flexShrink:0}}>
+          {TABS.map(([v,l]) => (
+            <button key={v} onClick={()=>setTab(v)} style={{flex:1,padding:"8px 4px",fontSize:11,fontWeight:tab===v?700:400,border:"none",borderBottom:tab===v?"2px solid #B91C1C":"2px solid transparent",background:"none",color:tab===v?"#B91C1C":"#6B7280",cursor:"pointer",marginBottom:-2}}>
+              {l}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab content */}
+        <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
+
+          {/* ===== TAB: CELL ===== */}
+          {tab==="cell" && (
+            <div>
+              <div style={{fontSize:12,fontWeight:700,color:"#1F2937",marginBottom:10}}>เนื้อหาในแต่ละช่อง (แต่ละบรรทัด)</div>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {layout.cellRows.map((row, i) => (
+                  <div key={i} style={{background:"#F9FAFB",borderRadius:10,padding:"10px 12px",border:"1.5px solid #E5E7EB"}}>
+                    <div style={{display:"flex",gap:5,alignItems:"center",marginBottom:6}}>
+                      <span style={{fontSize:11,color:"#9CA3AF",fontWeight:600,minWidth:18}}>#{i+1}</span>
+                      <select value={row.field} onChange={e=>updCellRow(i,"field",e.target.value)} style={{...IS2,flex:1}}>
+                        {PD_FIELD_OPTIONS.map(opt=><option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                      </select>
+                      <button onClick={()=>moveCellRow(i,-1)} disabled={i===0} style={{padding:"3px 6px",borderRadius:5,border:"1px solid #D1D5DB",background:"#fff",cursor:"pointer",opacity:i===0?0.3:1,fontSize:12}}>↑</button>
+                      <button onClick={()=>moveCellRow(i,1)} disabled={i===layout.cellRows.length-1} style={{padding:"3px 6px",borderRadius:5,border:"1px solid #D1D5DB",background:"#fff",cursor:"pointer",opacity:i===layout.cellRows.length-1?0.3:1,fontSize:12}}>↓</button>
+                      <button onClick={()=>removeCellRow(i)} style={{padding:"3px 6px",borderRadius:5,border:"1px solid #FCA5A5",background:"#FEF2F2",color:"#B91C1C",cursor:"pointer",fontSize:12}}>✕</button>
+                    </div>
+                    {row.field==="custom_text" && (
+                      <input value={row.customText||""} onChange={e=>updCellRow(i,"customText",e.target.value)} placeholder="ข้อความ..." style={{...IS2,marginBottom:6}}/>
+                    )}
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                      <label style={{fontSize:11,display:"flex",alignItems:"center",gap:4}}>
+                        ขนาด: <input type="number" min={7} max={22} value={row.fontSize} onChange={e=>updCellRow(i,"fontSize",parseInt(e.target.value)||11)} style={{width:44,padding:"2px 5px",border:"1px solid #D1D5DB",borderRadius:5,fontSize:11}}/>
+                      </label>
+                      <label style={{fontSize:11,display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
+                        <input type="checkbox" checked={row.bold} onChange={e=>updCellRow(i,"bold",e.target.checked)} style={{accentColor:"#B91C1C"}}/>ตัวหนา
+                      </label>
+                      <select value={row.align} onChange={e=>updCellRow(i,"align",e.target.value)} style={{padding:"2px 6px",border:"1px solid #D1D5DB",borderRadius:5,fontSize:11}}>
+                        <option value="left">ซ้าย</option><option value="center">กลาง</option><option value="right">ขวา</option>
+                      </select>
+                      <label style={{fontSize:11,display:"flex",alignItems:"center",gap:4}}>
+                        สี:<input type="color" value={row.color} onChange={e=>updCellRow(i,"color",e.target.value)} style={{width:26,height:22,border:"none",cursor:"pointer"}}/>
+                      </label>
+                    </div>
+                  </div>
+                ))}
+                <button onClick={addCellRow} style={{padding:"8px",borderRadius:10,border:"2px dashed #D1D5DB",background:"none",color:"#6B7280",fontSize:12,cursor:"pointer",fontWeight:600}}>+ เพิ่มบรรทัด</button>
+              </div>
+            </div>
+          )}
+
+          {/* ===== TAB: COLUMNS ===== */}
+          {tab==="columns" && (
+            <div>
+              <div style={{fontSize:12,fontWeight:700,color:"#1F2937",marginBottom:4}}>คอลัมน์ในตาราง (ลากปรับลำดับ / เปิด-ปิด)</div>
+              <div style={{fontSize:11,color:"#9CA3AF",marginBottom:10}}>เพิ่มคอลัมน์พัก, Homeroom, Assembly ได้ตามต้องการ</div>
+              <div style={{display:"flex",gap:6,marginBottom:12}}>
+                <button onClick={addBreakCol} style={{flex:1,padding:"7px",background:"#F3F4F6",border:"1.5px dashed #9CA3AF",borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer",color:"#4B5563"}}>+ พักระหว่างคาบ</button>
+                <button onClick={addCustomCol} style={{flex:1,padding:"7px",background:"#EFF6FF",border:"1.5px dashed #93C5FD",borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer",color:"#1D4ED8"}}>+ คอลัมน์กำหนดเอง</button>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {layout.columns.map((col, i) => (
+                  <div key={col.id} style={{background: col.show?"#F9FAFB":"#F9FAFB",borderRadius:8,padding:"8px 10px",border:`1.5px solid ${col.show?"#E5E7EB":"#F3F4F6"}`,opacity:col.show?1:0.5}}>
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      {/* toggle */}
+                      <button onClick={()=>updCol(col.id,"show",!col.show)} style={{padding:"3px 8px",borderRadius:6,border:"none",background:col.show?"#D1FAE5":"#F3F4F6",color:col.show?"#065F46":"#9CA3AF",fontSize:11,fontWeight:700,cursor:"pointer",minWidth:36}}>{col.show?"✓":"−"}</button>
+                      {/* type badge */}
+                      <span style={{fontSize:10,padding:"2px 6px",borderRadius:4,background:col.type==="period"?"#DBEAFE":col.type==="break"?"#F3F4F6":col.type==="homeroom"||col.type==="assembly"?"#FEF9C3":"#F0FDF4",color:col.type==="period"?"#1D4ED8":col.type==="break"?"#6B7280":"#92400E",fontWeight:600}}>
+                        {col.type==="day"?"วัน":col.type==="period"?"คาบ":col.type==="break"?"พัก":col.type==="homeroom"?"HR":col.type==="assembly"?"Asm":"กำหนด"}
+                      </span>
+                      {/* label edit */}
+                      <input value={col.label||""} onChange={e=>updCol(col.id,"label",e.target.value)} style={{...IS2,flex:1,padding:"3px 7px",fontSize:11}}/>
+                      {/* width */}
+                      <input type="number" min={15} max={250} value={col.width} onChange={e=>updCol(col.id,"width",parseInt(e.target.value)||60)} style={{width:50,padding:"2px 5px",border:"1px solid #D1D5DB",borderRadius:5,fontSize:11}}/>
+                      <span style={{fontSize:10,color:"#9CA3AF"}}>px</span>
+                      {/* move */}
+                      <button onClick={()=>moveCol(col.id,-1)} disabled={i===0} style={{padding:"2px 5px",borderRadius:5,border:"1px solid #D1D5DB",background:"#fff",cursor:"pointer",opacity:i===0?0.3:1,fontSize:11}}>↑</button>
+                      <button onClick={()=>moveCol(col.id,1)} disabled={i===layout.columns.length-1} style={{padding:"2px 5px",borderRadius:5,border:"1px solid #D1D5DB",background:"#fff",cursor:"pointer",opacity:i===layout.columns.length-1?0.3:1,fontSize:11}}>↓</button>
+                      {/* delete (ไม่ลบ day/period แกนหลัก) */}
+                      {(col.type==="break"||col.type==="custom"||col.type==="homeroom"||col.type==="assembly") && (
+                        <button onClick={()=>removeCol(col.id)} style={{padding:"2px 5px",borderRadius:5,border:"1px solid #FCA5A5",background:"#FEF2F2",color:"#B91C1C",cursor:"pointer",fontSize:11}}>✕</button>
+                      )}
+                    </div>
+                    {/* extra options for break/homeroom/assembly */}
+                    {(col.type==="break"||col.type==="homeroom"||col.type==="assembly"||col.type==="custom") && (
+                      <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap",alignItems:"center"}}>
+                        {(col.type==="break") && (
+                          <label style={{fontSize:11,display:"flex",alignItems:"center",gap:4}}>
+                            เวลา: <input value={col.timeLabel||""} onChange={e=>updCol(col.id,"timeLabel",e.target.value)} placeholder="10.10-10.25" style={{padding:"2px 6px",border:"1px solid #D1D5DB",borderRadius:5,fontSize:11,width:90}}/>
+                          </label>
+                        )}
+                        <label style={{fontSize:11,display:"flex",alignItems:"center",gap:4}}>
+                          สีพื้น:<input type="color" value={col.bg||"#F3F4F6"} onChange={e=>updCol(col.id,"bg",e.target.value)} style={{width:24,height:20,border:"none",cursor:"pointer"}}/>
+                        </label>
+                        <label style={{fontSize:11,display:"flex",alignItems:"center",gap:4}}>
+                          สีตัวอักษร:<input type="color" value={col.textColor||"#6B7280"} onChange={e=>updCol(col.id,"textColor",e.target.value)} style={{width:24,height:20,border:"none",cursor:"pointer"}}/>
+                        </label>
+                      </div>
+                    )}
+                    {col.type==="period" && (
+                      <div style={{display:"flex",gap:8,marginTop:5,flexWrap:"wrap",alignItems:"center"}}>
+                        <label style={{fontSize:11,display:"flex",alignItems:"center",gap:4}}>
+                          คาบ ID: <input type="number" min={1} max={20} value={col.periodId||""} onChange={e=>updCol(col.id,"periodId",parseInt(e.target.value))} style={{width:44,padding:"2px 5px",border:"1px solid #D1D5DB",borderRadius:5,fontSize:11}}/>
+                        </label>
+                        <label style={{fontSize:11,display:"flex",alignItems:"center",gap:4}}>
+                          เวลา: <input value={col.timeLabel||""} onChange={e=>updCol(col.id,"timeLabel",e.target.value)} placeholder="08.30-09.20" style={{padding:"2px 6px",border:"1px solid #D1D5DB",borderRadius:5,fontSize:11,width:100}}/>
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ===== TAB: STYLE ===== */}
+          {tab==="style" && (
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              {/* Colors */}
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:"#1F2937",marginBottom:8}}>🎨 สี</div>
+                <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:8}}>
+                  <label style={{flex:1,fontSize:12,minWidth:100}}>สีหัวตาราง
+                    <div style={{display:"flex",gap:5,marginTop:4}}>
+                      <input type="color" value={layout.headerBg} onChange={e=>upd("headerBg",e.target.value)} style={{width:32,height:26,border:"none",cursor:"pointer"}}/>
+                      <input type="color" value={layout.headerText} onChange={e=>upd("headerText",e.target.value)} style={{width:32,height:26,border:"none",cursor:"pointer"}}/>
+                      <span style={{fontSize:10,color:"#9CA3AF",alignSelf:"center"}}>พื้น / ตัวอักษร</span>
+                    </div>
+                  </label>
+                  <label style={{flex:1,fontSize:12,minWidth:100}}>สีแถวคี่
+                    <div style={{marginTop:4}}><input type="color" value={layout.rowAltBg} onChange={e=>upd("rowAltBg",e.target.value)} style={{width:32,height:26,border:"none",cursor:"pointer"}}/></div>
+                  </label>
+                  <label style={{flex:1,fontSize:12,minWidth:100}}>สีเส้นขอบ
+                    <div style={{marginTop:4}}><input type="color" value={layout.borderColor||"#E5E7EB"} onChange={e=>upd("borderColor",e.target.value)} style={{width:32,height:26,border:"none",cursor:"pointer"}}/></div>
+                  </label>
+                </div>
+                <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
+                  {[["showAltRow","สลับสีแถว"],["showBorder","เส้นขอบ"],["showPeriodNum","แสดงเลขคาบ"],["showPeriodTime","แสดงเวลาในหัว"]].map(([k,l])=>(
+                    <label key={k} style={{display:"flex",alignItems:"center",gap:5,fontSize:12,cursor:"pointer"}}>
+                      <input type="checkbox" checked={!!layout[k]} onChange={e=>upd(k,e.target.checked)} style={{accentColor:"#B91C1C"}}/>{l}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              {/* Font */}
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:"#1F2937",marginBottom:6}}>🔤 ฟอนต์และขนาด</div>
+                <select value={layout.fontFamily} onChange={e=>upd("fontFamily",e.target.value)} style={{...IS2,marginBottom:8}}>
+                  {["Sarabun","TH SarabunNew","Arial","Tahoma","Kanit","Prompt"].map(f=><option key={f} value={f}>{f}</option>)}
+                </select>
+                <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
+                  <span style={{fontSize:11,minWidth:90}}>ขนาดตัวอักษร {layout.fontSize}%</span>
+                  <input type="range" min={60} max={150} value={layout.fontSize} onChange={e=>upd("fontSize",+e.target.value)} style={{flex:1,accentColor:"#B91C1C"}}/>
+                </div>
+                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <span style={{fontSize:11,minWidth:90}}>ความสูงแถว {layout.rowHeight}%</span>
+                  <input type="range" min={60} max={180} value={layout.rowHeight} onChange={e=>upd("rowHeight",+e.target.value)} style={{flex:1,accentColor:"#B91C1C"}}/>
+                </div>
+              </div>
+              {/* Paper */}
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:"#1F2937",marginBottom:6}}>📄 กระดาษ</div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
+                  {[["A4","A4"],["A3","A3"],["A5","A5"]].map(([v,l])=>(
+                    <button key={v} onClick={()=>upd("paperSize",v)} style={{flex:1,padding:"6px",border:`2px solid ${layout.paperSize===v?"#B91C1C":"#E5E7EB"}`,borderRadius:7,background:layout.paperSize===v?"#FEE2E2":"#fff",color:layout.paperSize===v?"#B91C1C":"#374151",fontWeight:600,cursor:"pointer",fontSize:12}}>{l}</button>
+                  ))}
+                  {[["landscape","แนวนอน"],["portrait","แนวตั้ง"]].map(([v,l])=>(
+                    <button key={v} onClick={()=>upd("orientation",v)} style={{flex:1,padding:"6px",border:`2px solid ${layout.orientation===v?"#B91C1C":"#E5E7EB"}`,borderRadius:7,background:layout.orientation===v?"#FEE2E2":"#fff",color:layout.orientation===v?"#B91C1C":"#374151",fontWeight:600,cursor:"pointer",fontSize:12}}>{l}</button>
+                  ))}
+                </div>
+                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <span style={{fontSize:11,minWidth:80}}>ขอบ {layout.marginMm||10}mm</span>
+                  <input type="range" min={3} max={20} value={layout.marginMm||10} onChange={e=>upd("marginMm",+e.target.value)} style={{flex:1,accentColor:"#B91C1C"}}/>
+                </div>
+              </div>
+              {/* Reset */}
+              <button onClick={()=>upd("columns",PD_DEFAULT_COLUMNS.map(c=>({...c})))||setLayout({...PD_DEFAULT_LAYOUT,columns:PD_DEFAULT_COLUMNS.map(c=>({...c}))})} style={{padding:"9px",border:"2px solid #E5E7EB",borderRadius:8,background:"#F9FAFB",color:"#6B7280",fontWeight:600,cursor:"pointer",fontSize:12}}>↩ รีเซ็ตทั้งหมด</button>
+            </div>
+          )}
+
+          {/* ===== TAB: HEADER ===== */}
+          {tab==="header" && (
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {/* Logo */}
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:"#1F2937",marginBottom:6}}>🖼 โลโก้</div>
+                <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
+                  {sh?.logo
+                    ? <img src={sh.logo} style={{width:40,height:40,objectFit:"contain",border:"1px solid #E5E7EB",borderRadius:6}} alt="logo"/>
+                    : <div style={{width:40,height:40,background:"#F3F4F6",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#9CA3AF",textAlign:"center"}}>ไม่มี<br/>โลโก้</div>
+                  }
+                  <div style={{fontSize:11,color:"#6B7280",flex:1}}>โลโก้มาจากหน้า ตั้งค่า → โลโก้โรงเรียน<br/>{sh?.logo?"✅ มีโลโก้แล้ว":"❌ ยังไม่มีโลโก้"}</div>
+                </div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",fontSize:12}}>
+                    <input type="checkbox" checked={!!layout.showLogo} onChange={e=>upd("showLogo",e.target.checked)} style={{accentColor:"#B91C1C"}}/>แสดงโลโก้
+                  </label>
+                  <label style={{fontSize:11,display:"flex",alignItems:"center",gap:4}}>
+                    ขนาด: <input type="number" min={24} max={80} value={layout.logoSize||48} onChange={e=>upd("logoSize",+e.target.value)} style={{width:48,padding:"2px 5px",border:"1px solid #D1D5DB",borderRadius:5,fontSize:11}}/>px
+                  </label>
+                </div>
+              </div>
+              {/* Header layout */}
+              <div>
+                <label style={{...LS}}>รูปแบบหัว</label>
+                <div style={{display:"flex",gap:6}}>
+                  {[["logo-left","โลโก้ซ้าย"],["logo-center","โลโก้กลาง"],["no-logo","ไม่มีโลโก้"]].map(([v,l])=>(
+                    <button key={v} onClick={()=>upd("headerLayout",v)} style={{flex:1,padding:"6px",border:`2px solid ${layout.headerLayout===v?"#B91C1C":"#E5E7EB"}`,borderRadius:7,background:layout.headerLayout===v?"#FEE2E2":"#fff",color:layout.headerLayout===v?"#B91C1C":"#374151",fontWeight:600,cursor:"pointer",fontSize:11}}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              {/* Title */}
+              <div>
+                <label style={{...LS}}>ชื่อตาราง (ว่าง = ชื่อห้อง/ครูอัตโนมัติ)</label>
+                <input value={layout.titleText||""} onChange={e=>upd("titleText",e.target.value)} placeholder="ตารางเรียน ม.4/3" style={IS2}/>
+                <div style={{display:"flex",gap:8,alignItems:"center",marginTop:6}}>
+                  <span style={{fontSize:11,minWidth:60}}>ขนาด {layout.titleFontSize||16}px</span>
+                  <input type="range" min={10} max={28} value={layout.titleFontSize||16} onChange={e=>upd("titleFontSize",+e.target.value)} style={{flex:1,accentColor:"#B91C1C"}}/>
+                </div>
+              </div>
+              {/* Subtitle */}
+              <div>
+                <label style={{...LS}}>คำบรรยาย (ว่าง = โรงเรียน/ปีการศึกษาอัตโนมัติ)</label>
+                <input value={layout.subtitleText||""} onChange={e=>upd("subtitleText",e.target.value)} placeholder="ภาคเรียนที่ 1/2569 โรงเรียนดาราวิทยาลัย" style={IS2}/>
+                <div style={{display:"flex",gap:8,alignItems:"center",marginTop:6}}>
+                  <span style={{fontSize:11,minWidth:60}}>ขนาด {layout.subtitleFontSize||12}px</span>
+                  <input type="range" min={9} max={20} value={layout.subtitleFontSize||12} onChange={e=>upd("subtitleFontSize",+e.target.value)} style={{flex:1,accentColor:"#B91C1C"}}/>
+                </div>
+              </div>
+              {/* Footer */}
+              <div>
+                <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:12,marginBottom:8}}>
+                  <input type="checkbox" checked={!!layout.showFooter} onChange={e=>upd("showFooter",e.target.checked)} style={{accentColor:"#B91C1C"}}/>แสดงส่วนลงชื่อท้ายตาราง
+                </label>
+                {layout.showFooter && <>
+                  <label style={{...LS}}>ซ้าย</label>
+                  <input value={layout.footerLeft||""} onChange={e=>upd("footerLeft",e.target.value)} style={{...IS2,marginBottom:8}}/>
+                  <label style={{...LS}}>ขวา</label>
+                  <input value={layout.footerRight||""} onChange={e=>upd("footerRight",e.target.value)} style={IS2}/>
+                </>}
+              </div>
+            </div>
+          )}
+
+        </div>{/* end tab content */}
+      </div>{/* end right panel */}
+    </div>
+  );
+}
+
+
 /* ===== SETTINGS */
 function Settings({S,U,st,ay,setAY,sh,setSH,div}){
   const logoRef=useRef(null);
