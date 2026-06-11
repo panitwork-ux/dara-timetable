@@ -7575,6 +7575,43 @@ function PrintDesignerModal({ open, onClose, S, ay, sh }) {
     setTimeout(() => w.print(), 600);
   };
 
+  // Bulk print — พิมพ์ทุกห้องหรือทุกครูด้วย layout เดียวกัน
+  const doPrintAll = (type) => {
+    const targets = type === "room"
+      ? S.rooms
+      : S.teachers.filter(t => t.totalPeriods > 0);
+    if (!targets.length) return;
+
+    // สร้าง HTML ทุกหน้ารวมกัน โดยใส่ page-break ระหว่างกัน
+    const pages = targets.map(target => {
+      const id = target.id;
+      // เอา body ของแต่ละหน้า
+      const full = buildPDPrintHTML(layout, S, ay, sh, type, id);
+      // แกะเอาแค่ส่วนใน <body>...</body>
+      const bodyMatch = full.match(/<body>([\s\S]*?)<\/body>/);
+      return bodyMatch ? bodyMatch[1] : full;
+    });
+
+    // ใช้ header/style จากหน้าแรก
+    const first = buildPDPrintHTML(layout, S, ay, sh, type, targets[0].id);
+    const headMatch = first.match(/([\s\S]*?<body>)/);
+    const head = headMatch ? headMatch[1] : '<html><body>';
+    const closeMatch = first.match(/<\/body>[\s\S]*$/);
+    const close = closeMatch ? closeMatch[0] : '</body></html>';
+
+    // เพิ่ม page-break-after ระหว่างแต่ละหน้า
+    const combined = pages.map((p, i) =>
+      i < pages.length - 1
+        ? `<div style="page-break-after:always">${p}</div>`
+        : `<div>${p}</div>`
+    ).join('');
+
+    const w = window.open("", "_blank");
+    w.document.write(head + combined + close);
+    w.document.close();
+    setTimeout(() => w.print(), 800);
+  };
+
   const IS2 = { width:"100%", padding:"6px 10px", border:"1.5px solid #E5E7EB", borderRadius:8, fontSize:12, outline:"none", fontFamily:"inherit", background:"#fff" };
   const LS = { fontSize:12, fontWeight:600, display:"block", marginBottom:4, color:"#374151" };
   const TABS = [["cell","📋 เนื้อหาช่อง"],["columns","↔️ คอลัมน์"],["style","🎨 สไตล์"],["header","🏷 หัว/ท้าย"]];
@@ -7596,6 +7633,15 @@ function PrintDesignerModal({ open, onClose, S, ay, sh }) {
               : S.teachers.map(t=><option key={t.id} value={t.id}>{t.firstName} {t.lastName}</option>)}
           </select>
           <button onClick={doPrint} disabled={!previewTarget.id} style={{padding:"8px 20px",background:previewTarget.id?"#B91C1C":"#9CA3AF",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:previewTarget.id?"pointer":"default",fontSize:13,whiteSpace:"nowrap"}}>🖨 พิมพ์</button>
+        </div>
+        {/* Bulk print buttons */}
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>doPrintAll("teacher")} style={{flex:1,padding:"8px 12px",background:"#1D4ED8",color:"#fff",border:"none",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>
+            🖨 พิมพ์ครูทุกคน ({S.teachers.filter(t=>t.totalPeriods>0).length} คน)
+          </button>
+          <button onClick={()=>doPrintAll("room")} style={{flex:1,padding:"8px 12px",background:"#059669",color:"#fff",border:"none",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>
+            🖨 พิมพ์ทุกห้อง ({S.rooms.length} ห้อง)
+          </button>
         </div>
         {previewTarget.id
           ? <div style={{flex:1,background:"#fff",borderRadius:12,overflow:"auto",padding:14}}>
