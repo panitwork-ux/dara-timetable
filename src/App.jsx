@@ -6192,58 +6192,45 @@ function Reports({S,U,st,gc,ay,sh}){
       return a.room.localeCompare(b.room,"th");
     });
     const tDiv=getDivisionForTeacher(t.id,S);
-    let html=pdfPage(
-      "ตารางสอน "+(t.prefix||"")+(t.firstName||"")+" "+(t.lastName||""),
-      "ภาคเรียนที่ "+(ay?.semester||"1")+"/"+(ay?.year||"2568")+" "+(sh?.name||"โรงเรียนดาราวิทยาลัย"),
-      DAYS.map(day=>({day,cells:PERIODS.map(p=>{
-        let parts=[];
-        Object.entries(S.schedule).forEach(([k,en])=>{
-          const keySuffix="_"+day+"_"+p.id;
-          if(!k.endsWith(keySuffix))return;
-          en?.forEach(e=>{
-            const pCoIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
-            if(e.teacherId===t.id||pCoIds.includes(t.id)){
-              const sub=S.subjects.find(s=>s.id===e.subjectId);
-              const rid=k.split("_")[0];
-              const rm=S.rooms.find(r=>r.id===rid);
-              parts.push({sub:(sub?.shortName||sub?.name||""),room:rm?.name||"",room2:""});
-            }
-          });
-        });
-        return sortParts(parts);
-      })})),
-      "",
-      sh?.logo||null,
-      printSettings,
-      false,
-      tDiv
-    );
-    setPrintPreview({html:pdfPage(
-      "ตารางสอน "+(t.prefix||"")+(t.firstName||"")+" "+(t.lastName||""),
-      "ภาคเรียนที่ "+(ay?.semester||"1")+"/"+(ay?.year||"2568")+" "+(sh?.name||"โรงเรียนดาราวิทยาลัย"),
-      DAYS.map(day=>({day,cells:PERIODS.map(p=>{
-        let parts=[];
-        Object.entries(S.schedule).forEach(([k,en])=>{
-          const keySuffix="_"+day+"_"+p.id;
-          if(!k.endsWith(keySuffix))return;
-          en?.forEach(e=>{
-            const pCoIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
-            if(e.teacherId===t.id||pCoIds.includes(t.id)){
-              const sub=S.subjects.find(s=>s.id===e.subjectId);
-              const rid=k.split("_")[0];
-              const rm=S.rooms.find(r=>r.id===rid);
-              parts.push({sub:(sub?.shortName||sub?.name||""),room:rm?.name||"",room2:""});
-            }
-          });
-        });
-        return sortParts(parts);
-      })})),
-      "",
-      sh?.logo||null,
-      printSettings,
-      false,
-      tDiv
-    )});
+
+    // helper: หา lock cell สำหรับครูคนนี้ในแต่ละ day/period
+    const getLockCell=(day,pid)=>{
+      // 1) คาบล็อคส่วนตัว (personalLocks)
+      for(const pl of (t.personalLocks||[])){
+        if(pl.day===day&&(pl.periods||[]).includes(pid))
+          return [{sub:"🔒 "+(pl.reason||"ส่วนตัว"),room:"",room2:"",isLock:true,lockColor:"#FEF3C7",lockTextColor:"#92400E"}];
+      }
+      // 2) หน้าที่พิเศษ (specialRoles → วิชาการ/พัฒนาวินัย)
+      for(const rid of (t.specialRoles||[])){
+        const role=SROLES.find(r=>r.id===rid);
+        const bl=(role?.blocked||[]).find(b=>b.day===day&&(b.periods||[]).includes(pid));
+        if(bl) return [{sub:"📋 "+role.name.replace("ฝ่ายวิชาการ","วิชาการ").replace("ฝ่ายพัฒนาวินัย","พัฒนาวินัย"),room:"",room2:"",isLock:true,lockColor:"#EDE9FE",lockTextColor:"#5B21B6"}];
+      }
+      // 3) คาบล็อคกลุ่มสาระ (meetings type=dept)
+      for(const m of (S.meetings||[])){
+        if(m.type&&m.type!=="dept") continue;
+        if(m.isAssembly||m.isHomeroom) continue;
+        const isMyDept=!m.departmentId||m.departmentId===t.departmentId||m.departmentId==="all";
+        if(isMyDept&&m.day===day&&(m.periods||[]).includes(pid))
+          return [{sub:"🔒 LOCK",room:"",room2:"",isLock:true,lockColor:"#DBEAFE",lockTextColor:"#1D4ED8"}];
+      }
+      // 4) คาบ custom lock
+      for(const m of (S.meetings||[])){
+        if(m.type!=="custom") continue;
+        const inSlot=(m.slots||[]).some(s=>s.day===day&&s.period===pid);
+        if(inSlot) return [{sub:"🏫 "+(m.name||"Lock"),room:"",room2:"",isLock:true,lockColor:"#F3F4F6",lockTextColor:"#374151"}];
+      }
+      // 5) ชมรม/Assembly (meetings ที่มี isAssembly/isHomeroom และ teacherId ตรง)
+      for(const m of (S.meetings||[])){
+        if(m.teacherId===t.id&&(m.isAssembly||m.isHomeroom)&&m.day===day&&(m.periods||[]).includes(pid))
+          return [{sub:m.isAssembly?"🎤 หอประชุม":"🏠 Homeroom",room:"",room2:"",isLock:true,lockColor:"#FEF9C3",lockTextColor:"#92400E"}];
+      }
+      return null;
+    };
+
+    const title="ตารางสอน "+(t.prefix||"")+(t.firstName||"")+" "+(t.lastName||"");
+    const subtitle="ภาคเรียนที่ "+(ay?.semester||"1")+"/"+(ay?.year||"2568")+" "+(sh?.name||"โรงเรียนดาราวิทยาลัย");
+    setPrintPreview({html:pdfPage(title,subtitle,buildTeacherDayRows(t),"",sh?.logo||null,printSettings,false,tDiv)});
   };
 
   // helper: สร้าง pages สำหรับห้องหนึ่ง
@@ -6511,36 +6498,15 @@ function Reports({S,U,st,gc,ay,sh}){
     w.document.close();
     setTimeout(()=>w.print(),700);
   };
+  // helper: build dayRows สำหรับครู 1 คน พร้อม lock cells
+  const buildTeacherDayRows=(t)=>{    const sortParts=(parts)=>parts.sort((a,b)=>{      const numA=parseInt((a.room.match(/(\d+)$/)||[0,9999])[1]);      const numB=parseInt((b.room.match(/(\d+)$/)||[0,9999])[1]);      if(numA!==numB) return numA-numB;      return a.room.localeCompare(b.room,"th");    });    const getLock=(day,pid)=>{      for(const pl of (t.personalLocks||[])){        if(pl.day===day&&(pl.periods||[]).includes(pid))          return [{sub:"🔒 "+(pl.reason||"ส่วนตัว"),room:"",room2:"",isLock:true,lockColor:"#FEF3C7",lockTextColor:"#92400E"}];      }      for(const rid of (t.specialRoles||[])){        const role=SROLES.find(r=>r.id===rid);        const bl=(role?.blocked||[]).find(b=>b.day===day&&(b.periods||[]).includes(pid));        if(bl) return [{sub:"📋 "+role.name.replace("ฝ่ายวิชาการ","วิชาการ").replace("ฝ่ายพัฒนาวินัย","พัฒนาวินัย"),room:"",room2:"",isLock:true,lockColor:"#EDE9FE",lockTextColor:"#5B21B6"}];      }      for(const m of (S.meetings||[])){        if(m.type&&m.type!=="dept") continue;        if(m.isAssembly||m.isHomeroom) continue;        const isMyDept=!m.departmentId||m.departmentId===t.departmentId||m.departmentId==="all";        if(isMyDept&&m.day===day&&(m.periods||[]).includes(pid))          return [{sub:"🔒 LOCK",room:"",room2:"",isLock:true,lockColor:"#DBEAFE",lockTextColor:"#1D4ED8"}];      }      for(const m of (S.meetings||[])){        if(m.type!=="custom") continue;        if((m.slots||[]).some(s=>s.day===day&&s.period===pid))          return [{sub:"🏫 "+(m.name||"Lock"),room:"",room2:"",isLock:true,lockColor:"#F3F4F6",lockTextColor:"#374151"}];      }      for(const m of (S.meetings||[])){        if(m.teacherId===t.id&&(m.isAssembly||m.isHomeroom)&&m.day===day&&(m.periods||[]).includes(pid))          return [{sub:m.isAssembly?"🎤 หอประชุม":"🏠 Homeroom",room:"",room2:"",isLock:true,lockColor:"#FEF9C3",lockTextColor:"#92400E"}];      }      return null;    };    return DAYS.map(day=>({day,cells:PERIODS.map(p=>{      let parts=[];      Object.entries(S.schedule).forEach(([k,en])=>{        if(!k.endsWith("_"+day+"_"+p.id))return;        en?.forEach(e=>{          const pCoIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);          if(e.teacherId===t.id||pCoIds.includes(t.id)){            const sub=S.subjects.find(s=>s.id===e.subjectId);            const rid=k.split("_")[0];            const rm=S.rooms.find(r=>r.id===rid);            parts.push({sub:(sub?.shortName||sub?.name||""),room:rm?.name||"",room2:""});          }        });      });      if(parts.length) return sortParts(parts);      return getLock(day,p.id)||[];    })}));  };
   const printAllTeachersPDF=()=>{
     const teachers=S.teachers.filter(t=>t.totalPeriods>0);
     if(!teachers.length){st("ไม่มีครูที่กำหนดคาบ","error");return}
     const pages=teachers.map(t=>({
       title:"ตารางสอน "+(t.prefix||"")+(t.firstName||"")+" "+(t.lastName||""),
       subtitle:"ภาคเรียนที่ "+(ay?.semester||"1")+"/"+(ay?.year||"2568")+" "+(sh?.name||"โรงเรียนดาราวิทยาลัย"),
-      dayRows:DAYS.map(day=>({day,cells:PERIODS.map(p=>{
-        const keySuffix="_"+day+"_"+p.id;
-        let parts=[];
-        Object.entries(S.schedule).forEach(([k,en])=>{
-          if(!k.endsWith(keySuffix))return;
-          en?.forEach(e=>{
-            const pCoIds=e.coTeacherIds?.length?e.coTeacherIds:(e.coTeacherId?[e.coTeacherId]:[]);
-            if(e.teacherId===t.id||pCoIds.includes(t.id)){
-              const sub=S.subjects.find(s=>s.id===e.subjectId);
-              const rid=k.split("_")[0];
-              const rm=S.rooms.find(r=>r.id===rid);
-              parts.push({sub:(sub?.shortName||sub?.name||""),room:rm?.name||"",room2:""});
-            }
-          });
-        });
-        // เรียงห้องจากน้อยไปมาก (เช่น ม.6/1, ม.6/5, ม.6/6)
-        parts.sort((a,b)=>{
-          const numA=parseInt((a.room.match(/(\d+)$/)||[0,9999])[1]);
-          const numB=parseInt((b.room.match(/(\d+)$/)||[0,9999])[1]);
-          if(numA!==numB) return numA-numB;
-          return a.room.localeCompare(b.room,"th");
-        });
-        return parts;
-      })}))
+      dayRows:buildTeacherDayRows(t)
     }));
     const w=window.open('','_blank');
     w.document.write(pdfMultiPage(pages,sh?.logo||null,printSettings,false));
@@ -8315,6 +8281,12 @@ function pdfPage(title, subtitle, dayRows, footerText, logoBase64, ps, isRoom, d
   const bodyRows = dayRows.map(function(r) {
     const dayCells = r.cells.map(function(rawEntries) {
       if (!rawEntries || !rawEntries.length) return '<td class="slot"></td>';
+      // lock cell — แสดงสีพิเศษ
+      if (rawEntries[0]?.isLock) {
+        const lc = rawEntries[0].lockColor||"#FEF3C7";
+        const lt = rawEntries[0].lockTextColor||"#92400E";
+        return '<td class="slot" style="background:'+lc+';vertical-align:middle"><div class="ent"><div class="ent-sub" style="font-size:'+(11*fScale).toFixed(1)+'px;color:'+lt+'">'+rawEntries[0].sub+'</div></div></td>';
+      }
       const entries = groupEntries(rawEntries);
       const isDouble = entries.some(function(e){ return e.double || e.roomCount > 1; });
       const inner = entries.map(function(e) {
