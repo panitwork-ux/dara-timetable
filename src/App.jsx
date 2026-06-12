@@ -5827,31 +5827,130 @@ function SwapPage({S,st,ay,sh}){
                           border:"0.5px solid "+(sel?.subTeacherId===tB.id?"#6EE7B7":"#E5E7EB"),
                           background:sel?.subTeacherId===tB.id?"#F0FDF4":"#FAFAFA"
                         }}>
-                          <div style={{fontSize:13,fontWeight:600,color:"#1E3A5F",marginBottom:8}}>
-                            {tB.prefix}{tB.firstName} {tB.lastName}
-                          </div>
-                          {/* return slots grid — 2 cols */}
-                          <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:6}}>
-                            {returnSlots.map((rs,ri)=>{
-                              const isAct=sel?.subTeacherId===tB.id&&sel?.subDay===rs.day&&sel?.subPeriod===rs.period&&sel?.calcDate===rs.calcDate;
+                          {/* Teacher header + load bar */}
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                            <div style={{fontSize:13,fontWeight:600,color:"#1E3A5F"}}>
+                              {tB.prefix}{tB.firstName} {tB.lastName}
+                            </div>
+                            {(()=>{
+                              let totalB=0;
+                              DAYS_SW.forEach(d=>PERIODS_SW.forEach(p=>{if(getEntries(tB.id,d,p.id).length>0)totalB++;}));
+                              const cap=tB.totalPeriods||0;
+                              const pct=cap>0?Math.round(totalB/cap*100):0;
+                              const col=pct>=90?"#DC2626":pct>=70?"#D97706":"#059669";
                               return(
-                                <button key={ri}
-                                  onClick={()=>setSelected(p=>({...p,[key]:{subTeacherId:tB.id,subDay:rs.day,subPeriod:rs.period,calcDate:rs.calcDate,subBName:rs.subBName,subBRoom:rs.subBRoom}}))}
-                                  style={{
-                                    padding:"8px 10px",borderRadius:8,textAlign:"left",fontFamily:"inherit",
-                                    border:isAct?"1.5px solid #059669":"0.5px solid #E5E7EB",
-                                    background:isAct?"#F0FDF4":"#fff",
-                                    cursor:"pointer",transition:"all 0.12s"
-                                  }}>
-                                  <div style={{fontSize:12,fontWeight:600,color:isAct?"#065F46":"#374151"}}>
-                                    {isAct?"✓ ":""}{rs.day} คาบ {rs.period}
+                                <div style={{display:"flex",alignItems:"center",gap:5}}>
+                                  <span style={{fontSize:10,fontWeight:700,color:col}}>{totalB}/{cap||"?"}</span>
+                                  <div style={{width:36,height:5,background:"#E5E7EB",borderRadius:3,overflow:"hidden"}}>
+                                    <div style={{width:`${Math.min(pct,100)}%`,height:"100%",background:col,borderRadius:3,transition:"width 0.3s"}}/>
                                   </div>
-                                  <div style={{fontSize:11,color:isAct?"#059669":"#9CA3AF",marginTop:2}}>📅 {fmtDate(rs.calcDate)}</div>
-                                  {rs.subBName&&<div style={{fontSize:11,color:"#1E40AF",marginTop:1,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>📚 {rs.subBName}</div>}
-                                </button>
+                                </div>
                               );
-                            })}
+                            })()}
                           </div>
+
+                          {/* ── Mini Timetable ── */}
+                          <div style={{overflowX:"auto",marginBottom:8,borderRadius:6,border:"1px solid #E5E7EB"}}>
+                            <table style={{borderCollapse:"collapse",width:"100%",fontSize:9}}>
+                              <thead>
+                                <tr>
+                                  <th style={{padding:"2px 5px",background:"#7F1D1D",color:"#fff",fontSize:8,width:30,textAlign:"center"}}>วัน╲คาบ</th>
+                                  {PERIODS_SW.map(p=>(
+                                    <th key={p.id} style={{padding:"2px 2px",background:"#B91C1C",color:"#fff",fontSize:8,textAlign:"center",minWidth:24}}>
+                                      {p.id}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {DAYS_SW.map((d,di)=>(
+                                  <tr key={d} style={{background:di%2===1?"#FFF9F9":"#fff"}}>
+                                    <td style={{padding:"2px 4px",fontSize:8,fontWeight:600,color:"#374151",whiteSpace:"nowrap",borderRight:"1px solid #E5E7EB",background:"#FEF2F2",textAlign:"center"}}>{d.slice(0,3)}</td>
+                                    {PERIODS_SW.map(p=>{
+                                      const ents=getEntries(tB.id,d,p.id);
+                                      const isSubSlot=d===r.day&&p.id===r.period;
+                                      const isRetSlot=sel?.subTeacherId===tB.id&&d===sel?.subDay&&p.id===sel?.subPeriod;
+                                      const locked=!isFree(tB.id,d,p.id)&&!ents.length;
+                                      return(
+                                        <td key={p.id} style={{
+                                          padding:"1px",textAlign:"center",border:"1px solid #F3F4F6",
+                                          background:isSubSlot?"#FDE68A":isRetSlot?"#A7F3D0":ents.length?"#BFDBFE":locked?"#F1F5F9":"#fff",
+                                          minWidth:24,height:22,
+                                        }} title={ents[0]?.subName||""}>
+                                          {isSubSlot&&<span style={{color:"#B45309",fontWeight:800,fontSize:10}}>★</span>}
+                                          {isRetSlot&&!isSubSlot&&<span style={{color:"#065F46",fontWeight:800,fontSize:10}}>✓</span>}
+                                          {!isSubSlot&&!isRetSlot&&ents.length>0&&<span style={{color:"#1E40AF",fontWeight:700,fontSize:9}}>{ents[0].subName?.slice(0,2)||"■"}</span>}
+                                          {!isSubSlot&&!isRetSlot&&locked&&<span style={{color:"#CBD5E1",fontSize:8}}>🔒</span>}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                            <div style={{display:"flex",gap:8,padding:"3px 5px",flexWrap:"wrap",background:"#FAFAFA",borderTop:"1px solid #F3F4F6"}}>
+                              {[["#FDE68A","★ คาบสอนแทน"],["#BFDBFE","■ สอนอยู่"],["#A7F3D0","✓ คาบสอนคืน"],["#F1F5F9","🔒 ล็อค"]].map(([bg,lbl])=>(
+                                <div key={lbl} style={{display:"flex",alignItems:"center",gap:2,fontSize:8,color:"#6B7280"}}>
+                                  <div style={{width:8,height:8,background:bg,border:"1px solid #E5E7EB",borderRadius:1,flexShrink:0}}/>
+                                  {lbl}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* return slots — ยุบตาม day+period แล้วเลือกวันที่ */}
+                          <div style={{fontSize:11,fontWeight:600,color:"#374151",marginBottom:5}}>เลือกคาบสอนคืน:</div>
+                          {(()=>{
+                            const groups={};
+                            returnSlots.forEach(rs=>{
+                              const gk=rs.day+"_"+rs.period;
+                              if(!groups[gk]) groups[gk]={day:rs.day,period:rs.period,time:rs.time,subBName:rs.subBName,subBRoom:rs.subBRoom,dates:[]};
+                              groups[gk].dates.push(rs.calcDate);
+                            });
+                            const groupList=Object.values(groups);
+                            const selGk=sel?.subTeacherId===tB.id?(sel.subDay+"_"+sel.subPeriod):null;
+                            return(
+                              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                                {groupList.map((g,gi)=>{
+                                  const isGrpAct=selGk===g.day+"_"+g.period;
+                                  return(
+                                    <div key={gi} style={{borderRadius:8,border:`1.5px solid ${isGrpAct?"#059669":"#E5E7EB"}`,background:isGrpAct?"#F0FDF4":"#fff",overflow:"hidden"}}>
+                                      <button onClick={()=>{
+                                        if(isGrpAct){setSelected(p=>{const n={...p};delete n[key];return n;});}
+                                        else{setSelected(p=>({...p,[key]:{subTeacherId:tB.id,subDay:g.day,subPeriod:g.period,calcDate:g.dates[0],subBName:g.subBName,subBRoom:g.subBRoom}}));}
+                                      }} style={{width:"100%",padding:"8px 10px",border:"none",background:"none",cursor:"pointer",textAlign:"left",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                                        <div>
+                                          <span style={{fontSize:12,fontWeight:700,color:isGrpAct?"#065F46":"#374151"}}>{isGrpAct?"✓ ":""}{g.day} คาบ {g.period}</span>
+                                          <span style={{fontSize:10,color:"#9CA3AF",marginLeft:6}}>{g.time}</span>
+                                          {g.subBName&&<div style={{fontSize:10,color:"#1E40AF",marginTop:1}}>📚 {g.subBName}</div>}
+                                        </div>
+                                        <div style={{display:"flex",alignItems:"center",gap:4}}>
+                                          <span style={{fontSize:10,color:"#6B7280",background:"#F3F4F6",padding:"1px 7px",borderRadius:10}}>{g.dates.length} วัน</span>
+                                          <span style={{fontSize:11,color:"#9CA3AF"}}>{isGrpAct?"▲":"▼"}</span>
+                                        </div>
+                                      </button>
+                                      {isGrpAct&&(
+                                        <div style={{padding:"4px 10px 10px",borderTop:"1px solid #E5E7EB"}}>
+                                          <div style={{fontSize:10,color:"#6B7280",marginBottom:5}}>เลือกวันที่สอนคืน:</div>
+                                          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                                            {g.dates.map((dt,di)=>{
+                                              const isDateAct=sel?.calcDate===dt;
+                                              return(
+                                                <button key={di} onClick={()=>setSelected(p=>({...p,[key]:{subTeacherId:tB.id,subDay:g.day,subPeriod:g.period,calcDate:dt,subBName:g.subBName,subBRoom:g.subBRoom}}))}
+                                                  style={{padding:"4px 10px",borderRadius:6,fontSize:11,fontWeight:isDateAct?700:400,border:`1.5px solid ${isDateAct?"#059669":"#D1D5DB"}`,background:isDateAct?"#D1FAE5":"#fff",color:isDateAct?"#065F46":"#374151",cursor:"pointer"}}>
+                                                  {isDateAct?"✓ ":""}{fmtDate(dt)}
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
                         </div>
                       ))}
                     </div>
