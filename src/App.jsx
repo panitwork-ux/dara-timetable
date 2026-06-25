@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import * as XLSX from 'xlsx';
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, collection, getDocs, onSnapshot } from "firebase/firestore";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, deleteDoc, collection, getDocs, onSnapshot } from "firebase/firestore";
 
 // ===== FIREBASE CONFIG — ใส่ค่าจาก Firebase Console =====
 const FIREBASE_CONFIG = {
@@ -150,7 +150,20 @@ function AdminPanel({user,onBack,refreshPerms}){
     setLoading(true);
     const {db}=getFB();if(!db){setLoading(false);return;}
     const snap=await getDocs(collection(db,"permissions"));
-    setUsers(snap.docs.map(d=>({uid:d.id,...d.data()})));
+    // กรอง: ไม่แสดง doc ที่ merged:true (pre-key ที่ถูก migrate แล้ว)
+    // และ dedup ด้วย email — ถ้า email ซ้ำ เอาตัวที่ไม่ใช่ pre-key ก่อน
+    const allDocs=snap.docs.map(d=>({uid:d.id,...d.data()})).filter(u=>!u.merged);
+    const emailMap={};
+    allDocs.forEach(u=>{
+      const em=u.email?.toLowerCase()||u.uid;
+      if(!emailMap[em]){emailMap[em]=u;}
+      else{
+        // ถ้ามีซ้ำ เอาตัวที่ไม่ใช่ pre_ (uid จริง) ก่อน
+        const cur=emailMap[em];
+        if(cur.uid.startsWith("pre_")&&!u.uid.startsWith("pre_")) emailMap[em]=u;
+      }
+    });
+    setUsers(Object.values(emailMap));
     setLoading(false);
   };
 
@@ -1830,7 +1843,8 @@ export default function App() {
               const preData=preSnap.data();
               const divs=preData.divisions||{p1:false,p2:false,m1:false,m2:false};
               await Promise.race([setDoc(doc(db,"permissions",u.uid),{displayName:u.displayName||"",email:u.email,divisions:divs,preAdded:false},{merge:true}),new Promise((_,r)=>setTimeout(()=>r(),5000))]).catch(()=>{});
-              await Promise.race([setDoc(doc(db,"permissions",emailKey),{merged:true},{merge:true}),new Promise((_,r)=>setTimeout(()=>r(),5000))]).catch(()=>{});
+              // ลบ pre-key doc เก่าออกเลย (ไม่แค่ mark merged) เพื่อไม่ให้ซ้ำใน admin
+              await Promise.race([deleteDoc(doc(db,"permissions",emailKey)),new Promise((_,r)=>setTimeout(()=>r(),5000))]).catch(()=>{});
               perms={...perms,divisions:divs};
             }
           }catch{}
