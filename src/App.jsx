@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import * as XLSX from 'xlsx';
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, deleteDoc, collection, getDocs, onSnapshot } from "firebase/firestore";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, collection, getDocs, onSnapshot } from "firebase/firestore";
 
 // ===== FIREBASE CONFIG — ใส่ค่าจาก Firebase Console =====
 const FIREBASE_CONFIG = {
@@ -150,20 +150,7 @@ function AdminPanel({user,onBack,refreshPerms}){
     setLoading(true);
     const {db}=getFB();if(!db){setLoading(false);return;}
     const snap=await getDocs(collection(db,"permissions"));
-    // กรอง: ไม่แสดง doc ที่ merged:true (pre-key ที่ถูก migrate แล้ว)
-    // และ dedup ด้วย email — ถ้า email ซ้ำ เอาตัวที่ไม่ใช่ pre-key ก่อน
-    const allDocs=snap.docs.map(d=>({uid:d.id,...d.data()})).filter(u=>!u.merged);
-    const emailMap={};
-    allDocs.forEach(u=>{
-      const em=u.email?.toLowerCase()||u.uid;
-      if(!emailMap[em]){emailMap[em]=u;}
-      else{
-        // ถ้ามีซ้ำ เอาตัวที่ไม่ใช่ pre_ (uid จริง) ก่อน
-        const cur=emailMap[em];
-        if(cur.uid.startsWith("pre_")&&!u.uid.startsWith("pre_")) emailMap[em]=u;
-      }
-    });
-    setUsers(Object.values(emailMap));
+    setUsers(snap.docs.map(d=>({uid:d.id,...d.data()})));
     setLoading(false);
   };
 
@@ -293,7 +280,7 @@ function AdminPanel({user,onBack,refreshPerms}){
 
   if(!unlocked) return(
     <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#F3F4F6"}}>
-      <div style={{background:"#fff",borderRadius:16,padding:"40px 36px",width:360,textAlign:"center",boxShadow:"0 4px 20px rgba(0,0,0,0.1)"}}>
+      <div style={{background:"rgba(255,255,255,0.88)",backdropFilter:"blur(32px) saturate(200%)",WebkitBackdropFilter:"blur(32px) saturate(200%)",border:"1px solid rgba(255,255,255,0.65)",boxShadow:"0 24px 64px rgba(0,0,0,0.18),inset 0 1px 0 rgba(255,255,255,0.95)",borderRadius:20,padding:"40px 36px",width:360,textAlign:"center"}}>
         <div style={{fontSize:36,marginBottom:12}}>🔐</div>
         <h2 style={{fontSize:18,fontWeight:700,marginBottom:4}}>Admin Panel</h2>
         <p style={{color:"#6B7280",fontSize:12,marginBottom:24}}>ใส่รหัสผู้ดูแลระบบ</p>
@@ -325,7 +312,7 @@ function AdminPanel({user,onBack,refreshPerms}){
         </div>
 
         {/* ── เพิ่มอีเมลล่วงหน้า ── */}
-        <div style={{background:"#fff",borderRadius:14,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:20}}>
+        <div style={{background:"rgba(255,255,255,0.80)",backdropFilter:"blur(20px) saturate(180%)",WebkitBackdropFilter:"blur(20px) saturate(180%)",border:"1px solid rgba(255,255,255,0.6)",boxShadow:"0 4px 24px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.9)",borderRadius:16,padding:24,marginBottom:20}}>
           <h2 style={{fontSize:15,fontWeight:700,marginBottom:4}}>➕ กำหนดสิทธิ์ล่วงหน้า (Admin พิมพ์อีเมลเอง)</h2>
           <p style={{fontSize:12,color:"#6B7280",marginBottom:16}}>เพิ่มอีเมลพร้อมสิทธิ์ได้เลย — วางหลายอีเมลพร้อมกันได้ (แต่ละบรรทัด) เมื่อผู้ใช้ login ครั้งแรกระบบจะจำสิทธิ์ที่ตั้งไว้</p>
           <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
@@ -381,12 +368,12 @@ function AdminPanel({user,onBack,refreshPerms}){
         </div>
 
         {/* ── Bulk Import ── */}
-        <div style={{background:"#fff",borderRadius:14,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:20}}>
+        <div style={{background:"rgba(255,255,255,0.80)",backdropFilter:"blur(20px) saturate(180%)",WebkitBackdropFilter:"blur(20px) saturate(180%)",border:"1px solid rgba(255,255,255,0.6)",boxShadow:"0 4px 24px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.9)",borderRadius:16,padding:24,marginBottom:20}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
             <h2 style={{fontSize:15,fontWeight:700}}>📥 Bulk Import จาก CSV / วางข้อความ</h2>
             <button
               onClick={()=>{setBulkMode(v=>!v);setBulkResult(null);}}
-              style={{background:"none",border:"1px solid #D1D5DB",borderRadius:8,padding:"4px 14px",fontSize:12,cursor:"pointer",color:bulkMode?"#DC2626":"#374151",fontWeight:600}}
+              style={{background:"rgba(255,255,255,0.6)",backdropFilter:"blur(8px)",border:"1px solid rgba(0,0,0,0.1)",borderRadius:8,padding:"4px 14px",fontSize:12,cursor:"pointer",color:bulkMode?"#DC2626":"#374151",fontWeight:600}}
             >{bulkMode?"▲ ซ่อน":"▼ เปิด"}</button>
           </div>
           {!bulkMode&&<p style={{fontSize:12,color:"#6B7280",margin:0}}>นำเข้าหลายอีเมลพร้อมสิทธิ์จากไฟล์ CSV หรือวางข้อความ — รองรับรูปแบบ <code style={{background:"#F3F4F6",padding:"1px 5px",borderRadius:4}}>email,p1,p2,m1,m2,canEdit,isTeacher</code></p>}
@@ -399,7 +386,7 @@ function AdminPanel({user,onBack,refreshPerms}){
               </p>
 
               {/* Default permissions สำหรับ row ที่ไม่มี column สิทธิ์ */}
-              <div style={{background:"#F9FAFB",borderRadius:10,padding:"12px 16px",marginBottom:12,border:"1px solid #E5E7EB"}}>
+              <div style={{background:"rgba(249,249,251,0.85)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",borderRadius:10,padding:"12px 16px",marginBottom:12,border:"1px solid rgba(0,0,0,0.09)"}}>
                 <div style={{fontSize:12,fontWeight:600,color:"#374151",marginBottom:8}}>สิทธิ์ default (ใช้เมื่อ CSV ไม่มี column สิทธิ์)</div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                   {Object.entries(divNames).map(([k,name])=>(
@@ -434,12 +421,12 @@ function AdminPanel({user,onBack,refreshPerms}){
                   <div style={{fontSize:12,fontWeight:600,color:"#374151",marginBottom:6}}>
                     ตัวอย่างก่อน import — พบ <span style={{color:"#059669",fontWeight:700}}>{bulkPreview.length}</span> อีเมลที่ถูกต้อง
                   </div>
-                  <div style={{maxHeight:160,overflowY:"auto",border:"1px solid #E5E7EB",borderRadius:8,fontSize:11}}>
+                  <div style={{maxHeight:160,overflowY:"auto",border:"1px solid rgba(0,0,0,0.09)",borderRadius:8,fontSize:11}}>
                     <table style={{width:"100%",borderCollapse:"collapse"}}>
                       <thead>
                         <tr style={{background:"#F9FAFB",position:"sticky",top:0}}>
                           {["อีเมล","ประถมต้น","ประถมปลาย","มัธยมต้น","มัธยมปลาย","แก้ตาราง","แลกคาบ"].map(h=>(
-                            <th key={h} style={{padding:"5px 8px",textAlign:"left",fontWeight:600,color:"#6B7280",borderBottom:"1px solid #E5E7EB",whiteSpace:"nowrap"}}>{h}</th>
+                            <th key={h} style={{padding:"5px 8px",textAlign:"left",fontWeight:600,color:"#6B7280",borderBottom:"1px solid rgba(0,0,0,0.07)",whiteSpace:"nowrap"}}>{h}</th>
                           ))}
                         </tr>
                       </thead>
@@ -486,7 +473,7 @@ function AdminPanel({user,onBack,refreshPerms}){
                 </button>
                 {bulkText&&<button
                   onClick={()=>{setBulkText("");setBulkResult(null);}}
-                  style={{background:"none",border:"1px solid #D1D5DB",borderRadius:8,padding:"8px 14px",fontSize:13,cursor:"pointer",color:"#6B7280"}}
+                  style={{background:"rgba(255,255,255,0.6)",backdropFilter:"blur(8px)",border:"1px solid rgba(0,0,0,0.1)",borderRadius:8,padding:"8px 14px",fontSize:13,cursor:"pointer",color:"#6B7280"}}
                 >ล้าง</button>}
               </div>
             </div>
@@ -494,7 +481,7 @@ function AdminPanel({user,onBack,refreshPerms}){
         </div>
 
         {/* ── ค้นหา ── */}
-        <div style={{background:"#fff",borderRadius:12,padding:16,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:16}}>
+        <div style={{background:"rgba(255,255,255,0.75)",backdropFilter:"blur(16px) saturate(160%)",WebkitBackdropFilter:"blur(16px) saturate(160%)",border:"1px solid rgba(255,255,255,0.55)",boxShadow:"0 2px 16px rgba(0,0,0,0.06),inset 0 1px 0 rgba(255,255,255,0.9)",borderRadius:12,padding:16,marginBottom:16}}>
           <div style={{position:"relative"}}>
             <input style={{...IS,paddingLeft:36}} value={search} onChange={e=>setSearch(e.target.value)} placeholder="ค้นหาชื่อหรืออีเมล..."/>
             <div style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"#9CA3AF"}}><Icon name="search" size={14}/></div>
@@ -504,7 +491,7 @@ function AdminPanel({user,onBack,refreshPerms}){
         {loading&&<div style={{textAlign:"center",padding:40,color:"#6B7280"}}>กำลังโหลด...</div>}
 
         {/* ── ตารางผู้ใช้ ── */}
-        <div style={{background:"#fff",borderRadius:12,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",overflow:"hidden"}}>
+        <div style={{background:"rgba(255,255,255,0.75)",backdropFilter:"blur(16px) saturate(160%)",WebkitBackdropFilter:"blur(16px) saturate(160%)",border:"1px solid rgba(255,255,255,0.55)",boxShadow:"0 2px 16px rgba(0,0,0,0.06),inset 0 1px 0 rgba(255,255,255,0.9)",borderRadius:12,overflow:"hidden"}}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
             <thead>
               <tr style={{background:"#F9FAFB"}}>
@@ -540,7 +527,7 @@ function AdminPanel({user,onBack,refreshPerms}){
                     <div style={{display:"flex",gap:6}}>
                       <button
                         onClick={()=>{setEditUid(u.uid);setEditPerms(u.divisions||{p1:false,p2:false,m1:false,m2:false});}}
-                        style={{background:"none",border:"1px solid #D1D5DB",borderRadius:8,padding:"4px 12px",cursor:"pointer",fontSize:12}}
+                        style={{background:"rgba(255,255,255,0.6)",backdropFilter:"blur(8px)",border:"1px solid rgba(0,0,0,0.1)",borderRadius:8,padding:"4px 12px",cursor:"pointer",fontSize:12}}
                       >แก้ไขสิทธิ์</button>
                       <button
                         onClick={()=>deleteUser(u.uid)}
@@ -562,8 +549,8 @@ function AdminPanel({user,onBack,refreshPerms}){
 
         {/* ── Edit permissions modal ── */}
         {editUid&&(
-          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
-            <div style={{background:"#fff",borderRadius:16,padding:28,width:420}}>
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
+            <div style={{background:"rgba(255,255,255,0.88)",backdropFilter:"blur(32px) saturate(200%)",WebkitBackdropFilter:"blur(32px) saturate(200%)",border:"1px solid rgba(255,255,255,0.65)",boxShadow:"0 24px 64px rgba(0,0,0,0.18),inset 0 1px 0 rgba(255,255,255,0.95)",borderRadius:20,padding:28,width:420}}>
               <h3 style={{fontSize:16,fontWeight:700,marginBottom:4}}>แก้ไขสิทธิ์</h3>
               <p style={{fontSize:12,color:"#6B7280",marginBottom:16}}>{users.find(u=>u.uid===editUid)?.email||editUid}</p>
               <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
@@ -573,7 +560,7 @@ function AdminPanel({user,onBack,refreshPerms}){
                     <span style={{fontWeight:editPerms[k]?700:400,color:editPerms[k]?"#991B1B":"#374151",fontSize:14}}>{name}</span>
                   </label>
                 ))}
-                <div style={{borderTop:"1px solid #E5E7EB",paddingTop:8,marginTop:2}}>
+                <div style={{borderTop:"1px solid rgba(0,0,0,0.07)",paddingTop:8,marginTop:2}}>
                   <label style={{fontSize:12,fontWeight:600,color:"#374151",display:"block",marginBottom:6}}>สิทธิ์พิเศษ</label>
                   <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",padding:"10px 14px",borderRadius:10,background:editPerms.canEdit?"#EDE9FE":"#F9FAFB",border:`1.5px solid ${editPerms.canEdit?"#7C3AED":"#E5E7EB"}`,marginBottom:6}}>
                     <input type="checkbox" checked={!!editPerms.canEdit} onChange={e=>setEditPerms(p=>({...p,canEdit:e.target.checked,isTeacher:e.target.checked?false:p.isTeacher}))} style={{width:16,height:16,accentColor:"#7C3AED"}}/>
@@ -611,8 +598,8 @@ const subDisplayName = (sub) => sub?.shortName||sub?.name||"";
 // ===== Design tokens (Dara red scheme) =====
 const CRED="#B91C1C";      // แดงดารา หลัก
 const CBGW="#FFFFFF";       // white card
-const IS={width:"100%",padding:"10px 14px",border:"1.5px solid #E5E7EB",borderRadius:12,fontSize:14,outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:"#fff",color:"#1A1A1A"};
-const BS=(c=CRED)=>({padding:"10px 20px",background:c,color:"#fff",border:"none",borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,fontFamily:"inherit",letterSpacing:"0.01em"});
+const IS={width:"100%",padding:"10px 14px",border:"1.5px solid rgba(0,0,0,0.09)",borderRadius:12,fontSize:14,outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:"#fff",color:"#1A1A1A"};
+const BS=(c=CRED)=>({padding:"10px 20px",background:c,color:"#fff",border:"none",borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,fontFamily:"inherit",letterSpacing:"0.01em",boxShadow:`0 4px 12px ${c}44`,transition:"all 0.2s"});
 const BO=(c=CRED)=>({padding:"10px 20px",background:"transparent",color:c,border:`2px solid ${c}`,borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,fontFamily:"inherit"});
 const LS={display:"block",fontSize:13,fontWeight:600,color:"#374151",marginBottom:6};
 
@@ -679,7 +666,7 @@ function SearchSelect({value, onChange, options, placeholder="-- เลือก
           onMouseDown={e=>e.preventDefault()} // ป้องกัน input blur เมื่อคลิกใน list
           style={{
             position:"absolute",top:"calc(100% + 2px)",left:0,right:0,
-            background:"#fff",border:"1.5px solid #E5E7EB",borderRadius:10,
+            background:"#fff",border:"1.5px solid rgba(0,0,0,0.09)",borderRadius:10,
             boxShadow:"0 8px 24px rgba(0,0,0,0.13)",zIndex:9999,
             maxHeight:260,display:"flex",flexDirection:"column",overflow:"hidden",
           }}>
@@ -818,9 +805,9 @@ const Icon = ({ name, size=18 }) => {
 
 const Modal = ({ open, onClose, title, children, wide }) => {
   if(!open) return null;
-  return <div style={{position:"fixed",inset:0,zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.5)"}} onClick={onClose}>
-    <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:16,boxShadow:"0 25px 50px rgba(0,0,0,0.25)",width:wide?"92%":"min(580px,92%)",maxHeight:"88vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"18px 24px",borderBottom:"1px solid #E5E7EB"}}>
+  return <div style={{position:"fixed",inset:0,zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.35)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)"}} onClick={onClose}>
+    <div onClick={e=>e.stopPropagation()} style={{background:"rgba(255,255,255,0.88)",backdropFilter:"blur(32px) saturate(200%)",WebkitBackdropFilter:"blur(32px) saturate(200%)",border:"1px solid rgba(255,255,255,0.65)",boxShadow:"0 24px 64px rgba(0,0,0,0.18),inset 0 1px 0 rgba(255,255,255,0.95)",borderRadius:20,width:wide?"92%":"min(580px,92%)",maxHeight:"88vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"18px 24px",borderBottom:"1px solid rgba(0,0,0,0.07)"}}>
         <h3 style={{margin:0,fontSize:17,fontWeight:700}}>{title}</h3>
         <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"#9CA3AF",padding:4}}><Icon name="x"/></button>
       </div>
@@ -832,7 +819,7 @@ const Modal = ({ open, onClose, title, children, wide }) => {
 
 
 // ===== TOAST NOTIFICATION =====
-const Toast=({message,type="success",onClose})=>{useEffect(()=>{const t=setTimeout(onClose,3000);return()=>clearTimeout(t)},[onClose]);return<div style={{position:"fixed",top:24,right:24,zIndex:9999,background:type==="error"?"#DC2626":type==="warning"?"#D97706":"#059669",color:"#fff",padding:"14px 24px",borderRadius:12,fontSize:14,fontWeight:600,boxShadow:"0 10px 30px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:8,animation:"slideIn 0.3s ease"}}><Icon name={type==="error"?"alert":"check"} size={16}/>{message}</div>};
+const Toast=({message,type="success",onClose})=>{useEffect(()=>{const t=setTimeout(onClose,3000);return()=>clearTimeout(t)},[onClose]);return<div style={{position:"fixed",top:28,right:28,zIndex:9999,background:type==="error"?"#DC2626":type==="warning"?"#D97706":"#059669",color:"#fff",padding:"14px 24px",borderRadius:12,fontSize:14,fontWeight:600,boxShadow:"0 10px 30px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:8,animation:"slideIn 0.3s ease"}}><Icon name={type==="error"?"alert":"check"} size={16}/>{message}</div>};
 
 const DIVISIONS=[
   {id:"p1",name:"ประถมศึกษาตอนต้น",short:"ประถมต้น",defaultLevels:["ป.1","ป.2","ป.3"]},
@@ -987,7 +974,7 @@ function mkPrintStyle(ps){
   const f=P.fontSize/100;
   const r=P.rowHeight/100;
   const ff=P.fontFamily||"TH SarabunNew";
-  const bdr=P.showBorder?"1px solid "+C.border:"1px solid #E5E7EB";
+  const bdr=P.showBorder?"1px solid "+C.border:"1px solid rgba(0,0,0,0.09)";
   const hBdr=P.showBorder?"1px solid "+C.border:"1px solid transparent";
   return [
     "@page{size:A4 portrait;margin:10mm 8mm}",
@@ -1843,8 +1830,7 @@ export default function App() {
               const preData=preSnap.data();
               const divs=preData.divisions||{p1:false,p2:false,m1:false,m2:false};
               await Promise.race([setDoc(doc(db,"permissions",u.uid),{displayName:u.displayName||"",email:u.email,divisions:divs,preAdded:false},{merge:true}),new Promise((_,r)=>setTimeout(()=>r(),5000))]).catch(()=>{});
-              // ลบ pre-key doc เก่าออกเลย (ไม่แค่ mark merged) เพื่อไม่ให้ซ้ำใน admin
-              await Promise.race([deleteDoc(doc(db,"permissions",emailKey)),new Promise((_,r)=>setTimeout(()=>r(),5000))]).catch(()=>{});
+              await Promise.race([setDoc(doc(db,"permissions",emailKey),{merged:true},{merge:true}),new Promise((_,r)=>setTimeout(()=>r(),5000))]).catch(()=>{});
               perms={...perms,divisions:divs};
             }
           }catch{}
@@ -2130,9 +2116,163 @@ export default function App() {
   const divHasAccess=!firebaseConfigured||Boolean(userPerms?.divisions?.[divId]);
 
   return <div style={{display:"flex",height:"100vh",fontFamily:"'Sarabun','Noto Sans Thai',sans-serif",background:"linear-gradient(145deg,#EEF2FF 0%,#F8F9FF 40%,#FFF5F5 100%)",overflow:"hidden"}}>
-    <style>{`@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#D4C5BA;border-radius:4px}::-webkit-scrollbar-track{background:transparent}@keyframes slideIn{from{transform:translateX(100px);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}.ni:hover{background:rgba(255,255,255,0.12)!important;border-radius:10px}.ni.a{background:rgba(255,255,255,0.15)!important;border-radius:10px}input:focus,select:focus{border-color:#991B1B!important;box-shadow:0 0 0 3px rgba(153,27,27,0.12)!important}input,select{transition:border-color 0.15s,box-shadow 0.15s}.drag-card{cursor:grab;user-select:none}.drag-card:active{cursor:grabbing}.dz{transition:background 0.15s,outline 0.15s}.dz.over{background:#FEE2E2!important;outline:2px dashed #DC2626}button:hover{opacity:0.88;transition:opacity 0.15s}select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:36px!important}.div-sel{appearance:none!important;background:rgba(0,0,0,0.2)!important;background-image:none!important;border:1px solid rgba(255,255,255,0.25)!important;border-radius:10px!important;color:#fff!important;font-size:13px!important;font-weight:600!important;font-family:inherit!important;padding:8px 32px 8px 12px!important;width:100%!important;cursor:pointer!important;outline:none!important;transition:border-color 0.15s}.div-sel:focus{box-shadow:0 0 0 2px rgba(255,255,255,0.2)!important;border-color:rgba(255,255,255,0.5)!important}.div-sel option{background:#991B1B;color:#fff}`}</style>
+    <style>{`
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap');
 
-    <div style={{width:side?240:0,background:"linear-gradient(180deg,#B91C1C 0%,#991B1B 100%)",transition:"width 0.3s",overflow:"hidden",flexShrink:0,display:"flex",flexDirection:"column",boxShadow:"2px 0 12px rgba(185,28,28,0.2)"}}>
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --red:         #C0131A;
+  --red-dark:    #8B0000;
+  --red-light:   #FEF2F2;
+  --glass:       rgba(255,255,255,0.80);
+  --glass-sm:    rgba(255,255,255,0.70);
+  --glass-border:rgba(255,255,255,0.60);
+  --glass-shadow:0 4px 24px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.9);
+  --blur:        blur(20px) saturate(180%);
+  --blur-sm:     blur(12px) saturate(150%);
+  --blur-xs:     blur(8px);
+  --r:           14px;
+  --r-sm:        10px;
+  --r-xs:        8px;
+  --glow-red:    0 0 0 3px rgba(192,19,26,0.18);
+  --transition:  all 0.2s cubic-bezier(.4,0,.2,1);
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-thumb { background: rgba(192,19,26,0.2); border-radius: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ── Animations ── */
+@keyframes slideIn   { from { transform:translateX(100px); opacity:0 } to { transform:translateX(0); opacity:1 } }
+@keyframes fadeIn    { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
+@keyframes fadeUp    { from { opacity:0; transform:translateY(20px) } to { opacity:1; transform:translateY(0) } }
+@keyframes spin      { from { transform:rotate(0deg) } to { transform:rotate(360deg) } }
+@keyframes popIn     { 0%{transform:scale(.92);opacity:0} 60%{transform:scale(1.02)} 100%{transform:scale(1);opacity:1} }
+@keyframes shimmer   { 0%{background-position:-400px 0} 100%{background-position:400px 0} }
+
+/* ── Nav items ── */
+.ni {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: var(--r-sm);
+  cursor: pointer; color: rgba(255,255,255,0.72);
+  font-size: 13px; font-weight: 500; margin-bottom: 2px;
+  user-select: none; position: relative;
+  transition: var(--transition);
+  -webkit-tap-highlight-color: transparent;
+}
+.ni:hover {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  transform: translateX(3px);
+}
+.ni.a {
+  background: rgba(255,255,255,0.20);
+  color: #fff; font-weight: 700;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 2px 8px rgba(0,0,0,0.12);
+}
+.ni.a::before {
+  content: ''; position: absolute; left: -1px; top: 50%;
+  transform: translateY(-50%);
+  width: 3px; height: 56%; background: #fff;
+  border-radius: 0 3px 3px 0; opacity: 0.9;
+}
+
+/* ── Glass card utility ── */
+.glass {
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+/* ── Inputs & Selects ── */
+input, select, textarea {
+  font-family: inherit;
+  background: rgba(255,255,255,0.75);
+  border: 1.5px solid rgba(0,0,0,0.09);
+  border-radius: var(--r-sm);
+  transition: var(--transition);
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--red) !important;
+  box-shadow: var(--glow-red) !important;
+  outline: none;
+  background: rgba(255,255,255,0.95) !important;
+}
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px !important;
+}
+
+/* ── Division selector ── */
+.div-sel {
+  appearance: none !important;
+  background: rgba(0,0,0,0.18) !important;
+  background-image: none !important;
+  border: 1px solid rgba(255,255,255,0.22) !important;
+  border-radius: var(--r-sm) !important;
+  color: #fff !important; font-size: 13px !important;
+  font-weight: 600 !important; font-family: inherit !important;
+  padding: 8px 32px 8px 12px !important;
+  width: 100% !important; cursor: pointer !important;
+  outline: none !important; transition: var(--transition);
+}
+.div-sel:focus {
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.25) !important;
+  border-color: rgba(255,255,255,0.5) !important;
+}
+.div-sel option { background: #8B0000; color: #fff; }
+
+/* ── Buttons (global polish) ── */
+button { -webkit-tap-highlight-color: transparent; font-family: inherit; }
+button:not(:disabled):active { transform: scale(0.97); }
+
+/* ── Drag & Drop ── */
+.drag-card { cursor: grab; user-select: none; }
+.drag-card:active { cursor: grabbing; }
+.dz { transition: background 0.15s, outline 0.15s; }
+.dz.over { background: #FEE2E2 !important; outline: 2px dashed #DC2626; }
+
+/* ── Scheduler cell hover ── */
+.sched-cell { transition: var(--transition); }
+.sched-cell:hover { transform: scale(1.01); z-index: 2; }
+
+/* ── Swap grid ── */
+@media(max-width:600px){ .swap-period-grid{ grid-template-columns:repeat(4,1fr)!important } }
+
+/* ── Table th apple style ── */
+.apple-th {
+  background: rgba(244,244,248,0.9);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-weight: 600; color: #6B7280; font-size: 12px;
+  padding: 10px 14px; text-align: left;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+
+/* ── Badge pill ── */
+.pill {
+  display: inline-flex; align-items: center;
+  padding: 2px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 600;
+}
+
+/* ── Frosted overlay ── */
+.frosted-overlay {
+  background: rgba(0,0,0,0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+`}</style>
+
+    <div style={{width:side?240:0,background:"linear-gradient(170deg,#C0131A 0%,#8B0000 55%,#5A0808 100%)",transition:"width 0.3s cubic-bezier(.4,0,.2,1)",overflow:"hidden",flexShrink:0,display:"flex",flexDirection:"column",boxShadow:"4px 0 28px rgba(100,0,0,0.3)"}}>
       <div style={{padding:"20px 16px",borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           {schoolHeader.logo
@@ -2182,8 +2322,8 @@ export default function App() {
           );
         })}
       </nav>
-      <div style={{padding:"12px 16px",borderTop:"1px solid #F3F4F6"}}>
-        {firebaseConfigured&&authUser&&<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,padding:"8px 10px",background:"#F9FAFB",borderRadius:10}}>
+      <div style={{padding:"12px 16px",borderTop:"1px solid rgba(255,255,255,0.08)"}}>
+        {firebaseConfigured&&authUser&&<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,padding:"8px 10px",background:"rgba(249,249,251,0.85)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",borderRadius:10}}>
           <div style={{width:32,height:32,borderRadius:"50%",background:"linear-gradient(135deg,#B91C1C,#991B1B)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#fff",flexShrink:0}}>
             {(authUser.displayName||authUser.email||"U")[0].toUpperCase()}
           </div>
@@ -2193,33 +2333,33 @@ export default function App() {
           </div>
         </div>}
         <div style={{display:"flex",gap:6,marginBottom:6}}>
-          {firebaseConfigured&&<button onClick={handleLogout} style={{flex:1,padding:"6px 0",background:"#F9FAFB",border:"1px solid #FECACA",borderRadius:8,color:CRED,fontSize:11,fontWeight:600,cursor:"pointer"}}>ออกจากระบบ</button>}
-          {firebaseConfigured&&<button onClick={()=>setShowAdmin(true)} style={{flex:1,padding:"6px 0",background:"#F9FAFB",border:"1px solid #E5E7EB",borderRadius:8,color:"#374151",fontSize:11,fontWeight:600,cursor:"pointer"}}>🔐 Admin</button>}
+          {firebaseConfigured&&<button onClick={handleLogout} style={{flex:1,padding:"6px 0",background:"rgba(255,255,255,0.10)",backdropFilter:"blur(8px)",border:"1px solid rgba(255,100,100,0.3)",borderRadius:8,color:"rgba(255,200,200,1)",fontSize:11,fontWeight:600,cursor:"pointer"}}>ออกจากระบบ</button>}
+          {firebaseConfigured&&<button onClick={()=>setShowAdmin(true)} style={{flex:1,padding:"6px 0",background:"#F9FAFB",border:"1px solid rgba(0,0,0,0.09)",borderRadius:8,color:"#374151",fontSize:11,fontWeight:600,cursor:"pointer"}}>🔐 Admin</button>}
         </div>
-        <div style={{color:"#D1D5DB",fontSize:10,textAlign:"center"}}>พัฒนาโดย พนิต เกิดมงคล</div>
+        <div style={{color:"rgba(255,255,255,0.28)",fontSize:10,textAlign:"center"}}>พัฒนาโดย พนิต เกิดมงคล</div>
       </div>
     </div>
 
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-      <header style={{height:60,background:"rgba(255,255,255,0.85)",backdropFilter:"blur(12px)",borderBottom:"1px solid rgba(240,240,240,0.8)",display:"flex",alignItems:"center",padding:"0 20px",gap:12,flexShrink:0,boxShadow:"0 1px 8px rgba(0,0,0,0.05)"}}>
+      <header style={{height:60,background:"rgba(255,255,255,0.75)",backdropFilter:"blur(28px) saturate(220%)",WebkitBackdropFilter:"blur(28px) saturate(220%)",borderBottom:"1px solid rgba(255,255,255,0.6)",display:"flex",alignItems:"center",padding:"0 20px",gap:12,flexShrink:0,boxShadow:"0 1px 0 rgba(0,0,0,0.05), 0 4px 20px rgba(0,0,0,0.04)"}}>
         <button onClick={()=>setSide(!side)} style={{background:"none",border:"none",cursor:"pointer",color:"#9CA3AF",padding:4,borderRadius:8,display:"flex"}}><Icon name="menu" size={20}/></button>
         <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:"#9CA3AF"}}>
           <span style={{cursor:"pointer",color:"#9CA3AF"}} onClick={()=>setPage("dashboard")}>🏠</span>
           <span>/</span>
           <span style={{color:"#111",fontWeight:600}}>{nav.find(n=>n.id===page)?.label}</span>
         </div>
-        <span style={{fontSize:10,background:"#F9FAFB",color:CRED,padding:"2px 10px",borderRadius:20,fontWeight:700,border:"1px solid #FECACA"}}>{div.short}</span>
+        <span style={{fontSize:11,background:"rgba(192,19,26,0.08)",color:"#C0131A",padding:"3px 12px",borderRadius:20,fontWeight:700,border:"1px solid rgba(192,19,26,0.18)",backdropFilter:"blur(8px)"}}>{div.short}</span>
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:10}}>
           {syncing
-            ?<span style={{fontSize:11,color:"#D97706",background:"#FFFBEB",padding:"3px 10px",borderRadius:20,border:"1px solid #FDE68A",fontWeight:600}}>⏳ กำลัง sync...</span>
-            :<span style={{fontSize:11,color:"#059669",background:"#F0FDF4",padding:"3px 10px",borderRadius:20,border:"1px solid #BBF7D0",fontWeight:600}}>● sync แล้ว</span>
+            ?<span style={{fontSize:11,color:"#B45309",background:"rgba(251,191,36,0.1)",padding:"3px 12px",borderRadius:20,border:"1px solid rgba(251,191,36,0.25)",fontWeight:600,backdropFilter:"blur(8px)"}}>⏳ กำลัง sync...</span>
+            :<span style={{fontSize:11,color:"#059669",background:"rgba(16,185,129,0.09)",padding:"3px 12px",borderRadius:20,border:"1px solid rgba(16,185,129,0.22)",fontWeight:600,backdropFilter:"blur(8px)"}}>● sync แล้ว</span>
           }
           {firebaseConfigured&&authUser?.photoURL&&(
             <img src={authUser.photoURL} alt="avatar" style={{width:32,height:32,borderRadius:"50%",objectFit:"cover",border:"2px solid #E5E7EB"}}/>
           )}
         </div>
       </header>
-      <main style={{flex:1,overflow:"auto",padding:"20px 24px",background:"#F3F4F6"}}>
+      <main style={{flex:1,overflow:"auto",padding:"20px 24px",background:"linear-gradient(145deg,#FFF6F6 0%,#F8F8FB 50%,#F0F4FF 100%)"}}>
         {/* ── Guard 0: กำลังโหลดสิทธิ์จาก Firebase ── */}
         {firebaseConfigured&&authUser&&userPerms===null
           ?<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:12}}>
@@ -2233,7 +2373,7 @@ export default function App() {
               <div style={{fontSize:48}}>🔒</div>
               <h2 style={{fontSize:20,fontWeight:700,color:"#374151"}}>ไม่มีสิทธิ์เข้าระดับนี้</h2>
               <p style={{color:"#6B7280",fontSize:14}}>กรุณาติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์ {div.name}</p>
-              <button onClick={()=>{try{localStorage.removeItem("dara_perms_cache");}catch{}refreshPerms&&refreshPerms();window.location.reload();}} style={{marginTop:8,padding:"10px 24px",background:"#B91C1C",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:700,cursor:"pointer"}}>🔄 รีเฟรชสิทธิ์</button>
+              <button onClick={()=>{try{localStorage.removeItem("dara_perms_cache");}catch{}refreshPerms&&refreshPerms();window.location.reload();}} style={{marginTop:8,padding:"10px 24px",background:"linear-gradient(135deg,#C0131A,#8B0000)",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:700,cursor:"pointer",boxShadow:"0 4px 12px rgba(192,19,26,0.35)",transition:"all 0.2s"}}>🔄 รีเฟรชสิทธิ์</button>
               <p style={{color:"#9CA3AF",fontSize:12}}>ถ้าได้รับสิทธิ์แล้วแต่ยังเข้าไม่ได้ ให้กดปุ่มนี้</p>
             </div>
           // ── Guard 2: ครู (isTeacher only) ห้ามเข้าหน้าอื่นนอกจาก swap ──
@@ -2242,7 +2382,7 @@ export default function App() {
               <div style={{fontSize:48}}>🔒</div>
               <h2 style={{fontSize:20,fontWeight:700,color:"#374151"}}>ไม่มีสิทธิ์เข้าหน้านี้</h2>
               <p style={{color:"#6B7280",fontSize:14}}>คุณมีสิทธิ์เฉพาะหน้า <strong>แลกคาบ / สอนแทน</strong> เท่านั้น</p>
-              <button onClick={()=>setPage("swap")} style={{padding:"10px 24px",background:"#DC2626",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:700,cursor:"pointer"}}>→ ไปหน้าแลกคาบ</button>
+              <button onClick={()=>setPage("swap")} style={{padding:"10px 24px",background:"linear-gradient(135deg,#DC2626,#991B1B)",color:"#fff",border:"none",borderRadius:10,boxShadow:"0 4px 12px rgba(220,38,38,0.3)",fontSize:14,fontWeight:700,cursor:"pointer"}}>→ ไปหน้าแลกคาบ</button>
             </div>
           :<>
             {page==="dashboard"&&<Dash S={S} setPage={setPage}/>}
@@ -2272,9 +2412,9 @@ function Dash({S,setPage}){
   const stats=[{l:"ระดับชั้น",v:S.levels.length,c:"#DC2626"},{l:"แผนการเรียน",v:S.plans.length,c:"#7C3AED"},{l:"กลุ่มสาระ",v:S.depts.length,c:"#2563EB"},{l:"ครู",v:S.teachers.length,c:"#059669"},{l:"วิชา",v:S.subjects.length,c:"#D97706"},{l:"ห้อง",v:S.rooms.length,c:"#DB2777"}];
   return <div style={{animation:"fadeIn 0.3s"}}>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:16,marginBottom:32}}>
-      {stats.map((s,i)=><div key={i} style={{background:"#fff",borderRadius:14,padding:20,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}><div style={{fontSize:28,fontWeight:800}}>{s.v}</div><div style={{fontSize:13,color:"#6B7280",marginTop:2}}>{s.l}</div><div style={{height:4,background:s.c,borderRadius:2,marginTop:12,width:"40%"}}/></div>)}
+      {stats.map((s,i)=><div key={i} style={{background:"rgba(255,255,255,0.75)",backdropFilter:"blur(16px) saturate(160%)",WebkitBackdropFilter:"blur(16px) saturate(160%)",border:"1px solid rgba(255,255,255,0.55)",boxShadow:"0 2px 16px rgba(0,0,0,0.06),inset 0 1px 0 rgba(255,255,255,0.9)",borderRadius:14,padding:20}}><div style={{fontSize:28,fontWeight:800}}>{s.v}</div><div style={{fontSize:13,color:"#6B7280",marginTop:2}}>{s.l}</div><div style={{height:4,background:s.c,borderRadius:2,marginTop:12,width:"40%"}}/></div>)}
     </div>
-    <div style={{background:"#fff",borderRadius:14,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
+    <div style={{background:"rgba(255,255,255,0.80)",backdropFilter:"blur(20px) saturate(180%)",WebkitBackdropFilter:"blur(20px) saturate(180%)",border:"1px solid rgba(255,255,255,0.6)",boxShadow:"0 4px 24px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.9)",borderRadius:16,padding:24}}>
       <h3 style={{fontSize:16,fontWeight:700,marginBottom:16}}>ขั้นตอนการใช้งาน</h3>
       {[{s:1,t:"สร้างระดับชั้นและห้องเรียน",p:"levels"},{s:2,t:"สร้างแผนการเรียน (ใช้ร่วมข้ามระดับได้)",p:"plans"},{s:3,t:"สร้างกลุ่มสาระการเรียนรู้",p:"departments"},{s:4,t:"เพิ่มครู + กำหนดคาบที่ได้รับ",p:"teachers"},{s:5,t:"สร้างวิชา + ระบุระดับชั้น",p:"subjects"},{s:6,t:"มอบหมายวิชาและห้องให้ครู",p:"assignments"},{s:7,t:"ตั้งคาบล็อค/ประชุม",p:"meetings"},{s:8,t:"จัดตารางสอน (Drag & Drop)",p:"scheduler"},{s:9,t:"ตรวจสอบและ Export CSV",p:"reports"}].map(s=><div key={s.s} onClick={()=>setPage(s.p)} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 16px",borderRadius:10,cursor:"pointer",background:"#F9FAFB",marginBottom:6}} onMouseEnter={e=>e.currentTarget.style.background="#FEE2E2"} onMouseLeave={e=>e.currentTarget.style.background="#F9FAFB"}><div style={{width:30,height:30,borderRadius:"50%",background:"#DC2626",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,flexShrink:0}}>{s.s}</div><span style={{fontSize:14}}>{s.t}</span></div>)}
     </div>
@@ -2338,7 +2478,7 @@ function Levels({S,U,st}){
       <input ref={fileRefRm} type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}} onChange={importRooms}/>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:20}}>
-      {S.levels.map(lv=><div key={lv.id} style={{background:"#fff",borderRadius:14,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",overflow:"hidden"}}>
+      {S.levels.map(lv=><div key={lv.id} style={{background:"rgba(255,255,255,0.75)",backdropFilter:"blur(16px) saturate(160%)",WebkitBackdropFilter:"blur(16px) saturate(160%)",border:"1px solid rgba(255,255,255,0.55)",boxShadow:"0 2px 16px rgba(0,0,0,0.06),inset 0 1px 0 rgba(255,255,255,0.9)",borderRadius:14,overflow:"hidden"}}>
         <div style={{background:"linear-gradient(135deg,#991B1B,#DC2626)",padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <h3 style={{color:"#fff",fontSize:18,fontWeight:700}}>{lv.name}</h3>
           <div style={{display:"flex",gap:6}}>
@@ -2443,7 +2583,7 @@ function Plans({S,U,st}){
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}} onChange={importPlans}/>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:16}}>
-      {S.plans.map(plan=><div key={plan.id} style={{background:"#fff",borderRadius:14,padding:20,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
+      {S.plans.map(plan=><div key={plan.id} style={{background:"rgba(255,255,255,0.75)",backdropFilter:"blur(16px) saturate(160%)",WebkitBackdropFilter:"blur(16px) saturate(160%)",border:"1px solid rgba(255,255,255,0.55)",boxShadow:"0 2px 16px rgba(0,0,0,0.06),inset 0 1px 0 rgba(255,255,255,0.9)",borderRadius:14,padding:20}}>
         <div style={{display:"flex",justifyContent:"space-between"}}>
           <h4 style={{fontSize:16,fontWeight:700}}>{plan.name}</h4>
           <div style={{display:"flex",gap:6}}>
@@ -2631,7 +2771,7 @@ function Teachers({S,U,st,gc}){
       <div style={{position:"relative",flex:"1 1 200px",maxWidth:350}}><input style={{...IS,paddingLeft:38}} value={search} onChange={e=>setSearch(e.target.value)} placeholder="ค้นหาครู..."/><div style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:"#9CA3AF"}}><Icon name="search" size={16}/></div></div>
     </div>
 
-    <div style={{background:"#fff",borderRadius:14,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",overflow:"auto"}}>
+    <div style={{background:"rgba(255,255,255,0.75)",backdropFilter:"blur(16px) saturate(160%)",WebkitBackdropFilter:"blur(16px) saturate(160%)",border:"1px solid rgba(255,255,255,0.55)",boxShadow:"0 2px 16px rgba(0,0,0,0.06),inset 0 1px 0 rgba(255,255,255,0.9)",borderRadius:14,overflow:"auto"}}>
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:14}}>
         <thead><tr style={{background:"#F9FAFB"}}>{["#","ชื่อ-สกุล","กลุ่มสาระ","คาบได้รับ","มอบหมาย","เหลือ","หน้าที่พิเศษ","จัดการ"].map(h=><th key={h} style={{padding:"12px 14px",textAlign:"left",fontWeight:600,color:"#6B7280",fontSize:12}}>{h}</th>)}</tr></thead>
         <tbody>{filtered.map((t,i)=>{const dept=S.depts.find(d=>d.id===t.departmentId);const c=dept?gc(dept.id):{bg:"#6B7280",lt:"#F3F4F6",tx:"#374151"};const used=usedPeriods(t.id);const rem=(t.totalPeriods||0)-used;return<tr key={t.id} style={{borderTop:"1px solid #F3F4F6"}}>
@@ -2693,7 +2833,7 @@ function SpecialRooms({S,U,st}){
       <button onClick={()=>{setEditId(null);setForm({name:"",capacity:0,note:""});setModal(true)}} style={BS()}><Icon name="plus" size={16}/>เพิ่มห้องพิเศษ</button>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:16}}>
-      {S.specialRooms.map(r=>{const sc=subCount(r.id);return<div key={r.id} style={{background:"#fff",borderRadius:14,padding:18,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",borderLeft:"4px solid #7C3AED"}}>
+      {S.specialRooms.map(r=>{const sc=subCount(r.id);return<div key={r.id} style={{background:"rgba(255,255,255,0.75)",backdropFilter:"blur(16px) saturate(160%)",WebkitBackdropFilter:"blur(16px) saturate(160%)",border:"1px solid rgba(255,255,255,0.55)",boxShadow:"0 2px 16px rgba(0,0,0,0.06),inset 0 1px 0 rgba(255,255,255,0.9)",borderRadius:14,padding:18,borderLeft:"4px solid #7C3AED"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
             <h4 style={{fontSize:15,fontWeight:700}}>{r.name}</h4>
@@ -2812,7 +2952,7 @@ function Subjects({S,U,st,gc}){
     const dept=S.depts.find(d=>d.id===sub.departmentId);
     const c=dept?gc(dept.id):{bg:"#6B7280",lt:"#F3F4F6",tx:"#374151"};
     const sr=S.specialRooms.find(r=>r.id===sub.specialRoomId);
-    return<div style={{background:"#fff",borderRadius:12,overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",borderLeft:"3px solid "+c.bg}}>
+    return<div style={{background:"rgba(255,255,255,0.75)",backdropFilter:"blur(16px) saturate(160%)",WebkitBackdropFilter:"blur(16px) saturate(160%)",border:"1px solid rgba(255,255,255,0.55)",boxShadow:"0 2px 16px rgba(0,0,0,0.06),inset 0 1px 0 rgba(255,255,255,0.9)",borderRadius:12,overflow:"hidden",borderLeft:"3px solid "+c.bg}}>
       <div style={{padding:"12px 14px"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div style={{flex:1,minWidth:0}}>
@@ -2863,7 +3003,7 @@ function Subjects({S,U,st,gc}){
 
     {/* Grouped display */}
     {groups.map(({lv,deptGroups})=><div key={lv.id} style={{marginBottom:24}}>
-      <div style={{background:"linear-gradient(135deg,#991B1B,#DC2626)",borderRadius:10,padding:"10px 16px",marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
+      <div style={{background:"linear-gradient(135deg,#B91C1C,#7F1D1D)",borderRadius:12,padding:"10px 16px",boxShadow:"0 4px 16px rgba(127,29,29,0.2)",marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
         <span style={{color:"#fff",fontSize:16,fontWeight:700}}>{lv.name}</span>
         <span style={{background:"rgba(255,255,255,0.2)",color:"#fff",fontSize:11,padding:"2px 8px",borderRadius:20}}>{filtered.filter(s=>s.levelId===lv.id).length} วิชา</span>
       </div>
@@ -2879,7 +3019,7 @@ function Subjects({S,U,st,gc}){
       </div>)}
     </div>)}
     {noLevel.length>0&&<div style={{marginBottom:24}}>
-      <div style={{background:"#F3F4F6",borderRadius:10,padding:"10px 16px",marginBottom:12}}><span style={{fontSize:14,fontWeight:700,color:"#6B7280"}}>ไม่ระบุระดับชั้น ({noLevel.length} วิชา)</span></div>
+      <div style={{background:"rgba(243,244,246,0.7)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",borderRadius:10,padding:"10px 16px",marginBottom:12}}><span style={{fontSize:14,fontWeight:700,color:"#6B7280"}}>ไม่ระบุระดับชั้น ({noLevel.length} วิชา)</span></div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(250px,1fr))",gap:10}}>
         {noLevel.map(sub=><SubCard key={sub.id} sub={sub}/>)}
       </div>
@@ -2965,7 +3105,7 @@ function PersonalLockPanel({teacher,U,st,sel}){
   };
 
   return(
-    <div style={{background:"#fff",borderRadius:14,padding:20,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:20}}>
+    <div style={{background:"rgba(255,255,255,0.75)",backdropFilter:"blur(16px) saturate(160%)",WebkitBackdropFilter:"blur(16px) saturate(160%)",border:"1px solid rgba(255,255,255,0.55)",boxShadow:"0 2px 16px rgba(0,0,0,0.06),inset 0 1px 0 rgba(255,255,255,0.9)",borderRadius:14,padding:20,marginBottom:20}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
         <span style={{fontSize:20}}>🔒</span>
         <h3 style={{fontSize:15,fontWeight:700,margin:0}}>คาบล็อกส่วนตัว</h3>
@@ -3210,7 +3350,7 @@ function Assigns({S,U,st,gc}){
       </div>
     </div>
     {teacher&&<div>
-      <div style={{background:"#fff",borderRadius:14,padding:20,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
+      <div style={{background:"rgba(255,255,255,0.75)",backdropFilter:"blur(16px) saturate(160%)",WebkitBackdropFilter:"blur(16px) saturate(160%)",border:"1px solid rgba(255,255,255,0.55)",boxShadow:"0 2px 16px rgba(0,0,0,0.06),inset 0 1px 0 rgba(255,255,255,0.9)",borderRadius:14,padding:20,marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
         <div><h3 style={{fontSize:18,fontWeight:700}}>{teacher.prefix}{teacher.firstName} {teacher.lastName}</h3><div style={{fontSize:13,color:"#6B7280",marginTop:4}}>{S.depts.find(d=>d.id===teacher.departmentId)?.name}</div></div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           <div style={{background:"#DBEAFE",color:"#1E40AF",padding:"8px 16px",borderRadius:10,fontWeight:700,fontSize:13}}>📋 ได้รับ: {teacherQuota}</div>
@@ -3299,7 +3439,7 @@ function Assigns({S,U,st,gc}){
       return(
         <Modal open={!!editAssign} onClose={()=>setEditAssign(null)} title={"✏️ แก้ไข — "+(eSub?.code||"")+" "+(eSub?.name||"")}>
           <div style={{display:"flex",flexDirection:"column",gap:16}}>
-            <div style={{background:"#F9FAFB",borderRadius:10,padding:"10px 14px"}}>
+            <div style={{background:"rgba(249,249,251,0.85)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",borderRadius:10,padding:"10px 14px"}}>
               <div style={{fontSize:14,fontWeight:700}}>{eSub?.code} — {eSub?.name}</div>
             </div>
             <div>
@@ -3313,7 +3453,7 @@ function Assigns({S,U,st,gc}){
               </div>
               <div style={{display:"flex",gap:6,marginTop:8}}>
                 <button onClick={()=>setEditForm(p=>({...p,roomIds:eRooms.map(r=>r.id)}))} style={{fontSize:11,color:"#DC2626",background:"none",border:"1px solid #FECACA",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>เลือกทั้งหมด</button>
-                <button onClick={()=>setEditForm(p=>({...p,roomIds:[]}))} style={{fontSize:11,color:"#6B7280",background:"none",border:"1px solid #E5E7EB",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>ล้าง</button>
+                <button onClick={()=>setEditForm(p=>({...p,roomIds:[]}))} style={{fontSize:11,color:"#6B7280",background:"none",border:"1px solid rgba(0,0,0,0.09)",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>ล้าง</button>
                 <span style={{fontSize:11,color:"#6B7280"}}>เลือก {editForm.roomIds.length} ห้อง</span>
               </div>
             </div>
@@ -3367,7 +3507,7 @@ function Assigns({S,U,st,gc}){
         )}
 
         {/* ── ฟอร์มเพิ่มวิชาใหม่ ── */}
-        <div style={{background:"#F9FAFB",borderRadius:12,padding:"14px 16px",border:"1px solid #E5E7EB"}}>
+        <div style={{background:"rgba(249,249,251,0.85)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(0,0,0,0.09)"}}>
           <div style={{fontSize:12,fontWeight:700,color:"#374151",marginBottom:10}}>➕ เพิ่มวิชา</div>
 
           {/* เลือกสาระ */}
@@ -3534,7 +3674,7 @@ function HomeroomSettings({S,U,st}){
     </div>
 
     {/* ตาราง */}
-    <div style={{background:"#fff",borderRadius:14,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",overflow:"hidden"}}>
+    <div style={{background:"rgba(255,255,255,0.75)",backdropFilter:"blur(16px) saturate(160%)",WebkitBackdropFilter:"blur(16px) saturate(160%)",border:"1px solid rgba(255,255,255,0.55)",boxShadow:"0 2px 16px rgba(0,0,0,0.06),inset 0 1px 0 rgba(255,255,255,0.9)",borderRadius:14,overflow:"hidden"}}>
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
         <thead>
           <tr style={{background:"#F9FAFB"}}>
@@ -3658,7 +3798,7 @@ function Meetings({S,U,st,gc}){
 
     {/* ── Tab 1: คาบล็อคกลุ่มสาระ เดิม ── */}
     {tab==="dept"&&<>
-      <div style={{background:"#fff",borderRadius:14,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:24,maxWidth:600}}>
+      <div style={{background:"rgba(255,255,255,0.80)",backdropFilter:"blur(20px) saturate(180%)",WebkitBackdropFilter:"blur(20px) saturate(180%)",border:"1px solid rgba(255,255,255,0.6)",boxShadow:"0 4px 24px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.9)",borderRadius:16,padding:24,marginBottom:24,maxWidth:600}}>
         <h3 style={{fontSize:16,fontWeight:700,marginBottom:16}}>เพิ่มคาบล็อคกลุ่มสาระ</h3>
         <div style={{display:"flex",flexDirection:"column",gap:16}}>
           <div><label style={LS}>กลุ่มสาระ</label>
@@ -3700,7 +3840,7 @@ function Meetings({S,U,st,gc}){
 
     {/* ── Tab 2: คาบล็อคแผนก หลายวันหลายคาบ ── */}
     {tab==="custom"&&<>
-      <div style={{background:"#fff",borderRadius:14,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:24}}>
+      <div style={{background:"rgba(255,255,255,0.80)",backdropFilter:"blur(20px) saturate(180%)",WebkitBackdropFilter:"blur(20px) saturate(180%)",border:"1px solid rgba(255,255,255,0.6)",boxShadow:"0 4px 24px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.9)",borderRadius:16,padding:24,marginBottom:24}}>
         <h3 style={{fontSize:16,fontWeight:700,marginBottom:16}}>เพิ่มคาบล็อคแผนก</h3>
         <div style={{display:"flex",flexDirection:"column",gap:16}}>
           {/* ชื่อ */}
@@ -3716,9 +3856,9 @@ function Meetings({S,U,st,gc}){
               <table style={{borderCollapse:"collapse",minWidth:500}}>
                 <thead>
                   <tr>
-                    <th style={{padding:"8px 12px",background:"#F3F4F6",fontSize:12,fontWeight:700,color:"#374151",border:"1px solid #E5E7EB",minWidth:70}}>วัน \ คาบ</th>
+                    <th style={{padding:"8px 12px",background:"#F3F4F6",fontSize:12,fontWeight:700,color:"#374151",border:"1px solid rgba(0,0,0,0.09)",minWidth:70}}>วัน \ คาบ</th>
                     {PERIODS.map(p=>(
-                      <th key={p.id} style={{padding:"6px 8px",background:"#F3F4F6",fontSize:12,fontWeight:700,color:"#374151",border:"1px solid #E5E7EB",textAlign:"center",minWidth:52}}>
+                      <th key={p.id} style={{padding:"6px 8px",background:"#F3F4F6",fontSize:12,fontWeight:700,color:"#374151",border:"1px solid rgba(0,0,0,0.09)",textAlign:"center",minWidth:52}}>
                         <div>{p.id}</div>
                         <div style={{fontSize:9,fontWeight:400,color:"#9CA3AF"}}>{p.time.split("-")[0]}</div>
                       </th>
@@ -3728,13 +3868,13 @@ function Meetings({S,U,st,gc}){
                 <tbody>
                   {DAYS.map((day,di)=>(
                     <tr key={day} style={{background:di%2===0?"#fff":"#FAFAFA"}}>
-                      <td style={{padding:"8px 12px",fontWeight:700,fontSize:13,color:"#374151",border:"1px solid #E5E7EB",background:"#F9FAFB"}}>{day}</td>
+                      <td style={{padding:"8px 12px",fontWeight:700,fontSize:13,color:"#374151",border:"1px solid rgba(0,0,0,0.09)",background:"#F9FAFB"}}>{day}</td>
                       {PERIODS.map(p=>{
                         const active=slotActive(day,p.id);
                         return(
                           <td key={p.id}
                             onClick={()=>toggleSlot(day,p.id)}
-                            style={{padding:"6px 4px",border:"1px solid #E5E7EB",textAlign:"center",cursor:"pointer",
+                            style={{padding:"6px 4px",border:"1px solid rgba(0,0,0,0.09)",textAlign:"center",cursor:"pointer",
                               background:active?"#DC2626":"transparent",
                               transition:"background 0.1s"}}
                           >
@@ -4506,7 +4646,7 @@ function Scheduler({S,U,st,gc,isSavingRef,fsReadyRef,fsSave}){
               {rmPlan&&<span style={{background:lc.bg,color:lc.head,border:`1.5px solid ${lc.border}`,padding:"4px 12px",borderRadius:20,fontSize:11,fontWeight:700}}>{rmPlan.name}</span>}
               {rmLevel&&<span style={{color:"#9CA3AF",fontSize:11}}>{rmLevel.name}</span>}
             </div>
-            <div style={{background:"#fff",borderRadius:14,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",overflow:"hidden",border:`1px solid ${lc.border}`}}>
+            <div style={{background:"rgba(255,255,255,0.75)",backdropFilter:"blur(16px) saturate(160%)",WebkitBackdropFilter:"blur(16px) saturate(160%)",border:"1px solid rgba(255,255,255,0.55)",boxShadow:"0 2px 16px rgba(0,0,0,0.06),inset 0 1px 0 rgba(255,255,255,0.9)",borderRadius:14,overflow:"hidden",border:`1px solid ${lc.border}`}}>
               <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed",minWidth:700}}>
                 <thead>
                   <tr style={{borderBottom:`2px solid ${lc.head}`}}>
@@ -5042,7 +5182,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
               })}
             </div>
           )}
-          <div style={{borderTop:"1px solid #E5E7EB",paddingTop:12}}>
+          <div style={{borderTop:"1px solid rgba(0,0,0,0.07)",paddingTop:12}}>
             <div style={{fontSize:12,fontWeight:700,color:"#374151",marginBottom:8}}>เพิ่มวิชาคู่ใหม่</div>
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               <div>
@@ -5213,7 +5353,7 @@ e.preventDefault();e.currentTarget.classList.add("over");}}
               </div>
             </div>
             {/* Footer */}
-            <div style={{padding:"16px 24px",borderTop:"1px solid #E5E7EB",display:"flex",gap:10,justifyContent:"flex-end",background:"#FAFAFA"}}>
+            <div style={{padding:"16px 24px",borderTop:"1px solid rgba(0,0,0,0.07)",display:"flex",gap:10,justifyContent:"flex-end",background:"rgba(250,250,250,0.7)"}}>
               <button onClick={()=>setShowAutoModal(false)} style={BO()}>ยกเลิก</button>
               <button
                 onClick={()=>executeAutoSchedule(autoOpts)}
@@ -5619,7 +5759,7 @@ function SwapPage({S,st,ay,sh}){
       <style>{`@media(max-width:520px){.swap-period-grid{grid-template-columns:repeat(4,1fr)!important}}`}</style>
 
       {/* ── ขั้นที่ 1 ── */}
-      <div style={{background:"#fff",borderRadius:16,border:"0.5px solid #E5E7EB",padding:"20px 20px 16px"}}>
+      <div style={{background:"#fff",borderRadius:16,border:"0.5px solid rgba(0,0,0,0.08)",padding:"20px 20px 16px"}}>
 
         {/* step header */}
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
@@ -5684,7 +5824,7 @@ function SwapPage({S,st,ay,sh}){
 
         {/* ยังไม่เลือกครู */}
         {!teacherA&&(
-          <div style={{borderRadius:10,padding:"18px 16px",textAlign:"center",color:"#9CA3AF",fontSize:13,border:"1px dashed #E5E7EB",marginTop:4,background:"#FAFAFA"}}>
+          <div style={{borderRadius:10,padding:"18px 16px",textAlign:"center",color:"#9CA3AF",fontSize:13,border:"1px dashed #E5E7EB",marginTop:4,background:"rgba(250,250,250,0.7)"}}>
             เลือกครูก่อน เพื่อแสดงตารางคาบสอน
           </div>
         )}
@@ -5789,7 +5929,7 @@ function SwapPage({S,st,ay,sh}){
 
       {/* ── ขั้นที่ 2 ── */}
       {searched&&(
-        <div style={{background:"#fff",borderRadius:16,border:"0.5px solid #E5E7EB",padding:"20px 20px 16px"}}>
+        <div style={{background:"#fff",borderRadius:16,border:"0.5px solid rgba(0,0,0,0.08)",padding:"20px 20px 16px"}}>
 
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
             <div style={{width:28,height:28,borderRadius:"50%",background:"#059669",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:600,flexShrink:0}}>2</div>
@@ -5864,7 +6004,7 @@ function SwapPage({S,st,ay,sh}){
                           </div>
 
                           {/* ── Mini Timetable ── */}
-                          <div style={{overflowX:"auto",marginBottom:8,borderRadius:6,border:"1px solid #E5E7EB"}}>
+                          <div style={{overflowX:"auto",marginBottom:8,borderRadius:6,border:"1px solid rgba(0,0,0,0.09)"}}>
                             <table style={{borderCollapse:"collapse",width:"100%",fontSize:9}}>
                               <thead>
                                 <tr>
@@ -5879,7 +6019,7 @@ function SwapPage({S,st,ay,sh}){
                               <tbody>
                                 {DAYS_SW.map((d,di)=>(
                                   <tr key={d} style={{background:di%2===1?"#FFF9F9":"#fff"}}>
-                                    <td style={{padding:"2px 4px",fontSize:8,fontWeight:600,color:"#374151",whiteSpace:"nowrap",borderRight:"1px solid #E5E7EB",background:"#FEF2F2",textAlign:"center"}}>{d.slice(0,3)}</td>
+                                    <td style={{padding:"2px 4px",fontSize:8,fontWeight:600,color:"#374151",whiteSpace:"nowrap",borderRight:"1px solid rgba(0,0,0,0.07)",background:"#FEF2F2",textAlign:"center"}}>{d.slice(0,3)}</td>
                                     {PERIODS_SW.map(p=>{
                                       const ents=getEntries(tB.id,d,p.id);
                                       const isSubSlot=d===r.day&&p.id===r.period;
@@ -5902,10 +6042,10 @@ function SwapPage({S,st,ay,sh}){
                                 ))}
                               </tbody>
                             </table>
-                            <div style={{display:"flex",gap:8,padding:"3px 5px",flexWrap:"wrap",background:"#FAFAFA",borderTop:"1px solid #F3F4F6"}}>
+                            <div style={{display:"flex",gap:8,padding:"3px 5px",flexWrap:"wrap",background:"rgba(250,250,250,0.7)",borderTop:"1px solid #F3F4F6"}}>
                               {[["#FDE68A","★ คาบสอนแทน"],["#BFDBFE","■ สอนอยู่"],["#A7F3D0","✓ คาบสอนคืน"],["#F1F5F9","🔒 ล็อค"]].map(([bg,lbl])=>(
                                 <div key={lbl} style={{display:"flex",alignItems:"center",gap:2,fontSize:8,color:"#6B7280"}}>
-                                  <div style={{width:8,height:8,background:bg,border:"1px solid #E5E7EB",borderRadius:1,flexShrink:0}}/>
+                                  <div style={{width:8,height:8,background:bg,border:"1px solid rgba(0,0,0,0.09)",borderRadius:1,flexShrink:0}}/>
                                   {lbl}
                                 </div>
                               ))}
@@ -5944,7 +6084,7 @@ function SwapPage({S,st,ay,sh}){
                                         </div>
                                       </button>
                                       {isGrpAct&&(
-                                        <div style={{padding:"4px 10px 10px",borderTop:"1px solid #E5E7EB"}}>
+                                        <div style={{padding:"4px 10px 10px",borderTop:"1px solid rgba(0,0,0,0.07)"}}>
                                           <div style={{fontSize:10,color:"#6B7280",marginBottom:5}}>เลือกวันที่สอนคืน:</div>
                                           <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                                             {g.dates.map((dt,di)=>{
@@ -6685,7 +6825,7 @@ function Reports({S,U,st,gc,ay,sh}){
     <PrintDesignerModal open={showPrintDesigner} onClose={()=>setShowPrintDesigner(false)} S={S} ay={ay} sh={sh} />
 
     {/* ── REPORT TABS ── */}
-    <div style={{background:"#fff",borderRadius:16,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,0.07)"}}>
+    <div style={{background:"rgba(255,255,255,0.80)",backdropFilter:"blur(20px) saturate(180%)",WebkitBackdropFilter:"blur(20px) saturate(180%)",border:"1px solid rgba(255,255,255,0.6)",boxShadow:"0 4px 24px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.9)",borderRadius:16,padding:24}}>
       <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
         {[["print","🖨️ Print Center"],["hours","⏱ ชั่วโมงสอน"],["conflicts","⚠️ ตรวจ Conflict"]].map(([v,l])=>(
           <button key={v} onClick={()=>setReportTab(v)} style={{padding:"8px 18px",borderRadius:10,fontWeight:700,fontSize:13,border:`2px solid ${reportTab===v?"#B91C1C":"#E5E7EB"}`,background:reportTab===v?"#B91C1C":"#fff",color:reportTab===v?"#fff":"#374151",cursor:"pointer"}}>{l}</button>
@@ -6760,7 +6900,7 @@ function Reports({S,U,st,gc,ay,sh}){
 
       {/* Modal: พิมพ์แบบใหม่ */}
       {showNewRoomPDF&&(
-        <div style={{position:"fixed",inset:0,zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.5)"}}>
+        <div style={{position:"fixed",inset:0,zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.35)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)"}}>
           <div style={{background:"#fff",borderRadius:16,boxShadow:"0 20px 60px rgba(0,0,0,0.3)",width:"min(560px,94%)",maxHeight:"90vh",overflowY:"auto",padding:24,fontFamily:"inherit"}}>
             <div style={{fontSize:16,fontWeight:800,marginBottom:4}}>🆕 พิมพ์ตารางเรียนแบบใหม่</div>
             <div style={{fontSize:11,color:"#6B7280",marginBottom:16}}>auto-อ่านครูประจำชั้นและวันหอประชุมจากระบบ</div>
@@ -6787,7 +6927,7 @@ function Reports({S,U,st,gc,ay,sh}){
               {/* เลือกห้อง */}
               <div>
                 <label style={LS}>เลือกห้องที่ต้องการพิมพ์ (กดหลายห้องได้)</label>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap",maxHeight:200,overflowY:"auto",padding:4,border:"1px solid #E5E7EB",borderRadius:8}}>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",maxHeight:200,overflowY:"auto",padding:4,border:"1px solid rgba(0,0,0,0.09)",borderRadius:8}}>
                   {[...S.rooms].sort((a,b)=>{
                     const la=S.levels.find(l=>l.id===a.levelId)?.name||"";
                     const lb=S.levels.find(l=>l.id===b.levelId)?.name||"";
@@ -6803,8 +6943,8 @@ function Reports({S,U,st,gc,ay,sh}){
                   })}
                 </div>
                 <div style={{display:"flex",gap:6,marginTop:6}}>
-                  <button onClick={()=>setNewRoomPDFOpts(p=>({...p,selectedRooms:S.rooms.map(r=>r.id)}))} style={{fontSize:11,color:"#7C3AED",background:"none",border:"1px solid #E5E7EB",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>เลือกทั้งหมด</button>
-                  <button onClick={()=>setNewRoomPDFOpts(p=>({...p,selectedRooms:[]}))} style={{fontSize:11,color:"#6B7280",background:"none",border:"1px solid #E5E7EB",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>ล้าง</button>
+                  <button onClick={()=>setNewRoomPDFOpts(p=>({...p,selectedRooms:S.rooms.map(r=>r.id)}))} style={{fontSize:11,color:"#7C3AED",background:"none",border:"1px solid rgba(0,0,0,0.09)",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>เลือกทั้งหมด</button>
+                  <button onClick={()=>setNewRoomPDFOpts(p=>({...p,selectedRooms:[]}))} style={{fontSize:11,color:"#6B7280",background:"none",border:"1px solid rgba(0,0,0,0.09)",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>ล้าง</button>
                   <span style={{fontSize:11,color:"#6B7280",marginLeft:4,alignSelf:"center"}}>เลือกแล้ว {newRoomPDFOpts.selectedRooms?.length||0} ห้อง → {Math.ceil((newRoomPDFOpts.selectedRooms?.length||0)/2)} หน้า</span>
                 </div>
               </div>
@@ -6864,14 +7004,14 @@ function Reports({S,U,st,gc,ay,sh}){
 
       {/* Modal: Export Excel ตารางห้อง */}
       {showExcelModal&&(
-        <div style={{position:"fixed",inset:0,zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.5)"}}>
+        <div style={{position:"fixed",inset:0,zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.35)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)"}}>
           <div style={{background:"#fff",borderRadius:16,boxShadow:"0 20px 60px rgba(0,0,0,0.3)",width:"min(520px,94%)",maxHeight:"90vh",overflowY:"auto",padding:24,fontFamily:"inherit"}}>
             <div style={{fontSize:16,fontWeight:800,marginBottom:4}}>📊 Export Excel ตารางห้องเรียน</div>
             <div style={{fontSize:11,color:"#6B7280",marginBottom:16}}>แต่ละห้อง = 1 sheet · format: วัน/รหัสวิชา/เวลา/รหัสครู</div>
 
             <div>
               <label style={LS}>เลือกห้องที่ต้องการ export</label>
-              <div style={{display:"flex",gap:6,flexWrap:"wrap",maxHeight:200,overflowY:"auto",padding:6,border:"1px solid #E5E7EB",borderRadius:8}}>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",maxHeight:200,overflowY:"auto",padding:6,border:"1px solid rgba(0,0,0,0.09)",borderRadius:8}}>
                 {[...S.rooms].sort((a,b)=>{
                   const la=S.levels.find(l=>l.id===a.levelId)?.name||"";
                   const lb=S.levels.find(l=>l.id===b.levelId)?.name||"";
@@ -6888,7 +7028,7 @@ function Reports({S,U,st,gc,ay,sh}){
               </div>
               <div style={{display:"flex",gap:6,marginTop:6,alignItems:"center"}}>
                 <button onClick={()=>setExcelSelectedRooms(S.rooms.map(r=>r.id))} style={{fontSize:11,color:"#059669",background:"none",border:"1px solid #D1FAE5",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>เลือกทั้งหมด</button>
-                <button onClick={()=>setExcelSelectedRooms([])} style={{fontSize:11,color:"#6B7280",background:"none",border:"1px solid #E5E7EB",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>ล้าง</button>
+                <button onClick={()=>setExcelSelectedRooms([])} style={{fontSize:11,color:"#6B7280",background:"none",border:"1px solid rgba(0,0,0,0.09)",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>ล้าง</button>
                 <span style={{fontSize:11,color:"#6B7280"}}>เลือกแล้ว {excelSelectedRooms.length} ห้อง → {excelSelectedRooms.length} sheets</span>
               </div>
             </div>
@@ -6910,7 +7050,7 @@ function Reports({S,U,st,gc,ay,sh}){
         </div>
       )}
       {showNewTeacherPDF&&(
-        <div style={{position:"fixed",inset:0,zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.5)"}}>
+        <div style={{position:"fixed",inset:0,zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.35)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)"}}>
           <div style={{background:"#fff",borderRadius:16,boxShadow:"0 20px 60px rgba(0,0,0,0.3)",width:"min(560px,94%)",maxHeight:"90vh",overflowY:"auto",padding:24,fontFamily:"inherit"}}>
             <div style={{fontSize:16,fontWeight:800,marginBottom:4}}>🆕 พิมพ์ตารางสอนครูแบบใหม่</div>
             <div style={{fontSize:11,color:"#6B7280",marginBottom:16}}>A4 แนวตั้ง — 2 คนต่อหน้า · แสดงวิชา+ห้อง+ชื่ออังกฤษ</div>
@@ -6922,7 +7062,7 @@ function Reports({S,U,st,gc,ay,sh}){
                 value={teacherSearchQ||""}
                 onChange={e=>setTeacherSearchQ(e.target.value)}
               />
-              <div style={{display:"flex",gap:6,flexWrap:"wrap",maxHeight:220,overflowY:"auto",padding:6,border:"1px solid #E5E7EB",borderRadius:8}}>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",maxHeight:220,overflowY:"auto",padding:6,border:"1px solid rgba(0,0,0,0.09)",borderRadius:8}}>
                 {[...S.teachers].sort((a,b)=>{
                   const da=S.depts.find(d=>d.id===a.departmentId)?.name||"";
                   const db=S.depts.find(d=>d.id===b.departmentId)?.name||"";
@@ -6946,8 +7086,8 @@ function Reports({S,U,st,gc,ay,sh}){
                 })}
               </div>
               <div style={{display:"flex",gap:6,marginTop:6}}>
-                <button onClick={()=>setSelectedTeachersPDF(S.teachers.map(t=>t.id))} style={{fontSize:11,color:"#7C3AED",background:"none",border:"1px solid #E5E7EB",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>เลือกทั้งหมด</button>
-                <button onClick={()=>setSelectedTeachersPDF([])} style={{fontSize:11,color:"#6B7280",background:"none",border:"1px solid #E5E7EB",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>ล้าง</button>
+                <button onClick={()=>setSelectedTeachersPDF(S.teachers.map(t=>t.id))} style={{fontSize:11,color:"#7C3AED",background:"none",border:"1px solid rgba(0,0,0,0.09)",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>เลือกทั้งหมด</button>
+                <button onClick={()=>setSelectedTeachersPDF([])} style={{fontSize:11,color:"#6B7280",background:"none",border:"1px solid rgba(0,0,0,0.09)",borderRadius:6,padding:"2px 10px",cursor:"pointer"}}>ล้าง</button>
                 <span style={{fontSize:11,color:"#6B7280",alignSelf:"center"}}>เลือก {selectedTeachersPDF.length} คน → {Math.ceil(selectedTeachersPDF.length/2)} หน้า</span>
               </div>
             </div>
@@ -7165,11 +7305,11 @@ function TeacherHoursSummary({ S }) {
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
           <thead>
             <tr style={{background:"#F9FAFB"}}>
-              <th style={{padding:"8px 10px",textAlign:"left",border:"1px solid #E5E7EB",minWidth:120}}>ครู</th>
-              <th style={{padding:"8px 6px",textAlign:"center",border:"1px solid #E5E7EB",minWidth:60}}>กำหนด</th>
-              <th style={{padding:"8px 6px",textAlign:"center",border:"1px solid #E5E7EB",minWidth:60}}>สอนแล้ว</th>
-              <th style={{padding:"8px 6px",textAlign:"center",border:"1px solid #E5E7EB",minWidth:60}}>คงเหลือ</th>
-              {DAYS_TH.map(d=><th key={d} style={{padding:"6px 4px",textAlign:"center",border:"1px solid #E5E7EB",fontSize:11,minWidth:40}}>{d.slice(0,3)}</th>)}
+              <th style={{padding:"8px 10px",textAlign:"left",border:"1px solid rgba(0,0,0,0.09)",minWidth:120}}>ครู</th>
+              <th style={{padding:"8px 6px",textAlign:"center",border:"1px solid rgba(0,0,0,0.09)",minWidth:60}}>กำหนด</th>
+              <th style={{padding:"8px 6px",textAlign:"center",border:"1px solid rgba(0,0,0,0.09)",minWidth:60}}>สอนแล้ว</th>
+              <th style={{padding:"8px 6px",textAlign:"center",border:"1px solid rgba(0,0,0,0.09)",minWidth:60}}>คงเหลือ</th>
+              {DAYS_TH.map(d=><th key={d} style={{padding:"6px 4px",textAlign:"center",border:"1px solid rgba(0,0,0,0.09)",fontSize:11,minWidth:40}}>{d.slice(0,3)}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -7178,15 +7318,15 @@ function TeacherHoursSummary({ S }) {
               const ok = r.tot > 0 && r.used === r.tot;
               return (
                 <tr key={r.teacher.id} style={{background: overload?"#FEF2F2": ok?"#F0FDF4": i%2===1?"#F9FAFB":"#fff"}}>
-                  <td style={{padding:"6px 10px",border:"1px solid #E5E7EB"}}>
+                  <td style={{padding:"6px 10px",border:"1px solid rgba(0,0,0,0.09)"}}>
                     <div style={{fontWeight:600,color:"#1F2937"}}>{r.teacher.firstName} {r.teacher.lastName}</div>
                     <div style={{fontSize:10,color:"#6B7280"}}>{r.dept?.name||""}</div>
                   </td>
-                  <td style={{padding:"6px",textAlign:"center",border:"1px solid #E5E7EB",fontWeight:600}}>{r.tot||"—"}</td>
-                  <td style={{padding:"6px",textAlign:"center",border:"1px solid #E5E7EB",fontWeight:700,color: overload?"#B91C1C": ok?"#059669":"#1F2937"}}>{r.used}</td>
-                  <td style={{padding:"6px",textAlign:"center",border:"1px solid #E5E7EB",color: overload?"#B91C1C": r.rem>0?"#D97706":"#059669",fontWeight:600}}>{r.tot?r.rem:"—"}</td>
+                  <td style={{padding:"6px",textAlign:"center",border:"1px solid rgba(0,0,0,0.09)",fontWeight:600}}>{r.tot||"—"}</td>
+                  <td style={{padding:"6px",textAlign:"center",border:"1px solid rgba(0,0,0,0.09)",fontWeight:700,color: overload?"#B91C1C": ok?"#059669":"#1F2937"}}>{r.used}</td>
+                  <td style={{padding:"6px",textAlign:"center",border:"1px solid rgba(0,0,0,0.09)",color: overload?"#B91C1C": r.rem>0?"#D97706":"#059669",fontWeight:600}}>{r.tot?r.rem:"—"}</td>
                   {DAYS_TH.map(d=>(
-                    <td key={d} style={{padding:"4px",textAlign:"center",border:"1px solid #E5E7EB",fontSize:11,color:r.dayMap[d]>0?"#1F2937":"#D1D5DB"}}>
+                    <td key={d} style={{padding:"4px",textAlign:"center",border:"1px solid rgba(0,0,0,0.09)",fontSize:11,color:r.dayMap[d]>0?"#1F2937":"#D1D5DB"}}>
                       {r.dayMap[d]>0?r.dayMap[d]:"·"}
                     </td>
                   ))}
@@ -7725,7 +7865,7 @@ function PrintDesignerModal({ open, onClose, S, ay, sh }) {
     setTimeout(() => w.print(), 800);
   };
 
-  const IS2 = { width:"100%", padding:"6px 10px", border:"1.5px solid #E5E7EB", borderRadius:8, fontSize:12, outline:"none", fontFamily:"inherit", background:"#fff" };
+  const IS2 = { width:"100%", padding:"6px 10px", border:"1.5px solid rgba(0,0,0,0.09)", borderRadius:8, fontSize:12, outline:"none", fontFamily:"inherit", background:"#fff" };
   const LS = { fontSize:12, fontWeight:600, display:"block", marginBottom:4, color:"#374151" };
   const TABS = [["cell","📋 เนื้อหาช่อง"],["columns","↔️ คอลัมน์"],["style","🎨 สไตล์"],["header","🏷 หัว/ท้าย"]];
 
@@ -7788,7 +7928,7 @@ function PrintDesignerModal({ open, onClose, S, ay, sh }) {
         </div>
 
         {/* Saved layouts */}
-        <div style={{padding:"10px 14px",borderBottom:"1px solid #F0F0F0",background:"#FAFAFA",flexShrink:0}}>
+        <div style={{padding:"10px 14px",borderBottom:"1px solid #F0F0F0",background:"rgba(250,250,250,0.7)",flexShrink:0}}>
           <div style={{fontSize:12,fontWeight:600,marginBottom:6,color:"#374151"}}>💾 รูปแบบที่บันทึก</div>
           <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:6}}>
             {Object.keys(layouts).map(n => (
@@ -7805,7 +7945,7 @@ function PrintDesignerModal({ open, onClose, S, ay, sh }) {
               <input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="ชื่อ เช่น ม.1-3, ม.4-6" style={{...IS2,flex:1}}
                 onKeyDown={e=>{if(e.key==="Enter"&&newName.trim()){saveLayout(newName.trim());setNewName("");setShowSaveAs(false);}}} />
               <button onClick={()=>{if(newName.trim()){saveLayout(newName.trim());setNewName("");setShowSaveAs(false);}}} style={{padding:"5px 12px",background:"#B91C1C",color:"#fff",border:"none",borderRadius:7,fontSize:12,fontWeight:600,cursor:"pointer"}}>บันทึก</button>
-              <button onClick={()=>setShowSaveAs(false)} style={{padding:"5px 8px",border:"1px solid #E5E7EB",borderRadius:7,background:"none",cursor:"pointer",fontSize:12}}>ยกเลิก</button>
+              <button onClick={()=>setShowSaveAs(false)} style={{padding:"5px 8px",border:"1px solid rgba(0,0,0,0.09)",borderRadius:7,background:"none",cursor:"pointer",fontSize:12}}>ยกเลิก</button>
             </div>
           ) : (
             <div style={{display:"flex",gap:6}}>
@@ -7833,7 +7973,7 @@ function PrintDesignerModal({ open, onClose, S, ay, sh }) {
               <div style={{fontSize:12,fontWeight:700,color:"#1F2937",marginBottom:10}}>เนื้อหาในแต่ละช่อง (แต่ละบรรทัด)</div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {layout.cellRows.map((row, i) => (
-                  <div key={i} style={{background:"#F9FAFB",borderRadius:10,padding:"10px 12px",border:"1.5px solid #E5E7EB"}}>
+                  <div key={i} style={{background:"rgba(249,249,251,0.85)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",borderRadius:10,padding:"10px 12px",border:"1.5px solid rgba(0,0,0,0.09)"}}>
                     <div style={{display:"flex",gap:5,alignItems:"center",marginBottom:6}}>
                       <span style={{fontSize:11,color:"#9CA3AF",fontWeight:600,minWidth:18}}>#{i+1}</span>
                       <select value={row.field} onChange={e=>updCellRow(i,"field",e.target.value)} style={{...IS2,flex:1}}>
@@ -8004,7 +8144,7 @@ function PrintDesignerModal({ open, onClose, S, ay, sh }) {
                 <div style={{fontSize:12,fontWeight:700,color:"#1F2937",marginBottom:6}}>🖼 โลโก้</div>
                 <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
                   {sh?.logo
-                    ? <img src={sh.logo} style={{width:40,height:40,objectFit:"contain",border:"1px solid #E5E7EB",borderRadius:6}} alt="logo"/>
+                    ? <img src={sh.logo} style={{width:40,height:40,objectFit:"contain",border:"1px solid rgba(0,0,0,0.09)",borderRadius:6}} alt="logo"/>
                     : <div style={{width:40,height:40,background:"#F3F4F6",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#9CA3AF",textAlign:"center"}}>ไม่มี<br/>โลโก้</div>
                   }
                   <div style={{fontSize:11,color:"#6B7280",flex:1}}>โลโก้มาจากหน้า ตั้งค่า → โลโก้โรงเรียน<br/>{sh?.logo?"✅ มีโลโก้แล้ว":"❌ ยังไม่มีโลโก้"}</div>
@@ -8111,7 +8251,7 @@ function Settings({S,U,st,ay,setAY,sh,setSH,div}){
   return <div style={{animation:"fadeIn 0.3s"}}>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(400px,1fr))",gap:24}}>
       {/* Academic Year */}
-      <div style={{background:"#fff",borderRadius:14,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
+      <div style={{background:"rgba(255,255,255,0.80)",backdropFilter:"blur(20px) saturate(180%)",WebkitBackdropFilter:"blur(20px) saturate(180%)",border:"1px solid rgba(255,255,255,0.6)",boxShadow:"0 4px 24px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.9)",borderRadius:16,padding:24}}>
         <h3 style={{fontSize:16,fontWeight:700,marginBottom:20}}>ปีการศึกษา</h3>
         <div style={{display:"flex",flexDirection:"column",gap:16}}>
           <div><label style={LS}>ปีการศึกษา (พ.ศ.)</label><input style={IS} value={ay.year} onChange={e=>{
@@ -8127,7 +8267,7 @@ function Settings({S,U,st,ay,setAY,sh,setSH,div}){
       </div>
 
       {/* School Header + Logo */}
-      <div style={{background:"#fff",borderRadius:14,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
+      <div style={{background:"rgba(255,255,255,0.80)",backdropFilter:"blur(20px) saturate(180%)",WebkitBackdropFilter:"blur(20px) saturate(180%)",border:"1px solid rgba(255,255,255,0.6)",boxShadow:"0 4px 24px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.9)",borderRadius:16,padding:24}}>
         <h3 style={{fontSize:16,fontWeight:700,marginBottom:20}}>หัวเอกสาร (สำหรับ PDF)</h3>
         <div style={{display:"flex",flexDirection:"column",gap:16}}>
           <div><label style={LS}>ชื่อโรงเรียน</label><input style={IS} value={sh.name} onChange={e=>setSH(p=>({...p,name:e.target.value}))} placeholder="โรงเรียนดาราวิทยาลัย"/></div>
@@ -8160,7 +8300,7 @@ function Settings({S,U,st,ay,setAY,sh,setSH,div}){
       </div>
 
       {/* Reset */}
-      <div style={{background:"#fff",borderRadius:14,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
+      <div style={{background:"rgba(255,255,255,0.80)",backdropFilter:"blur(20px) saturate(180%)",WebkitBackdropFilter:"blur(20px) saturate(180%)",border:"1px solid rgba(255,255,255,0.6)",boxShadow:"0 4px 24px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.9)",borderRadius:16,padding:24}}>
         <h3 style={{fontSize:16,fontWeight:700,marginBottom:20,color:"#DC2626"}}>รีเซ็ทข้อมูล</h3>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           <button onClick={resetScheduleOnly} style={BO("#D97706")}><Icon name="trash" size={16}/>ล้างเฉพาะตารางสอน</button>
@@ -8174,14 +8314,14 @@ function Settings({S,U,st,ay,setAY,sh,setSH,div}){
             setTimeout(()=>window.location.reload(),1000);
           }} style={BO("#6B7280")}><Icon name="x" size={16}/>ล้าง Cache (แก้ข้อมูลไม่ตรง)</button>
           <div style={{fontSize:12,color:"#6B7280"}}>ลบข้อมูลตารางสอนที่จัดไว้ แต่ข้อมูลครู วิชา ห้อง ยังอยู่</div>
-          <div style={{borderTop:"1px solid #E5E7EB",paddingTop:12,marginTop:4}}/>
+          <div style={{borderTop:"1px solid rgba(0,0,0,0.07)",paddingTop:12,marginTop:4}}/>
           <button onClick={resetAll} style={BS("#DC2626")}><Icon name="trash" size={16}/>รีเซ็ทข้อมูลทั้งหมด</button>
           <div style={{fontSize:12,color:"#DC2626"}}>⚠️ ลบข้อมูลทุกอย่าง — ไม่สามารถกู้คืนได้</div>
         </div>
       </div>
 
       {/* Summary */}
-      <div style={{background:"#fff",borderRadius:14,padding:24,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
+      <div style={{background:"rgba(255,255,255,0.80)",backdropFilter:"blur(20px) saturate(180%)",WebkitBackdropFilter:"blur(20px) saturate(180%)",border:"1px solid rgba(255,255,255,0.6)",boxShadow:"0 4px 24px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.9)",borderRadius:16,padding:24}}>
         <h3 style={{fontSize:16,fontWeight:700,marginBottom:20}}>สรุปข้อมูลในระบบ</h3>
         <div style={{display:"flex",flexDirection:"column",gap:8,fontSize:14}}>
           <div>ระดับชั้น: <b>{S.levels.length}</b></div>
@@ -8220,7 +8360,7 @@ function PrintSettingsPanel({open,onClose,onApply}){
   if(!open)return null;
   const u=(k,v)=>setS(p=>({...p,[k]:v}));
   return(
-    <div style={{position:"fixed",inset:0,zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.5)"}}>
+    <div style={{position:"fixed",inset:0,zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.35)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)"}}>
       <div style={{background:"#fff",borderRadius:16,padding:28,width:"min(540px,95vw)",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.3)",fontFamily:"'Sarabun',sans-serif"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
           <h2 style={{fontSize:18,fontWeight:700}}>⚙️ ตั้งค่าการพิมพ์</h2>
@@ -8270,7 +8410,7 @@ function PrintSettingsPanel({open,onClose,onApply}){
             <input type="checkbox" checked={s.showBorder} onChange={e=>u("showBorder",e.target.checked)} style={{width:16,height:16,accentColor:"#B91C1C"}}/>เส้นขอบ
           </label>
         </div>
-        <div style={{background:"#F9FAFB",borderRadius:10,padding:10,marginBottom:18}}>
+        <div style={{background:"rgba(249,249,251,0.85)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",borderRadius:10,padding:10,marginBottom:18}}>
           <div style={{fontSize:11,color:"#6B7280",marginBottom:5}}>ตัวอย่าง:</div>
           <table style={{width:"100%",borderCollapse:"collapse",fontFamily:s.fontFamily,fontSize:(11*s.fontSize/100)+"px"}}>
             <thead><tr>{["วัน","คาบ 1","คาบ 2","คาบ 3"].map(h=><th key={h} style={{background:PRINT_COLORS[s.color].header,color:PRINT_COLORS[s.color].headerText,padding:"4px 6px",border:s.showBorder?"1px solid "+PRINT_COLORS[s.color].border:"none",fontWeight:700}}>{h}</th>)}</tr></thead>
