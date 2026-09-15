@@ -1,0 +1,53 @@
+const fs=require('fs'),assert=require('node:assert/strict');
+const root=require('path').resolve(__dirname,'..');
+const esbuild=require(root+'/node_modules/esbuild');
+const React=require(root+'/node_modules/react');const {renderToString}=require(root+'/node_modules/react-dom/server');
+const cache=new Map();global.localStorage={getItem:k=>cache.get(k)||null,setItem:(k,v)=>cache.set(k,String(v)),removeItem:k=>cache.delete(k)};
+global.window={location:{hostname:'localhost'},innerWidth:1400,addEventListener(){},removeEventListener(){}};
+(async()=>{
+ const source=fs.readFileSync(root+'/src/App.jsx','utf8');
+ assert.ok(!source.includes('<Mascot compact'),'scheduler must not contain the distracting companion');
+ const input=source.replace('  /* ── render ── */','  globalThis.__autoTest={executeAutoSchedule};\n  /* ── render ── */')+'\nexport {Teachers,Scheduler,Levels,Plans,Depts,Subjects,SpecialRooms,Assigns,HomeroomSettings,Meetings,SwapPage,Reports,Settings,RecordList,LevelsManager,ReportLauncher};';
+ await esbuild.build({stdin:{contents:input,resolveDir:root+'/src',loader:'jsx'},bundle:true,platform:'node',format:'cjs',jsx:'automatic',loader:{'.css':'empty'},define:{'import.meta.env.VITE_LIVE_FIREBASE':'"false"'},external:['react','react-dom'],outfile:root+'/verify-app.cjs',logLevel:'silent'});
+ const App=require(root+'/verify-app.cjs');
+ await esbuild.build({entryPoints:[root+'/src/renovation/model.mjs'],bundle:true,platform:'node',format:'cjs',define:{'import.meta.env':'{"VITE_LIVE_FIREBASE":"false"}'},outfile:root+'/verify-model.cjs',logLevel:'silent'});
+ const model=require(root+'/verify-model.cjs');model.seedPreview();const S={};for(const k of ['levels','plans','depts','teachers','subjects','rooms','specialRooms','assigns','meetings','schedule','locks'])S[k]=JSON.parse(localStorage.getItem('dara_preview_m2_'+k));
+ const U=Object.fromEntries(Object.keys(S).map(k=>['set'+k[0].toUpperCase()+k.slice(1),()=>{}]));
+ const common={S,U,st:()=>{},gc:()=>({bg:'#123456',lt:'#eeeeee',tx:'#222222'}),ay:{year:'2569',semester:'1'},sh:{name:'โรงเรียนดาราวิทยาลัย',logo:''},div:{id:'m2',name:'มัธยมปลาย',defaultLevels:['ม.4','ม.5','ม.6']},setAY:()=>{},setSH:()=>{},setSyncing:()=>{},stateRef:{current:S},fsReadyRef:{current:false},isSavingRef:{current:false}};
+ const errors=[];
+ for(const [name,component] of Object.entries(App)){if(['RecordList','LevelsManager','ReportLauncher'].includes(name))continue;try{const html=renderToString(React.createElement(component,common));assert.ok(html.length>10);console.log('PASS render '+name);}catch(e){errors.push(name+': '+e.message);}}
+ assert.deepEqual(model.progress(S),{total:72,placed:16,remaining:56,percent:22});
+ const sample={...S,schedule:{'r1_จันทร์_1':[{teacherId:'t0'},{teacherId:'t1',coTeacherIds:['t0']}],'r2_จันทร์_1':[{teacherId:'t0'}]}};
+ assert.equal(model.teacherLoad(sample,'t0'),1,'shared periods count once');
+ assert.deepEqual(model.progress({...S,assigns:[],schedule:{}}),{total:0,placed:0,remaining:0,percent:0});
+ console.log('PASS progress, empty state and co-teacher counting');
+ const memory=[];let cursor=0,writes=0;
+ const dispatcher={useState(init){const i=cursor++;if(!(i in memory))memory[i]=typeof init==='function'?init():init;return [memory[i],v=>{memory[i]=typeof v==='function'?v(memory[i]):v;}];},useRef(init){const i=cursor++;if(!(i in memory))memory[i]={current:init};return memory[i];},useMemo(fn){cursor++;return fn()},useCallback(fn){cursor++;return fn},useEffect(){cursor++;},useLayoutEffect(){cursor++;}};
+ const internals=React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+ const props={...common,U:{...U,setSchedule(value){writes++;props.S={...props.S,schedule:typeof value==='function'?value(props.S.schedule):value};}}};
+ const render=()=>{cursor=0;const prev=internals.ReactCurrentDispatcher.current;internals.ReactCurrentDispatcher.current=dispatcher;try{return App.Scheduler(props)}finally{internals.ReactCurrentDispatcher.current=prev}};
+ const flattenText=n=>typeof n==='string'?n:typeof n==='number'?String(n):Array.isArray(n)?n.map(flattenText).join(''):n?.props?flattenText(n.props.children):'';
+ const button=(node,label)=>{if(!node)return null;if(Array.isArray(node)){for(const x of node){const found=button(x,label);if(found)return found;}return null;}if(node.type==='button'&&flattenText(node.props.children).includes(label))return node;return node.props?button(node.props.children,label):null;};
+ render();const before=JSON.stringify(props.S.schedule);
+ const opts={runs:1,mode:'remaining',allowNormal:true,allowConsec:false,allowNP:false,allowSR:false,spreadDay:true,noFirstLast:true};
+ global.__autoTest.executeAutoSchedule(opts);await new Promise(r=>setTimeout(r,180));
+ assert.equal(writes,0,'proposal must not save before acceptance');assert.equal(JSON.stringify(props.S.schedule),before,'proposal must not mutate original');
+ let tree=render();const accept=button(tree,'นำผลนี้ไปใช้');assert.ok(accept);accept.props.onClick();assert.equal(writes,1,'accept saves once');
+ tree=render();const undo=button(tree,'ย้อนกลับการจัดอัตโนมัติ');assert.ok(undo);undo.props.onClick();assert.equal(JSON.stringify(props.S.schedule),before,'undo restores original');
+ render();global.__autoTest.executeAutoSchedule(opts);await new Promise(r=>setTimeout(r,180));props.S={...props.S,rooms:[...props.S.rooms,{id:'newroom',name:'new'}]};tree=render();const staleWrites=writes;button(tree,'นำผลนี้ไปใช้').props.onClick();assert.equal(writes,staleWrites,'stale proposal cannot overwrite changed inputs');
+ console.log('PASS auto proposal, accept, undo, and stale-input rejection');
+ const find=(node,predicate)=>{if(!node)return null;if(Array.isArray(node)){for(const n of node){const x=find(n,predicate);if(x)return x;}return null;}if(predicate(node))return node;return node.props?find(node.props.children,predicate):null};
+ const renderUnit=(Component,unitProps)=>{cursor=0;const prev=internals.ReactCurrentDispatcher.current;internals.ReactCurrentDispatcher.current=dispatcher;try{return Component(unitProps)}finally{internals.ReactCurrentDispatcher.current=prev}};
+ memory.length=0;
+ const listProps={rows:Array.from({length:20},(_,i)=>({id:String(i),name:'course-'+i})),columns:[{key:'name',label:'Name'}]};
+ tree=renderUnit(App.RecordList,listProps);assert.ok(button(tree,'ถัดไป'));find(tree,n=>n.type==='input').props.onChange({target:{value:'course-19'}});tree=renderUnit(App.RecordList,listProps);assert.ok(flattenText(tree).includes('course-19'));assert.ok(!flattenText(tree).includes('course-18'));console.log('PASS record search and paging');
+ memory.length=0;const calls=[];const reportProps={mode:'excel',S,actions:{teacherExcelAll:()=>calls.push('all-teachers'),roomExcel:id=>calls.push(id)}};
+ tree=renderUnit(App.ReportLauncher,reportProps);button(tree,'ดาวน์โหลด Excel').props.onClick();assert.equal(calls[0],'all-teachers');
+ const selectByValue=(t,value)=>find(t,n=>n.type==='select'&&n.props.value===value);
+ selectByValue(tree,'teacher').props.onChange({target:{value:'room'}});tree=renderUnit(App.ReportLauncher,reportProps);selectByValue(tree,'all').props.onChange({target:{value:'single'}});tree=renderUnit(App.ReportLauncher,reportProps);assert.equal(button(tree,'ดาวน์โหลด Excel').props.disabled,true);selectByValue(tree,'').props.onChange({target:{value:S.rooms[0].id}});tree=renderUnit(App.ReportLauncher,reportProps);button(tree,'ดาวน์โหลด Excel').props.onClick();assert.equal(calls[1],S.rooms[0].id);console.log('PASS report scope and required selection');
+ memory.length=0;let roomWrites=0;const levelProps={S,U:{...U,setRooms:value=>{roomWrites++;const added=value(S.rooms);assert.equal(added.at(-1).name,'ม.4/9');}},st:()=>{},divisions:[{id:'m2',name:'มัธยมปลาย'}],actions:[]};
+ tree=renderUnit(App.LevelsManager,levelProps);find(tree,n=>n.type?.name==='ManagementToolbar').props.onAdd();tree=renderUnit(App.LevelsManager,levelProps);let dialog=find(tree,n=>n.type?.name==='EditDialog');find(dialog,n=>n.type==='input').props.onChange({target:{value:'ม.4/9'}});tree=renderUnit(App.LevelsManager,levelProps);find(tree,n=>n.type?.name==='EditDialog').props.onSave();assert.equal(roomWrites,1);console.log('PASS room create dialog');
+ fs.unlinkSync(root+'/verify-app.cjs');fs.unlinkSync(root+'/verify-model.cjs');
+ if(errors.length){console.error(errors.join('\n'));process.exitCode=1;}
+})();
+

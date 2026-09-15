@@ -1,0 +1,20 @@
+const fs=require('fs'),path=require('path'),assert=require('node:assert/strict');
+const root=path.resolve(__dirname,'..'),React=require('react'),esbuild=require('esbuild'),out=root+'/verify-print.cjs';
+(async()=>{try{
+const source=fs.readFileSync(root+'/src/renovation/PrintStudio.jsx','utf8').replace("import {createPortal} from 'react-dom';",'const createPortal=x=>x;');
+await esbuild.build({stdin:{contents:source,loader:'jsx',resolveDir:root+'/src/renovation'},bundle:true,platform:'node',format:'cjs',external:['react'],loader:{'.css':'empty'},outfile:out,logLevel:'silent'});
+const Studio=require(out).default,cache=new Map();global.localStorage={getItem:k=>cache.get(k)||null,setItem:(k,v)=>cache.set(k,v)};global.document={body:{}};
+const S={levels:[{id:'l1',name:'ป.1'},{id:'l2',name:'ม.4'}],rooms:[{id:'r1',name:'ป.1/1',levelId:'l1'},{id:'r2',name:'ม.4/1',levelId:'l2'}],teachers:[],subjects:[],depts:[],schedule:{}};
+const memory=[];let cursor=0;const dispatcher={useState(init){const i=cursor++;if(!(i in memory))memory[i]=typeof init==='function'?init():init;return [memory[i],v=>memory[i]=typeof v==='function'?v(memory[i]):v]},useEffect(){cursor++},useRef(value){const i=cursor++;if(!(i in memory))memory[i]={current:value};return memory[i]}};
+const internals=React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED,render=()=>{cursor=0;const prev=internals.ReactCurrentDispatcher.current;internals.ReactCurrentDispatcher.current=dispatcher;try{return Studio({open:true,onClose(){},S,getPeriodCfg:()=>({periods:[{id:1,time:'08.30'}],breaks:[]})})}finally{internals.ReactCurrentDispatcher.current=prev}};
+const all=(n,p)=>!n?[]:Array.isArray(n)?n.flatMap(x=>all(x,p)):typeof n==='object'?[...(p(n)?[n]:[]),...all(n.props?.children,p)]:[];
+const text=n=>typeof n==='string'?n:Array.isArray(n)?n.map(text).join(''):text(n?.props?.children||'');
+let tree=render();assert.ok(all(tree,n=>n.type==='iframe')[0].props.srcDoc.includes('ป.1/1'));
+all(tree,n=>n.type==='button'&&text(n)==='หน้ากระดาษ')[0].props.onClick();tree=render();
+const title=all(tree,n=>typeof n.type==='function'&&n.props.label?.startsWith('หัวเรื่อง'))[0];title.props.children.props.onChange({target:{value:'ตาราง {ห้อง}'}});tree=render();
+assert.equal(JSON.parse(cache.get('dara_preview_printStudio_v1')).l1.title,'ตาราง {ห้อง}');
+const scope=all(tree,n=>typeof n.type==='function'&&n.props.label==='แบบพิมพ์ที่ต้องการแก้ไข')[0];scope.props.children.props.onChange({target:{value:'l2'}});tree=render();assert.equal(all(tree,n=>typeof n.type==='function'&&n.props.label?.startsWith('หัวเรื่อง'))[0].props.children.props.value,'','other level remains unchanged');
+all(tree,n=>n.type==='button'&&text(n)==='จัดการแบบ')[0].props.onClick();tree=render();all(tree,n=>typeof n.type==='function'&&n.props.label==='คัดลอกจาก')[0].props.children.props.onChange({target:{value:'l1'}});tree=render();all(tree,n=>n.type==='button'&&text(n)==='คัดลอกมาใช้กับแบบนี้')[0].props.onClick();
+const data=JSON.parse(cache.get('dara_preview_printStudio_v1'));assert.equal(data.l2.title,data.l1.title);assert.ok(data.l1&&data.l2);
+console.log('PASS print controls: live preview, autosave, independent grade templates, copy template');
+}finally{if(fs.existsSync(out))fs.unlinkSync(out)}})().catch(e=>{console.error(e);process.exitCode=1});

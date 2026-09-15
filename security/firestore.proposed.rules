@@ -1,0 +1,66 @@
+// DRAFT: configure trusted admin claims and test in Emulator before publishing.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function schoolUser() {
+      return request.auth != null && request.auth.token.email_verified == true
+        && request.auth.token.email is string
+        && request.auth.token.email.matches('^[^@]+@web1[.]dara[.]ac[.]th$');
+    }
+    function admin() { return schoolUser() && request.auth.token.get('admin', false) == true; }
+    function knownDivision(id) { return id in ['p1','p2','m1','m2']; }
+    function permissionPath() { return /databases/$(database)/documents/permissions/$(request.auth.uid); }
+    function canRead(id) {
+      return schoolUser() && knownDivision(id) && (admin() || (exists(permissionPath())
+        && get(permissionPath()).data.get('divisions', {}).get(id, false) == true));
+    }
+    function canWrite(id) {
+      return canRead(id) && (admin() || get(permissionPath()).data.get('divisions', {}).get('canEdit', false) == true);
+    }
+    function validPermission(data) {
+      let d = data.get('divisions', {});
+      return data.keys().hasOnly(['displayName','email','divisions','preAdded','merged'])
+        && data.displayName is string && data.displayName.size() <= 200
+        && data.email is string && data.email.size() <= 254 && d is map
+        && d.keys().hasOnly(['p1','p2','m1','m2','canEdit','isTeacher'])
+        && d.get('p1',false) is bool && d.get('p2',false) is bool
+        && d.get('m1',false) is bool && d.get('m2',false) is bool
+        && d.get('canEdit',false) is bool && d.get('isTeacher',false) is bool
+        && !(d.get('canEdit',false) && d.get('isTeacher',false))
+        && data.get('preAdded',false) is bool && data.get('merged',false) is bool;
+    }
+    match /permissions/{uid} {
+      allow get: if admin() || (schoolUser() && request.auth.uid == uid);
+      allow list: if admin();
+      allow create: if validPermission(request.resource.data) && (admin() ||
+        (schoolUser() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['displayName','email'])
+          && request.resource.data.email == request.auth.token.email));
+      allow update: if validPermission(request.resource.data) && (admin() ||
+        (schoolUser() && request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName','email'])
+          && request.resource.data.email == request.auth.token.email));
+      allow delete: if admin();
+    }
+    function validTimetable(data) {
+      return data.keys().hasAll(['levels','plans','depts','teachers','subjects','rooms','specialRooms','assigns','meetings','schedule','locks'])
+        && data.keys().hasOnly(['levels','plans','depts','teachers','subjects','rooms','specialRooms','assigns','meetings','schedule','locks','schoolHeader','academicYear'])
+        && data.levels is list && data.plans is list && data.depts is list
+        && data.teachers is list && data.subjects is list && data.rooms is list
+        && data.specialRooms is list && data.assigns is list && data.meetings is list
+        && data.schedule is map && data.locks is map
+        && data.get('schoolHeader', {}) is map && data.get('academicYear', {}) is map;
+    }
+    match /timetable/{division} {
+      allow read: if canRead(division);
+      allow create, update: if canWrite(division) && validTimetable(request.resource.data);
+      allow delete: if admin();
+    }
+    match /timetable_dev/{division} {
+      allow read: if canRead(division);
+      allow create, update: if canWrite(division) && validTimetable(request.resource.data);
+      allow delete: if admin();
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

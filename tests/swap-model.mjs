@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import {datesBetween,requestedSlots,slotKey,findCandidates,freeReasons,proposalIssues,proposalHTML,overlaps,returnDateAllowed} from '../src/renovation/swap-model.mjs';
+const periods=[{id:1,time:'08.30-09.20'},{id:2,time:'09.20-10.10'},{id:6,time:'14.00-14.50'}];
+const S={defaultPeriods:periods,roles:[],periodConfigs:{room_a:{periods},r2:{periods:[...periods.filter(p=>p.id!==6),{id:6,time:'13.50-14.40'}]}},teachers:[{id:'a',firstName:'A',departmentId:'math'},{id:'b',firstName:'B',departmentId:'math'},{id:'c',firstName:'C',departmentId:'thai'}],rooms:[{id:'room_a',name:'ม.4/1'},{id:'r2',name:'ป.1/1'}],subjects:[{id:'s1',name:'คณิต <script>',departmentId:'math'},{id:'s2',name:'ไทย',departmentId:'thai'}],assigns:[{teacherId:'b',subjectId:'s1',roomIds:['room_a']}],meetings:[],locks:{},schedule:{'room_a_จันทร์_1':[{id:'e1',teacherId:'a',subjectId:'s1'}],'room_a_อังคาร_2':[{id:'e2',teacherId:'b',subjectId:'s2'}],'r2_จันทร์_6':[{id:'e3',teacherId:'c',subjectId:'s2'}]}};
+assert.equal(datesBetween('2026-09-14','2026-09-28').filter(d=>d.day==='จันทร์').length,3);
+assert.equal(datesBetween('2026-09-28','2026-09-14').length,0);assert.equal(datesBetween('2026-09-01','2026-12-01').length,0);
+const slots=requestedSlots(S,'a','2026-09-14','2026-09-28');assert.equal(slots.length,3);assert.equal(new Set(slots.map(slotKey)).size,3,'repeated weekdays stay distinct dates');
+const slot=slots[0],absence=datesBetween('2026-09-14','2026-09-21');
+const covers=findCandidates(S,'a',slot,'cover',absence);assert.equal(covers[0].teacher.id,'b','subject assignment outranks other free teachers');assert.ok(covers.some(c=>c.teacher.id==='c'),'cover requires no return lesson');
+const swaps=findCandidates(S,'a',slot,'swap',absence);assert.equal(swaps.length,1);assert.equal(swaps[0].teacher.id,'b');assert.ok(swaps[0].returns.every(b=>b.date<'2026-09-14'||b.date>'2026-09-21'),'return lessons outside absence');
+assert.ok(freeReasons(S,'c',{day:'จันทร์',period:6,time:'14.00-14.50'}).length,'cross-grade clock overlap');assert.ok(!overlaps({time:'08.30-09.20'},{time:'09.20-10.10'}));
+const locked={...S,teachers:S.teachers.map(t=>t.id==='b'?{...t,personalLocks:[{day:'จันทร์',periods:[1]}]}:t)};assert.ok(!findCandidates(locked,'a',slot,'cover',absence).some(c=>c.teacher.id==='b'));
+const proposal={slot,candidate:swaps[0],back:swaps[0].returns[0]};assert.deepEqual(proposalIssues(S,'a',[proposal],'swap',absence),[]);
+assert.ok(proposalIssues(S,'a',[proposal,proposal],'swap',absence).some(x=>x.includes('ชนกันเอง')));
+assert.ok(proposalIssues(S,'a',[{...proposal,back:null}],'swap',absence).length);
+const joint={...S,schedule:{...S.schedule,[slot.key]:[...S.schedule[slot.key],{id:'joint',teacherId:'c',subjectId:'s2'}]}};assert.ok(proposalIssues(joint,'a',[proposal],'swap',absence).some(x=>x.includes('คาบร่วม')));
+const html=proposalHTML(S,'a',[proposal],'swap','<img onerror=alert(1)>');assert.ok(!html.includes('<script>'));assert.ok(!html.includes('<img onerror'));assert.ok(html.includes('&lt;script&gt;'));assert.ok(html.includes('ยังไม่ใช่การอนุมัติ'));
+console.log('PASS substitution: exact dates, ranking, cover without return, absence exclusion, cross-division time overlap, locks, multiple-selection conflicts, joint-lesson guard, escaped proposal');
+
+assert.ok(swaps[0].returns.some(b=>b.date<slot.date),'return before exchange available');
+assert.equal(returnDateAllowed('2026-09-14','2026-08-31'),true);
+assert.equal(returnDateAllowed('2026-09-14','2026-08-30'),false);
+assert.equal(returnDateAllowed('2026-09-14','2026-10-12'),true);
+assert.equal(returnDateAllowed('2026-09-14','2026-10-13'),false);
+assert.equal(returnDateAllowed('2026-09-14','2026-09-14'),false);
+assert.ok(proposalIssues(S,'a',[{...proposal,back:{...proposal.back,date:'2026-08-30'}}],'swap',absence).some(x=>x.includes('14 วัน')));
+console.log('PASS return-date boundaries: -14, -15, +28, +29 and same day');

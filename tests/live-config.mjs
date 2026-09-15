@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {readLiveConfig,schoolAccount,effectivePermissions,canonical} from '../src/renovation/live-config.mjs';
+assert.equal(readLiveConfig({}).ready,false);assert.equal(readLiveConfig({}).preview,false);
+assert.equal(readLiveConfig({VITE_LIVE_FIREBASE:'false'}).preview,true);
+const env={VITE_FIREBASE_API_KEY:'key',VITE_FIREBASE_AUTH_DOMAIN:'school.firebaseapp.com',VITE_FIREBASE_PROJECT_ID:'school',VITE_FIREBASE_APP_ID:'app'};
+assert.equal(readLiveConfig(env).ready,true);assert.equal(readLiveConfig({...env,VITE_FIRESTORE_COLLECTION:'wrong'}).ready,false);
+assert.equal(schoolAccount({email:'a@web1.dara.ac.th',emailVerified:true}),true);
+for(const email of ['a@gmail.com','a@web1.dara.ac.th.evil','a@evilweb1.dara.ac.th'])assert.equal(schoolAccount({email,emailVerified:true}),false);
+assert.equal(schoolAccount({email:'a@web1.dara.ac.th',emailVerified:false}),false);
+assert.equal(effectivePermissions(null,false).divisions.canEdit,undefined);assert.equal(effectivePermissions(null,true).divisions.canEdit,true);
+assert.equal(canonical({b:1,a:{d:2,c:3}}),canonical({a:{c:3,d:2},b:1}));
+assert.notEqual(canonical({schedule:{a:1}}),canonical({schedule:{a:2}}));
+console.log('PASS live config: fail-closed, explicit demo, domain verification, admin claims and canonical comparison');

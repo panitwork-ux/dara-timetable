@@ -1,0 +1,8 @@
+import React,{useState} from 'react';
+import {createRoot} from 'react-dom/client';
+import UnifiedDialog from './UnifiedDialog.jsx';
+function Question({kind,message,initial,done}){const [value,setValue]=useState(initial||'');return <UnifiedDialog open title={kind==='prompt'?'แก้ไขข้อมูล':kind==='alert'?'ผลการทำงาน':'ยืนยันการเปลี่ยนแปลง'} layer={12000} onClose={()=>done(kind==='prompt'?null:false)}><form onSubmit={e=>{e.preventDefault();done(kind==='prompt'?value:true)}}><p style={{whiteSpace:'pre-wrap',lineHeight:1.8,margin:'0 0 18px'}}>{message}</p>{kind==='prompt'&&<input aria-label="ค่าที่ต้องการ" value={value} onChange={e=>setValue(e.target.value)} style={{width:'100%',padding:12,border:'1px solid #d7dfeb',borderRadius:8}}/>}<div className="question-actions">{kind!=='alert'&&<button type="button" className="secondary" onClick={()=>done(kind==='prompt'?null:false)}>ยกเลิก</button>}<button className="primary" type="submit">{kind==='alert'?'รับทราบ':kind==='prompt'?'บันทึก':'ยืนยัน'}</button></div></form></UnifiedDialog>}
+function ask(kind,message,initial){return new Promise(resolve=>{const host=document.createElement('div');document.body.appendChild(host);const root=createRoot(host);let settled=false;const done=value=>{if(settled)return;settled=true;resolve(value);queueMicrotask(()=>{root.unmount();host.remove()})};root.render(<Question kind={kind} message={message} initial={initial} done={done}/>);})}
+export const uiConfirm=message=>ask('confirm',message);
+export const uiPrompt=(message,initial)=>ask('prompt',message,initial);
+export const uiAlert=message=>ask('alert',message);
