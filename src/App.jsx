@@ -1516,7 +1516,7 @@ export default function App() {
     {id:"homeroom",icon:"users",label:"ครูประจำชั้น"},
     {id:"meetings",icon:"clock",label:"คาบล็อค / ประชุม"},
     {id:"scheduler",icon:"grid",label:"จัดตารางสอน"},
-    {id:"swap",icon:"layers",label:"แลกคาบ / สอนแทน"},
+    {id:"swap",icon:"layers",label:"แลกคาบ"},
     {id:"reports",icon:"download",label:"รายงาน / Export"},
     {id:"settings",icon:"file",label:"ตั้งค่า / ปีการศึกษา"},
   ];
