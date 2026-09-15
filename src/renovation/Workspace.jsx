@@ -9,14 +9,14 @@ export function Glyph({name='grid',size=20}) {
  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]||paths.grid}</svg>;
 }
 const groups=[['ภาพรวม',[['dashboard','grid','แดชบอร์ด']]],['เตรียมข้อมูล',[['levels','grid','ระดับชั้น / ห้องเรียน'],['plans','book','แผนการเรียน'],['departments','users','กลุ่มสาระ'],['teachers','users','จัดการครู'],['subjects','book','รายวิชา'],['specialrooms','grid','ห้องพิเศษ']]],['ตารางสอน',[['assignments','edit','มอบหมายงานครู'],['homeroom','users','ครูประจำชั้น'],['meetings','clock','คาบล็อก / ประชุม'],['scheduler','calendar','จัดตารางสอน'],['swap','calendar','แลกคาบ / สอนแทน'],['reports','check','ตรวจสอบ / รายงาน']]],['ระบบ',[['settings','settings','ตั้งค่าปีการศึกษา']]]];
-export function Workspace({page,setPage,div,divisions,switchDivision,ay,children,syncing,demo,user,onLogout,onAdmin,canVisit=()=>true}) {
+export function Workspace({logo,page,setPage,div,divisions,switchDivision,ay,children,syncing,demo,user,onLogout,onAdmin,canVisit=()=>true}) {
  const [open,setOpen]=useState(false);
  const title=groups.flatMap(g=>g[1]).find(n=>n[0]===page)?.[2];
  const go=id=>{if(canVisit(id)){setPage(id);setOpen(false);}};
  return <div className="dara-workspace">
   {open&&<button className="drawer-backdrop" aria-label="ปิดเมนู" onClick={()=>setOpen(false)}/>}
   <aside className={'workspace-sidebar '+(open?'is-open':'')}>
-   <a className="brand" href="#dashboard" onClick={e=>{e.preventDefault();go('dashboard')}}><span className="brand-mark">ด</span><span><strong>DARA</strong><small>ระบบจัดตารางสอน</small></span><span className="brand-version">04</span></a>
+   <a className="brand" href="#dashboard" onClick={e=>{e.preventDefault();go('dashboard')}}><span className="brand-mark" style={{background:"white"}}><img src={logo} alt="ตราโรงเรียนดาราวิทยาลัย" style={{width:48,height:52,objectFit:"contain"}}/></span><span><strong>DARA</strong><small>ระบบจัดตารางสอน</small></span><span className="brand-version">04</span></a>
    <label className="division-label">ระดับการศึกษา<select value={div.id} onChange={e=>switchDivision(e.target.value)}>{divisions.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label>
    <nav aria-label="เมนูหลัก">{groups.map(([label,items])=><section key={label}><p className="nav-label">{label}</p>{items.map(([id,icon,label])=><button key={id} disabled={!canVisit(id)} className={'nav-item '+(page===id?'active':'')} onClick={()=>go(id)} aria-current={page===id?'page':undefined}><Glyph name={icon}/><span>{label}</span>{page===id&&<i/>}</button>)}</section>)}</nav>
    <div className="sidebar-account"><span className="avatar">{(user?.displayName||'ด')[0]}</span><div><strong>{user?.displayName||'พื้นที่ทดลองใช้งาน'}</strong><small>{demo?'ข้อมูลตัวอย่าง':user?.email}</small></div>{!demo&&<button title="ออกจากระบบ" onClick={onLogout}><Glyph name="arrow"/></button>}</div>

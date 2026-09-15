@@ -1,3 +1,4 @@
+import {schoolLogo} from './renovation/school-logo.mjs';
 import AssignmentHeader from './renovation/AssignmentHeader.jsx';
 import {uiConfirm,uiPrompt,uiAlert} from './renovation/AppQuestion.jsx';
 import UnifiedDialog from './renovation/UnifiedDialog.jsx';
@@ -1561,7 +1562,7 @@ export default function App() {
     return Boolean(userPerms?.divisions?.canEdit)||['dashboard','reports','swap'].includes(id);
   };
   const sp=progress(S);
-  return <Workspace page={page} setPage={setPage} div={div} divisions={availDivs} switchDivision={switchDivision} ay={academicYear} syncing={syncing} demo={PREVIEW_MODE} user={authUser} onLogout={handleLogout} onAdmin={isAdmin?()=>setShowAdmin(true):null} canVisit={canVisit}>
+  return <Workspace logo={schoolLogo(schoolHeader.logo)} page={page} setPage={setPage} div={div} divisions={availDivs} switchDivision={switchDivision} ay={academicYear} syncing={syncing} demo={PREVIEW_MODE} user={authUser} onLogout={handleLogout} onAdmin={isAdmin?()=>setShowAdmin(true):null} canVisit={canVisit}>
     {!divHasAccess ? <div className="empty-message">ไม่มีสิทธิ์เข้าระดับชั้นนี้ กรุณาติดต่อผู้ดูแลระบบ</div> : !canVisit(page) ? <div className="empty-message">ไม่มีสิทธิ์แก้ไขหน้านี้ <button data-ui-control="true" className="secondary" onClick={()=>setPage('reports')}>ดูรายงาน</button></div> : <>
     {page==='dashboard'&&<Dashboard S={S} setPage={setPage} ay={academicYear}/>}
     {page==='teachers'&&<><PageHeading eyebrow="เตรียมข้อมูล" title="จัดการครู" description="ค้นหาครู ตรวจภาระสอน และปรับข้อมูลในที่เดียว"/><Teachers S={S} U={U} st={st} gc={gc}/></>}
@@ -1575,9 +1576,9 @@ export default function App() {
     {page==='assignments'&&<Assigns S={S} U={U} st={st} gc={gc}/>}
     {page==='homeroom'&&<HomeroomSettings S={S} U={U} st={st}/>}
     {page==='meetings'&&<Meetings S={S} U={U} st={st} gc={gc}/>}
-    {page==='swap'&&<SwapPage S={S} st={st} ay={academicYear} sh={schoolHeader}/>}
-    {page==='reports'&&<Reports S={S} U={U} st={st} gc={gc} ay={academicYear} sh={schoolHeader}/>}
-    {page==='settings'&&<Settings S={S} U={U} st={st} ay={academicYear} setAY={setAcademicYear} sh={schoolHeader} setSH={setSchoolHeader} div={div} setSyncing={setSyncing} stateRef={stateRef}/>}
+    {page==='swap'&&<SwapPage S={S} st={st} ay={academicYear} sh={{...schoolHeader,logo:schoolLogo(schoolHeader.logo)}}/>}
+    {page==='reports'&&<Reports S={S} U={U} st={st} gc={gc} ay={academicYear} sh={{...schoolHeader,logo:schoolLogo(schoolHeader.logo)}}/>}
+    {page==='settings'&&<Settings S={S} U={U} st={st} ay={academicYear} setAY={setAcademicYear} sh={{...schoolHeader,logo:schoolLogo(schoolHeader.logo)}} setSH={setSchoolHeader} div={div} setSyncing={setSyncing} stateRef={stateRef}/>}
     </div>}
     </>}
     {toast&&<Toast {...toast} onClose={()=>setToast(null)}/>}
@@ -5479,7 +5480,7 @@ function Settings({S,U,st,ay,setAY,sh,setSH,div,setSyncing,stateRef}){
             <label style={LS}>โลโก้โรงเรียน (จะแสดงในตาราง PDF)</label>
             <div style={{display:"flex",alignItems:"center",gap:14,marginTop:8}}>
               {sh.logo
-                ?<img src={sh.logo} alt="logo" style={{width:56,height:56,borderRadius:"50%",objectFit:"cover",border:"2px solid #E5E7EB"}} onError={e=>{e.target.style.display='none'}}/>
+                ?<img src={sh.logo} alt="logo" style={{width:56,height:56,borderRadius:"50%",objectFit:"cover",border:"2px solid #E5E7EB"}} onLoad={e=>{e.currentTarget.style.display='block'}} onError={e=>{e.currentTarget.style.display='none'}}/>
                 :<div style={{width:56,height:56,borderRadius:"50%",background:"#F3F4F6",border:"2px dashed #D1D5DB",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#9CA3AF"}}>LOGO</div>
               }
               <div style={{flex:1,display:"flex",flexDirection:"column",gap:8}}>
